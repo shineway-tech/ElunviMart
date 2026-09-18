@@ -225,3 +225,22 @@ Store 不得依赖渲染层，也不得包含 Electron 窗口逻辑。对外返�
 ## 6. 变更边界
 
 每次变更应尽量围绕一个明确目标，避免在功能开发中顺带进行无关重构。涉及模块边界、数据模型或 IPC 协议的调整，需要在变更说明中写明影响范围、兼容方式和验证结果。
+
+## 7. Git 提交与远程仓库
+
+- 远程仓库统一使用 SSH 地址：`git@github.com:shineway-tech/ElunviMart.git`。
+- 推送前必须先确认 SSH 身份，不要依赖 SSH agent 的默认密钥。当前有仓库权限的账号是 `mulfrion`，对应密钥为 `~/.ssh/id_ed25519`。
+- 推送前执行：
+
+  ```bash
+  ssh -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519 -T git@github.com
+  ```
+
+  输出应显示 `Hi mulfrion!`。Git 的 `user.name` 和 `user.email` 只影响提交作者，不决定远程仓库权限。
+- 推送时显式指定同一密钥：
+
+  ```bash
+  GIT_SSH_COMMAND='ssh -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519' git push -u origin main
+  ```
+
+- 如果出现 `Permission denied`，先重新核对 GitHub 账号和仓库协作者权限，不得通过强制推送绕过权限问题。
