@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Elunvi Mart</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark"><img src="assets/elunvi-mart.png" alt="Elunvi Mart"></span><span>Elunvi Mart</span></div>
+      <nav class="nav" aria-label="主导航">
+        <button class="nav-button is-active" type="button" data-view="accounts"><i data-lucide="store"></i><span>商家账号</span></button>
+        <button class="nav-button" type="button" data-view="settings"><i data-lucide="settings"></i><span>监控设置</span></button>
+      </nav>
+      <div class="account-limit" id="account-limit">已添加 0 / 10 个账号</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-heading"><div><h1 id="page-title">商家账号</h1><p id="page-meta" hidden></p></div></div>
+        <button class="page-back" type="button" id="page-back" aria-label="返回账号列表" title="返回账号列表" hidden><i data-lucide="arrow-left"></i></button>
+        <button class="button button-primary" type="button" id="add-account"><i data-lucide="plus"></i>添加账号</button>
+      </header>
+
+      <div class="content">
+        <div class="notice" id="notice" role="status" aria-live="polite" hidden><i data-lucide="circle-check"></i><span></span></div>
+
+        <section class="view" id="accounts-view">
+          <div class="section-header"><div><h2>账号列表</h2></div></div>
+          <div class="table-frame" id="accounts-table-frame">
+            <table>
+              <thead><tr><th>商家账号</th><th>登录状态</th><th>营销活动商品</th><th>最近同步</th><th></th></tr></thead>
+              <tbody id="accounts-body"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="accounts-empty" hidden>
+            <i data-lucide="store"></i><h2>还没有商家账号</h2><p>添加账号并登录拼多多商家后台后，即可读取营销活动商品。</p><button class="button button-primary" type="button" data-action="add-account"><i data-lucide="plus"></i>添加账号</button>
+          </div>
+        </section>
+
+        <section class="view detail-view" id="account-detail-view" hidden>
+          <div class="account-summary">
+            <div class="summary-metric summary-metric-products"><span class="metric-icon"><i data-lucide="package"></i></span><div><span>全部商品</span><strong id="detail-product-count">0</strong></div></div>
+            <div class="summary-metric summary-metric-alerts"><span class="metric-icon"><i data-lucide="triangle-alert"></i></span><div><span>异常状态</span><strong class="danger-text" id="detail-error-count">0</strong></div></div>
+          </div>
+          <section class="product-surface">
+            <div class="section-header product-header">
+              <div><h2>营销活动商品</h2></div>
+              <div class="toolbar">
+                <label class="search-field"><i data-lucide="search"></i><input class="input search-input" id="product-search" type="search" placeholder="搜索商品名称或 ID" aria-label="搜索商品"></label>
+                <select class="select" id="product-status" aria-label="筛选状态"><option value="">全部状态</option><option value="active">在标</option><option value="suspected">疑似掉标</option><option value="lost">已掉标</option><option value="reviewing">审核中</option></select>
+                <button class="button button-primary" type="button" id="sync-products"><i data-lucide="refresh-cw"></i><span>从后台同步</span></button>
+              </div>
+            </div>
+            <div class="table-frame" id="products-table-frame">
+              <table>
+                <thead><tr><th>商品</th><th>活动</th><th>状态</th><th>活动价</th><th>活动结束</th><th>最近更新</th></tr></thead>
+                <tbody id="products-body"></tbody>
+              </table>
+            </div>
+            <div class="empty-state compact" id="products-empty" hidden><i data-lucide="package-search"></i><h2>暂无营销活动商品</h2></div>
+          </section>
+        </section>
+
+        <section class="view settings-view" id="settings-view" hidden>
+          <form id="settings-form">
+            <section class="settings-section">
+              <h2>检测策略</h2>
+              <div class="setting-row"><div><strong>检测间隔范围</strong><p>在设定范围内随机安排检测时间，账号之间自动错峰</p></div><div class="range-fields"><label><span>最短间隔</span><select class="select" id="interval-min"><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="15">15 分钟</option><option value="20">20 分钟</option><option value="30">30 分钟</option></select></label><span class="range-separator">至</span><label><span>最长间隔</span><select class="select" id="interval-max"><option value="15">15 分钟</option><option value="20">20 分钟</option><option value="30">30 分钟</option><option value="45">45 分钟</option><option value="60">60 分钟</option></select></label></div></div>
+            </section>
+
+            <section class="settings-section">
+              <h2>提醒方式</h2>
+              <div class="channel-row"><span class="channel-icon"><i data-lucide="monitor"></i></span><div><strong>桌面通知</strong><p>客户端运行时显示系统通知</p></div><label class="switch"><input type="checkbox" id="desktop-enabled"><span></span></label></div>
+              <div class="channel-row" id="wecom-channel"><span class="channel-icon"><i data-lucide="message-square"></i></span><div><strong>企业微信</strong><p>通过群机器人进行推送</p></div><label class="switch"><input type="checkbox" id="wecom-enabled"><span></span></label><div class="channel-fields"><label>机器人 Webhook<div class="inline-field"><input class="input" id="wecom-webhook" type="url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."><button class="button" type="button" data-test-channel="wecom">测试</button></div></label></div></div>
+              <div class="channel-row" id="dingtalk-channel"><span class="channel-icon channel-icon-ding"><i data-lucide="bell"></i></span><div><strong>钉钉</strong><p>通过群机器人进行推送</p></div><label class="switch"><input type="checkbox" id="dingtalk-enabled"><span></span></label><div class="channel-fields"><label>机器人 Webhook<input class="input" id="dingtalk-webhook" type="url" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."></label><label>加签密钥<div class="inline-field"><input class="input" id="dingtalk-secret" type="password" placeholder="SEC..."><button class="button" type="button" data-test-channel="dingtalk">测试</button></div></label></div></div>
+            </section>
+            <button class="button button-primary" type="submit"><i data-lucide="save"></i>保存设置</button>
+          </form>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="account-modal" hidden>
+    <section class="modal login-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
+      <div class="modal-header"><h2 id="account-modal-title">添加商家账号</h2><button class="icon-button" type="button" data-close-modal aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <div class="login-step" id="login-start-step">
+        <div class="login-intro"><span class="login-intro-icon"><i data-lucide="store"></i></span><div><strong>使用商家后台账号登录</strong><p>登录完成后，客户端会自动读取店铺名称、头像和店铺 ID。</p></div></div>
+      </div>
+      <div class="login-guidance" id="login-confirm-step" hidden>
+        <span class="login-guidance-icon"><i data-lucide="scan-line"></i></span><div><strong>请在独立窗口完成登录</strong><p>进入拼多多商家后台首页后，保持窗口打开，再回到这里同步店铺资料。</p></div>
+      </div>
+      <div class="login-error" id="login-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong id="login-error-title"></strong><p id="login-error-detail"></p></div></div>
+      <div class="modal-actions login-modal-actions"><button class="button" type="button" data-close-modal>取消</button><button class="button button-accent-outline" type="button" id="start-login"><i data-lucide="external-link"></i><span>打开登录窗口</span></button><button class="button button-primary" type="button" id="complete-login" hidden>登录完成，保存账号</button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="remove-account-modal" hidden>
+    <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="remove-account-title" aria-describedby="remove-account-description">
+      <div class="modal-header"><h2 id="remove-account-title">移除商家账号？</h2><button class="icon-button" type="button" data-close-remove-modal aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <div class="confirm-content">
+        <span class="confirm-icon"><i data-lucide="trash-2"></i></span>
+        <p id="remove-account-description">移除后，该账号的本地商品缓存和登录会话也会一并清除。</p>
+      </div>
+      <div class="modal-actions"><button class="button" type="button" data-close-remove-modal>取消</button><button class="button button-danger" type="button" id="confirm-remove-account"><i data-lucide="trash-2"></i><span>移除账号</span></button></div>
+    </section>
+  </div>
+
+  <script src="../../node_modules/lucide/dist/umd/lucide.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

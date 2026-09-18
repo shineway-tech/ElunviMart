@@ -1,0 +1,101 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { reconcileProducts, buildStatusAlert } = require('../src/main/product-monitor');
+const { buildBidListRequest, mapBidListResponse } = require('../src/main/pdd-adapter');
+
+test('buildBidListRequest uses the bid list pagination contract', () => {
+  assert.deepEqual(buildBidListRequest(), { page: 1, page_size: 40, activity_status: 101 });
+});
+
+test('mapBidListResponse maps bid registrations into monitor products', () => {
+  const result = mapBidListResponse({
+    success: true,
+    result: {
+      total: 1,
+      result: [{
+        activity_id: 24109,
+        activity_name: '小米混合补贴竞价',
+        activity_status: 101,
+        activity_type: 205,
+        enroll_end_time: 1988096400000,
+        template_goods_name: '小米平板 RedmiPad 2',
+        image_url: 'https://img.example/template.jpg',
+        bid_goods_id: 1005058300239,
+        my_bid_goods_id: 1005058300239,
+        my_bid_goods_name: '小米红米平板',
+        my_bid_goods_url: 'https://img.example/product.jpg',
+        mall_bid_price: '132000-175900',
+        left_activity_quantity: 11,
+        enroll_time: 1789552007995,
+        bid_audit_status: 2
+      }]
+    }
+  });
+
+  assert.deepEqual(result, [{
+    id: '1005058300239',
+    name: '小米红米平板',
+    activityId: '24109',
+    activityName: '小米混合补贴竞价',
+    activityPrice: '132000-175900',
+    activityStock: 11,
+    endsAt: '2032-12-31T09:00:00.000Z',
+    enrolledAt: '2026-09-16T09:46:47.995Z',
+    imageUrl: 'https://img.example/product.jpg',
+    templateImageUrl: 'https://img.example/template.jpg',
+    status: 'active',
+    source: 'pdd-bid-list',
+    raw: {
+      activity_id: 24109,
+      activity_name: '小米混合补贴竞价',
+      activity_status: 101,
+      activity_type: 205,
+      enroll_end_time: 1988096400000,
+      template_goods_name: '小米平板 RedmiPad 2',
+      image_url: 'https://img.example/template.jpg',
+      bid_goods_id: 1005058300239,
+      my_bid_goods_id: 1005058300239,
+      my_bid_goods_name: '小米红米平板',
+      my_bid_goods_url: 'https://img.example/product.jpg',
+      mall_bid_price: '132000-175900',
+      left_activity_quantity: 11,
+      enroll_time: 1789552007995,
+      bid_audit_status: 2
+    }
+  }]);
+});
+
+test('mapBidListResponse accepts an empty complete snapshot', () => {
+  assert.deepEqual(mapBidListResponse({ success: true, result: { total: 0, result: [] } }), []);
+});
+
+test('reconcileProducts marks a missing product as lost and reports one change', () => {
+  const now = '2026-09-17T01:02:03.000Z';
+  const result = reconcileProducts([
+    { id: 'a', name: '仍在活动', status: 'active' },
+    { id: 'b', name: '已离开活动', status: 'active' }
+  ], [{ id: 'a', name: '仍在活动', status: 'active' }], now);
+  assert.equal(result.products.find((item) => item.id === 'b').status, 'lost');
+  assert.equal(result.changes.length, 1);
+  assert.equal(result.changes[0].product.id, 'b');
+});
+
+test('reconcileProducts keeps a previously lost product in the local history', () => {
+  const first = reconcileProducts([{ id: 'b', name: '已离开活动', status: 'active' }], []);
+  const second = reconcileProducts(first.products, []);
+  assert.equal(second.products.length, 1);
+  assert.equal(second.products[0].status, 'lost');
+  assert.equal(second.changes.length, 0);
+});
+
+test('reconcileProducts does not alert for a first snapshot', () => {
+  const result = reconcileProducts([], [{ id: 'a', name: '新商品', status: 'lost' }]);
+  assert.equal(result.changes.length, 0);
+});
+
+test('buildStatusAlert includes the shop and product identifiers', () => {
+  const message = buildStatusAlert({ displayName: '测试店铺' }, { product: { id: '123', name: '测试商品', status: 'lost' } });
+  assert.match(message.title, /已掉标/);
+  assert.match(message.body, /测试店铺/);
+  assert.match(message.body, /商品 ID：123/);
+});
