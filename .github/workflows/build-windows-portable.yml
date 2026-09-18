@@ -7,7 +7,7 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -37,3 +37,14 @@ jobs:
           name: Elunvi-Mart-1.0.0-windows-portable
           path: release/Elunvi-Mart-1.0.0-portable.exe
           if-no-files-found: error
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Elunvi Mart v1.0.0
+          body: Windows x64 免安装版
+          draft: false
+          prerelease: false
+          files: release/Elunvi-Mart-1.0.0-portable.exe
+          fail_on_unmatched_files: true
