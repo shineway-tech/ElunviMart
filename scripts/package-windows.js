@@ -1,9 +1,7 @@
 const { spawnSync } = require('node:child_process');
 
-const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const result = spawnSync(npx, [
-  '--yes',
-  'electron-builder@26.0.12',
+const builder = process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder';
+const result = spawnSync(builder, [
   '--win',
   'portable',
   '--x64'
