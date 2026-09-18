@@ -103,3 +103,5 @@
 .empty-state>svg,.product-surface .empty-state>svg{margin-bottom:0}
 .settings-view{width:100%;max-width:none}
 .settings-view form{width:100%;max-width:none}
+
+html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overflow:hidden}.sidebar{height:100vh;min-height:0;overflow-x:hidden;overflow-y:auto}.main{height:100vh;min-height:0;overflow-x:hidden;overflow-y:auto}
