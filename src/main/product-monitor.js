@@ -1,4 +1,11 @@
 const WATCHED_STATUSES = new Set(['suspected', 'lost']);
+const ACTIVITY_STATUS_LABELS = Object.freeze({
+  all_sku_win_bid: '全部规格已中标',
+  partial_sku_win_bid: '部分规格未中标',
+  all_sku_not_win_bid: '全部规格未中标',
+  lost: '已掉标',
+  unknown: '状态异常'
+});
 
 function productKey(product) {
   return String(product.id || '');
@@ -56,4 +63,61 @@ function buildStatusAlert(account, change) {
   return { title, body };
 }
 
-module.exports = { normalizeProducts, reconcileProducts, buildStatusAlert };
+function activityStatusKey(product) {
+  if (product?.status === 'lost') return 'lost';
+  if (product?.raw?.all_sku_win_bid === true || product?.activityStatus === 'all_sku_win_bid') return 'all_sku_win_bid';
+  if (Number(product?.raw?.target_activity_status) === 2 || product?.activityStatus === 'partial_sku_win_bid') return 'partial_sku_win_bid';
+  if (Number(product?.raw?.target_activity_status) === 3 || product?.activityStatus === 'all_sku_not_win_bid') return 'all_sku_not_win_bid';
+  return 'unknown';
+}
+
+function summarizeActivityStatuses(products) {
+  const counts = Object.fromEntries(Object.keys(ACTIVITY_STATUS_LABELS).map((key) => [key, 0]));
+  for (const product of products) counts[activityStatusKey(product)] += 1;
+  return counts;
+}
+
+function buildActivitySummaryAlert(account, products) {
+  const counts = summarizeActivityStatuses(products);
+  const primaryStatusKeys = ['all_sku_win_bid', 'partial_sku_win_bid', 'all_sku_not_win_bid'];
+  const lines = primaryStatusKeys.map((key) => `${ACTIVITY_STATUS_LABELS[key]}：${counts[key]}`);
+  for (const key of ['lost', 'unknown']) {
+    if (counts[key] > 0) lines.push(`${ACTIVITY_STATUS_LABELS[key]}：${counts[key]}`);
+  }
+  return {
+    title: '营销活动商品状态汇总',
+    body: [`店铺：${account.displayName}`, `商品总数：${products.length}`, ...lines].join('\n')
+  };
+}
+
+function buildAccountOfflineAlert(account, reason = '') {
+  return {
+    title: '拼多多商家账号已掉线',
+    body: [
+      `店铺：${account.displayName}`,
+      '状态：需要重新登录',
+      reason ? `原因：${reason}` : '',
+      '请重新登录商家后台后恢复自动监控。'
+    ].filter(Boolean).join('\n')
+  };
+}
+
+function isAbnormalActivityProduct(product) {
+  return activityStatusKey(product) !== 'all_sku_win_bid';
+}
+
+function hasAbnormalActivityProducts(products) {
+  return Array.isArray(products) && products.some(isAbnormalActivityProduct);
+}
+
+module.exports = {
+  normalizeProducts,
+  reconcileProducts,
+  buildStatusAlert,
+  buildActivitySummaryAlert,
+  buildAccountOfflineAlert,
+  activityStatusKey,
+  summarizeActivityStatuses,
+  isAbnormalActivityProduct,
+  hasAbnormalActivityProducts
+};

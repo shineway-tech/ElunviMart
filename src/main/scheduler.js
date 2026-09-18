@@ -5,29 +5,46 @@ function randomDelayMs(minMinutes, maxMinutes, random = Math.random) {
 }
 
 class MonitorScheduler {
-  constructor(run) {
+  constructor(run, listAccounts = () => []) {
     this.run = run;
-    this.timer = null;
+    this.listAccounts = listAccounts;
+    this.timers = new Map();
     this.settings = null;
   }
 
   configure(settings) {
     this.settings = settings;
     this.stop();
-    this.scheduleNext();
+    this.refreshAccounts();
   }
 
-  scheduleNext() {
+  refreshAccounts() {
     if (!this.settings) return;
+    const monitorableAccountIds = new Set(this.listAccounts()
+      .filter((account) => account.status === 'active' || account.status === 'needs_login')
+      .map((account) => String(account.id)));
+    for (const [accountId, timer] of this.timers) {
+      if (!monitorableAccountIds.has(accountId)) {
+        clearTimeout(timer);
+        this.timers.delete(accountId);
+      }
+    }
+    for (const accountId of monitorableAccountIds) this.scheduleAccount(accountId);
+  }
+
+  scheduleAccount(accountId) {
+    if (!this.settings || this.timers.has(accountId)) return;
     const delay = randomDelayMs(this.settings.intervalMinMinutes, this.settings.intervalMaxMinutes);
-    this.timer = setTimeout(async () => {
-      try { await this.run(); } finally { this.scheduleNext(); }
+    const timer = setTimeout(async () => {
+      this.timers.delete(accountId);
+      try { await this.run(accountId); } finally { this.refreshAccounts(); }
     }, delay);
+    this.timers.set(accountId, timer);
   }
 
   stop() {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
   }
 }
 

@@ -95,6 +95,7 @@
 .product-surface .table-frame{border:1px solid var(--line);border-radius:7px;background:var(--surface)}
 .product-surface .empty-state.compact{min-height:330px;padding:40px;border:1px dashed var(--line);border-radius:7px;background:var(--surface)}
 .product-surface .empty-state>svg{width:34px;height:34px;margin-bottom:12px}
+.pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;color:var(--muted);font-size:12px}.pagination-controls{display:flex;align-items:center;gap:8px}.pagination-controls .button{min-height:32px;padding:5px 10px}.pagination-controls .button:disabled{cursor:not-allowed;opacity:.48}.pagination-current{min-width:90px;text-align:center;font-variant-numeric:tabular-nums}
 .product-surface .empty-state h2{font-size:15px;font-weight:500}
 .account-summary .metric-icon{display:grid;place-items:center;flex:0 0 46px;width:46px;height:46px;padding:0;line-height:0}
 .account-summary .metric-icon svg{display:block;width:24px;height:24px;margin:0}

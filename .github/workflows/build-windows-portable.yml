@@ -1,0 +1,33 @@
+name: Build Windows Portable
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows portable package
+        run: npm run package:win
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Elunvi-Mart-1.0.0-windows-portable
+          path: release/Elunvi-Mart-1.0.0-portable.exe
+          if-no-files-found: error

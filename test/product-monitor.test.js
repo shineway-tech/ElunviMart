@@ -1,10 +1,25 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { reconcileProducts, buildStatusAlert } = require('../src/main/product-monitor');
-const { buildBidListRequest, mapBidListResponse } = require('../src/main/pdd-adapter');
+const {
+  reconcileProducts,
+  buildStatusAlert,
+  buildActivitySummaryAlert,
+  buildAccountOfflineAlert,
+  isAbnormalActivityProduct,
+  hasAbnormalActivityProducts
+} = require('../src/main/product-monitor');
+const { buildBidListRequest, mapActivityStatus, mapBidListResponse } = require('../src/main/pdd-adapter');
 
 test('buildBidListRequest uses the bid list pagination contract', () => {
-  assert.deepEqual(buildBidListRequest(), { page: 1, page_size: 40, activity_status: 101 });
+  assert.deepEqual(buildBidListRequest(), {
+    page_number: 1,
+    page_size: 10,
+    activity_type_list: [205, 212, 219, 220, 221, 223, 213, 216, 218, 211, 215, 217, 224, 214],
+    status_list: [501],
+    is_wait_handle_invite_cut_price: false,
+    standard_temp_id_list: [],
+    activity_sub_type_list: []
+  });
 });
 
 test('mapBidListResponse maps bid registrations into monitor products', () => {
@@ -27,7 +42,9 @@ test('mapBidListResponse maps bid registrations into monitor products', () => {
         mall_bid_price: '132000-175900',
         left_activity_quantity: 11,
         enroll_time: 1789552007995,
-        bid_audit_status: 2
+        bid_audit_status: 2,
+        all_sku_win_bid: false,
+        target_activity_status: 2
       }]
     }
   });
@@ -35,14 +52,18 @@ test('mapBidListResponse maps bid registrations into monitor products', () => {
   assert.deepEqual(result, [{
     id: '1005058300239',
     name: '小米红米平板',
+    myBidProductName: '小米红米平板',
+    myBidProductId: '1005058300239',
     activityId: '24109',
     activityName: '小米混合补贴竞价',
+    activityProductName: '小米平板 RedmiPad 2',
     activityPrice: '132000-175900',
     activityStock: 11,
     endsAt: '2032-12-31T09:00:00.000Z',
     enrolledAt: '2026-09-16T09:46:47.995Z',
     imageUrl: 'https://img.example/product.jpg',
     templateImageUrl: 'https://img.example/template.jpg',
+    activityStatus: 'partial_sku_win_bid',
     status: 'active',
     source: 'pdd-bid-list',
     raw: {
@@ -60,9 +81,18 @@ test('mapBidListResponse maps bid registrations into monitor products', () => {
       mall_bid_price: '132000-175900',
       left_activity_quantity: 11,
       enroll_time: 1789552007995,
-      bid_audit_status: 2
+      bid_audit_status: 2,
+      all_sku_win_bid: false,
+      target_activity_status: 2
     }
   }]);
+});
+
+test('mapActivityStatus matches the merchant page labels', () => {
+  assert.equal(mapActivityStatus({ all_sku_win_bid: true, is_unqualified: true }), 'all_sku_win_bid');
+  assert.equal(mapActivityStatus({ all_sku_win_bid: false, target_activity_status: 2 }), 'partial_sku_win_bid');
+  assert.equal(mapActivityStatus({ all_sku_win_bid: false, target_activity_status: 3 }), 'all_sku_not_win_bid');
+  assert.equal(mapActivityStatus({ all_sku_win_bid: false }), 'unknown');
 });
 
 test('mapBidListResponse accepts an empty complete snapshot', () => {
@@ -98,4 +128,30 @@ test('buildStatusAlert includes the shop and product identifiers', () => {
   assert.match(message.title, /已掉标/);
   assert.match(message.body, /测试店铺/);
   assert.match(message.body, /商品 ID：123/);
+});
+
+test('isAbnormalActivityProduct matches the all-sku-win rule', () => {
+  assert.equal(isAbnormalActivityProduct({ activityStatus: 'all_sku_win_bid', status: 'active' }), false);
+  assert.equal(isAbnormalActivityProduct({ raw: { all_sku_win_bid: true }, activityStatus: 'unknown', status: 'active' }), false);
+  assert.equal(isAbnormalActivityProduct({ activityStatus: 'partial_sku_win_bid', status: 'active' }), true);
+  assert.equal(isAbnormalActivityProduct({ activityStatus: 'all_sku_win_bid', status: 'lost' }), true);
+  assert.equal(hasAbnormalActivityProducts([{ activityStatus: 'all_sku_win_bid', status: 'active' }]), false);
+  assert.equal(hasAbnormalActivityProducts([{ activityStatus: 'partial_sku_win_bid', status: 'active' }]), true);
+});
+
+test('activity summary and offline alerts include the shop and status counts', () => {
+  const summary = buildActivitySummaryAlert({ displayName: '测试店铺' }, [
+    { activityStatus: 'all_sku_win_bid', status: 'active' },
+    { activityStatus: 'partial_sku_win_bid', status: 'active' },
+    { activityStatus: 'all_sku_not_win_bid', status: 'active' }
+  ]);
+  assert.match(summary.title, /状态汇总/);
+  assert.match(summary.body, /测试店铺/);
+  assert.match(summary.body, /全部规格已中标：1/);
+  assert.match(summary.body, /部分规格未中标：1/);
+  assert.match(summary.body, /全部规格未中标：1/);
+
+  const offline = buildAccountOfflineAlert({ displayName: '测试店铺' });
+  assert.match(offline.title, /掉线/);
+  assert.match(offline.body, /重新登录/);
 });

@@ -1,17 +1,46 @@
 {
   "name": "pdd-subsidy-monitor",
   "productName": "Elunvi Mart",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "拼多多商家百亿补贴状态监控客户端",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "package:win": "node scripts/package-windows.js"
+  },
+  "build": {
+    "appId": "com.shineway.elunvimart",
+    "productName": "Elunvi Mart",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "node_modules/lucide/**/*",
+      "!test/**/*",
+      "!preview/**/*",
+      "!design-qa.md",
+      "!PROJECT_GUIDELINES.md"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "Elunvi-Mart-${version}-portable.${ext}"
+    }
+  },
+  "dependencies": {
+    "lucide": "^1.47.0"
   },
   "devDependencies": {
-    "electron": "^37.2.6",
-    "lucide": "^1.47.0"
+    "electron": "^37.2.6"
   }
 }

@@ -2,6 +2,10 @@ const state = {
   accounts: [],
   currentAccount: null,
   products: [],
+  productPage: 1,
+  syncCooldownUntilByAccount: new Map(),
+  syncCooldownTimer: null,
+  syncInProgress: false,
   loginAccountId: null,
   loginMode: 'create',
   pendingRemoval: null
@@ -19,6 +23,12 @@ const elements = {
   productsBody: document.querySelector('#products-body'),
   productsTable: document.querySelector('#products-table-frame'),
   productsEmpty: document.querySelector('#products-empty'),
+  productsPagination: document.querySelector('#products-pagination'),
+  productsPaginationSummary: document.querySelector('#products-pagination-summary'),
+  productsPageCurrent: document.querySelector('#products-page-current'),
+  productsPagePrev: document.querySelector('#products-page-prev'),
+  productsPageNext: document.querySelector('#products-page-next'),
+  syncProducts: document.querySelector('#sync-products'),
   notice: document.querySelector('#notice'),
   modal: document.querySelector('#account-modal'),
   loginStartStep: document.querySelector('#login-start-step'),
@@ -33,11 +43,14 @@ const elements = {
   confirmRemoveAccount: document.querySelector('#confirm-remove-account')
 };
 
+const PRODUCT_PAGE_SIZE = 10;
+
 const STATUS_LABELS = {
-  active: ['在标', 'status-active'],
-  suspected: ['疑似掉标', 'status-warning'],
+  all_sku_win_bid: ['全部规格已中标', 'status-active'],
+  partial_sku_win_bid: ['部分规格未中标', 'status-warning'],
+  all_sku_not_win_bid: ['全部规格未中标', 'status-lost'],
   lost: ['已掉标', 'status-lost'],
-  reviewing: ['审核中', 'status-info']
+  unknown: ['状态异常', 'status-warning']
 };
 
 function createIcon(name) {
@@ -67,11 +80,66 @@ function renderAccountAvatar(container, avatarUrl) {
   }
 }
 
-function formatDate(value) {
-  if (!value) return '尚未同步';
+const LOCAL_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+  hour12: false, timeZone: LOCAL_TIME_ZONE
+});
+
+function formatDate(value, emptyLabel = '尚未同步') {
+  if (!value) return emptyLabel;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '尚未同步';
-  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date);
+  if (Number.isNaN(date.getTime())) return emptyLabel;
+  return LOCAL_DATE_FORMATTER.format(date);
+}
+
+function formatPrice(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '-';
+  return text.split(/[-~～]/).map((part) => {
+    const amountInFen = Number(part.trim());
+    if (!Number.isFinite(amountInFen)) return part.trim();
+    return `¥${(amountInFen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }).join(' - ');
+}
+
+function getActivityStatus(product) {
+  if (product.status === 'lost') return 'lost';
+  const raw = product.raw || {};
+  if (raw.all_sku_win_bid === true) return 'all_sku_win_bid';
+  if (Number(raw.target_activity_status) === 2) return 'partial_sku_win_bid';
+  if (Number(raw.target_activity_status) === 3) return 'all_sku_not_win_bid';
+  return STATUS_LABELS[product.activityStatus] ? product.activityStatus : 'unknown';
+}
+
+function renderStatusOptions() {
+  const select = document.querySelector('#product-status');
+  const selected = select.value;
+  const available = new Set(state.products.map(getActivityStatus));
+  const statuses = ['all_sku_win_bid', 'partial_sku_win_bid', 'all_sku_not_win_bid', 'lost', 'unknown']
+    .filter((value) => available.has(value));
+  const options = [['', '全部状态'], ...statuses.map((value) => [value, STATUS_LABELS[value][0]])];
+  select.replaceChildren(...options.map(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
+  select.value = statuses.includes(selected) ? selected : '';
+}
+
+function renderPagination(totalItems) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / PRODUCT_PAGE_SIZE));
+  state.productPage = Math.min(Math.max(1, state.productPage), totalPages);
+  const hasPagination = totalItems > PRODUCT_PAGE_SIZE;
+  elements.productsPagination.hidden = !hasPagination;
+  if (!hasPagination) return totalPages;
+  elements.productsPaginationSummary.textContent = `共 ${totalItems} 条`;
+  elements.productsPageCurrent.textContent = `第 ${state.productPage} / ${totalPages} 页`;
+  elements.productsPagePrev.disabled = state.productPage <= 1;
+  elements.productsPageNext.disabled = state.productPage >= totalPages;
+  return totalPages;
 }
 
 function showNotice(message, error = false) {
@@ -104,6 +172,46 @@ function friendlyError(error) {
   }
   const ipcMessage = original.match(/Error invoking remote method '[^']+': Error: (.+)$/);
   return ipcMessage?.[1] || original || '操作没有完成，请稍后重试。';
+}
+
+function syncCooldownRemaining(accountId) {
+  return Math.max(0, (state.syncCooldownUntilByAccount.get(accountId) || 0) - Date.now());
+}
+
+function updateSyncButton() {
+  const button = elements.syncProducts;
+  if (!button) return;
+  const label = button.querySelector('span');
+  if (state.syncInProgress) {
+    button.disabled = true;
+    label.textContent = '同步中';
+    return;
+  }
+  const remainingMs = syncCooldownRemaining(state.currentAccount?.id);
+  if (remainingMs > 0) {
+    button.disabled = true;
+    label.textContent = `${Math.ceil(remainingMs / 1000)} 秒后可同步`;
+    if (!state.syncCooldownTimer) state.syncCooldownTimer = window.setInterval(updateSyncButton, 250);
+    return;
+  }
+  button.disabled = false;
+  label.textContent = '从后台同步';
+  if (state.syncCooldownTimer) {
+    window.clearInterval(state.syncCooldownTimer);
+    state.syncCooldownTimer = null;
+  }
+}
+
+function startSyncCooldown(accountId, durationMs = 60_000) {
+  const until = Date.now() + durationMs;
+  state.syncCooldownUntilByAccount.set(accountId, Math.max(until, state.syncCooldownUntilByAccount.get(accountId) || 0));
+  updateSyncButton();
+}
+
+function applySyncCooldownFromError(error, accountId) {
+  const message = String(error?.message || error || '');
+  const match = message.match(/(\d+)\s*秒/);
+  if (match) startSyncCooldown(accountId, Math.max(1000, Number(match[1]) * 1000));
 }
 
 function setLoginButtonLabel(label) {
@@ -158,6 +266,7 @@ function renderAccounts() {
       <td><div class="account-cell"><span class="account-avatar"><i data-lucide="store"></i></span><div><div class="primary-text"></div><div class="secondary-text"></div></div></div></td>
       <td>${accountStatus(account)}</td>
       <td>${Number(account.productCount || 0)} 个</td>
+      <td><span class="status ${Number(account.abnormalProductCount || 0) > 0 ? 'status-lost' : 'status-active'}">${Number(account.abnormalProductCount || 0)} 个</span></td>
       <td class="time">${formatDate(account.lastSyncAt)}</td>
       <td><div class="account-actions"><button class="icon-button account-action" type="button" data-account-action="view" aria-label="查看营销活动商品" title="查看营销活动商品"><i data-lucide="eye"></i></button><button class="icon-button account-action" type="button" data-account-action="login" aria-label="${account.status === 'active' ? '重新登录' : '登录'}" title="${account.status === 'active' ? '重新登录' : '登录'}"><i data-lucide="refresh-cw"></i></button><button class="icon-button account-action account-remove" type="button" data-account-action="remove" aria-label="移除账号" title="移除账号"><i data-lucide="trash-2"></i></button></div></td>`;
     row.querySelector('.primary-text').textContent = account.displayName || '未命名店铺';
@@ -205,30 +314,35 @@ async function loadAccounts() {
 }
 
 function renderProducts() {
+  renderStatusOptions();
   const search = document.querySelector('#product-search').value.trim().toLowerCase();
   const status = document.querySelector('#product-status').value;
   const visible = state.products.filter((product) => {
     const matchesText = !search || String(product.name || '').toLowerCase().includes(search) || String(product.id || '').includes(search);
-    return matchesText && (!status || product.status === status);
+    return matchesText && (!status || getActivityStatus(product) === status);
   });
+  renderPagination(visible.length);
+  const pageStart = (state.productPage - 1) * PRODUCT_PAGE_SIZE;
+  const pageProducts = visible.slice(pageStart, pageStart + PRODUCT_PAGE_SIZE);
   elements.productsBody.replaceChildren();
   elements.productsEmpty.hidden = visible.length > 0;
   elements.productsTable.hidden = visible.length === 0;
-  for (const product of visible) {
-    const [label, className] = STATUS_LABELS[product.status] || ['未知', 'status-info'];
+  for (const product of pageProducts) {
+    const activityStatus = getActivityStatus(product);
+    const [label, className] = STATUS_LABELS[activityStatus];
     const row = document.createElement('tr');
     row.innerHTML = `
-      <td><div class="product-cell"><span class="product-thumb"></span><div><div class="primary-text"></div><div class="secondary-text"></div></div></div></td>
-      <td><div class="activity-name"></div><div class="secondary-text activity-id"></div></td>
+      <td><div class="activity-name"></div><div class="secondary-text activity-product"></div><div class="secondary-text activity-id"></div></td>
+      <td><div class="product-cell"><span class="product-thumb"></span><div><div class="primary-text my-bid-product"></div><div class="secondary-text my-bid-id"></div></div></div></td>
       <td><span class="status ${className}">${label}</span></td>
-      <td class="price"></td><td class="time ends-at"></td><td class="time updated-at"></td>`;
-    row.querySelector('.primary-text').textContent = product.name || '未命名商品';
-    row.querySelector('.product-cell .secondary-text').textContent = `商品 ID ${product.id || '-'}`;
+      <td class="price"></td><td class="time enrolled-at"></td>`;
     row.querySelector('.activity-name').textContent = product.activityName || '百亿补贴';
+    row.querySelector('.activity-product').textContent = product.activityProductName ? `活动商品：${product.activityProductName}` : '';
     row.querySelector('.activity-id').textContent = product.activityId ? `活动 ID ${product.activityId}` : '';
-    row.querySelector('.price').textContent = product.activityPrice ?? '-';
-    row.querySelector('.ends-at').textContent = product.endsAt || '-';
-    row.querySelector('.updated-at').textContent = formatDate(product.updatedAt);
+    row.querySelector('.my-bid-product').textContent = product.myBidProductName || product.name || '未命名商品';
+    row.querySelector('.my-bid-id').textContent = product.myBidProductId ? `商品 ID ${product.myBidProductId}` : `商品 ID ${product.id || '-'}`;
+    row.querySelector('.price').textContent = formatPrice(product.activityPrice);
+    row.querySelector('.enrolled-at').textContent = formatDate(product.enrolledAt, '-');
     const thumb = row.querySelector('.product-thumb');
     if (product.imageUrl) {
       const image = document.createElement('img');
@@ -252,10 +366,12 @@ async function openAccount(account) {
   elements.pageMeta.hidden = false;
   elements.addAccount.hidden = true;
   document.querySelectorAll('.view').forEach((view) => { view.hidden = view.id !== 'account-detail-view'; });
+  state.productPage = 1;
   state.products = await window.pddMonitor.products.list(account.id);
   document.querySelector('#detail-product-count').textContent = state.products.length;
-  document.querySelector('#detail-error-count').textContent = state.products.filter((item) => ['lost', 'suspected'].includes(item.status)).length;
+  document.querySelector('#detail-error-count').textContent = state.products.filter((item) => getActivityStatus(item) !== 'all_sku_win_bid').length;
   renderProducts();
+  updateSyncButton();
 }
 
 function resetLoginModal() {
@@ -317,23 +433,30 @@ async function completeLogin() {
 
 async function syncProducts() {
   if (!state.currentAccount) return;
-  const button = document.querySelector('#sync-products');
-  const label = button.querySelector('span');
-  button.disabled = true;
-  label.textContent = '同步中';
+  const accountId = state.currentAccount.id;
+  if (syncCooldownRemaining(accountId) > 0) {
+    updateSyncButton();
+    return;
+  }
+  state.syncInProgress = true;
+  startSyncCooldown(accountId);
+  updateSyncButton();
   try {
-    const result = await window.pddMonitor.products.sync(state.currentAccount.id);
+    const result = await window.pddMonitor.products.sync(accountId);
     state.products = result.products;
+    state.productPage = 1;
     renderProducts();
     document.querySelector('#detail-product-count').textContent = state.products.length;
+    document.querySelector('#detail-error-count').textContent = state.products.filter((item) => getActivityStatus(item) !== 'all_sku_win_bid').length;
     const message = result.message || `已同步 ${state.products.length} 个营销活动商品`;
     showNotice(result.notificationErrors?.length ? `${message}；部分提醒发送失败` : message, !result.ok || Boolean(result.notificationErrors?.length));
     await loadAccounts();
   } catch (error) {
+    applySyncCooldownFromError(error, accountId);
     showNotice(friendlyError(error), true);
   } finally {
-    button.disabled = false;
-    label.textContent = '从后台同步';
+    state.syncInProgress = false;
+    updateSyncButton();
   }
 }
 
@@ -383,8 +506,10 @@ elements.startLogin.addEventListener('click', beginLogin);
 elements.completeLogin.addEventListener('click', completeLogin);
 elements.pageBack.addEventListener('click', () => { showView('accounts'); loadAccounts(); });
 document.querySelector('#sync-products').addEventListener('click', syncProducts);
-document.querySelector('#product-search').addEventListener('input', renderProducts);
-document.querySelector('#product-status').addEventListener('change', renderProducts);
+document.querySelector('#product-search').addEventListener('input', () => { state.productPage = 1; renderProducts(); });
+document.querySelector('#product-status').addEventListener('change', () => { state.productPage = 1; renderProducts(); });
+elements.productsPagePrev.addEventListener('click', () => { if (state.productPage > 1) { state.productPage -= 1; renderProducts(); } });
+elements.productsPageNext.addEventListener('click', () => { state.productPage += 1; renderProducts(); });
 document.querySelectorAll('#wecom-enabled,#dingtalk-enabled').forEach((input) => input.addEventListener('change', updateChannelVisibility));
 document.querySelectorAll('[data-test-channel]').forEach((button) => button.addEventListener('click', async () => {
   const kind = button.dataset.testChannel;

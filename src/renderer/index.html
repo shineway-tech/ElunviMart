@@ -32,7 +32,7 @@
           <div class="section-header"><div><h2>账号列表</h2></div></div>
           <div class="table-frame" id="accounts-table-frame">
             <table>
-              <thead><tr><th>商家账号</th><th>登录状态</th><th>营销活动商品</th><th>最近同步</th><th></th></tr></thead>
+              <thead><tr><th>商家账号</th><th>登录状态</th><th>营销活动商品</th><th>异常活动商品</th><th>最近同步</th><th></th></tr></thead>
               <tbody id="accounts-body"></tbody>
             </table>
           </div>
@@ -51,15 +51,23 @@
               <div><h2>营销活动商品</h2></div>
               <div class="toolbar">
                 <label class="search-field"><i data-lucide="search"></i><input class="input search-input" id="product-search" type="search" placeholder="搜索商品名称或 ID" aria-label="搜索商品"></label>
-                <select class="select" id="product-status" aria-label="筛选状态"><option value="">全部状态</option><option value="active">在标</option><option value="suspected">疑似掉标</option><option value="lost">已掉标</option><option value="reviewing">审核中</option></select>
+                <select class="select" id="product-status" aria-label="筛选状态"><option value="">全部状态</option></select>
                 <button class="button button-primary" type="button" id="sync-products"><i data-lucide="refresh-cw"></i><span>从后台同步</span></button>
               </div>
             </div>
             <div class="table-frame" id="products-table-frame">
               <table>
-                <thead><tr><th>商品</th><th>活动</th><th>状态</th><th>活动价</th><th>活动结束</th><th>最近更新</th></tr></thead>
+                <thead><tr><th>活动商品信息</th><th>我的竞价商品信息</th><th>状态</th><th>当前价格</th><th>报名时间</th></tr></thead>
                 <tbody id="products-body"></tbody>
               </table>
+            </div>
+            <div class="pagination" id="products-pagination" hidden>
+              <span class="pagination-summary" id="products-pagination-summary"></span>
+              <div class="pagination-controls">
+                <button class="button" type="button" id="products-page-prev">上一页</button>
+                <span class="pagination-current" id="products-page-current"></span>
+                <button class="button" type="button" id="products-page-next">下一页</button>
+              </div>
             </div>
             <div class="empty-state compact" id="products-empty" hidden><i data-lucide="package-search"></i><h2>暂无营销活动商品</h2></div>
           </section>

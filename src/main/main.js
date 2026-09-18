@@ -6,9 +6,17 @@ const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./m
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
 const { assertWebhook, sendChannelTest, sendConfiguredNotifications } = require('./notifier');
 const { MonitorScheduler } = require('./scheduler');
-const { reconcileProducts, buildStatusAlert } = require('./product-monitor');
+const {
+  reconcileProducts,
+  buildStatusAlert,
+  buildActivitySummaryAlert,
+  buildAccountOfflineAlert,
+  isAbnormalActivityProduct,
+  hasAbnormalActivityProducts
+} = require('./product-monitor');
 
 const MERCHANT_URL = 'https://mms.pinduoduo.com/';
+const BID_PAGE_URL = 'https://mms.pinduoduo.com/act-bidding/market-sign-list?activity_status=IN_PROGRESS';
 const MAX_ACCOUNTS = 10;
 const APP_NAME = 'Elunvi Mart';
 
@@ -18,6 +26,9 @@ let mainWindow;
 let store;
 let scheduler;
 const loginWindows = new Map();
+const antiContentByAccount = new Map();
+const manualSyncAtByAccount = new Map();
+const MANUAL_SYNC_COOLDOWN_MS = 60_000;
 
 function rendererPath(file) {
   return path.join(__dirname, '..', 'renderer', file);
@@ -58,13 +69,18 @@ function accountPartition(accountId) {
   return `persist:pdd-account-${accountId}`;
 }
 
-function configureMerchantSession(partition) {
+function configureMerchantSession(partition, accountId) {
   const merchantSession = session.fromPartition(partition);
   merchantSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  merchantSession.webRequest.onBeforeSendHeaders({ urls: ['*://mms.pinduoduo.com/lakemms/bid/query/bidList*'] }, (details, callback) => {
+    const antiContentEntry = Object.entries(details.requestHeaders).find(([name]) => name.toLowerCase() === 'anti-content');
+    if (antiContentEntry?.[1]) antiContentByAccount.set(accountId, String(antiContentEntry[1]));
+    callback({ requestHeaders: details.requestHeaders });
+  });
   return merchantSession;
 }
 
-function createLoginWindow(accountId) {
+function createLoginWindow(accountId, { deferNavigation = false, show = true } = {}) {
   const existing = loginWindows.get(accountId);
   if (existing && !existing.isDestroyed()) {
     existing.show();
@@ -72,7 +88,7 @@ function createLoginWindow(accountId) {
     return existing;
   }
   const partition = accountPartition(accountId);
-  configureMerchantSession(partition);
+  configureMerchantSession(partition, accountId);
   const window = new BrowserWindow({
     width: 1180,
     height: 820,
@@ -80,6 +96,7 @@ function createLoginWindow(accountId) {
     minHeight: 640,
     title: `${APP_NAME} - 拼多多商家后台登录`,
     icon: appIconPath(),
+    show,
     webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -89,10 +106,39 @@ function createLoginWindow(accountId) {
     } catch {}
     return { action: 'deny' };
   });
-  window.loadURL(MERCHANT_URL);
-  window.on('closed', () => loginWindows.delete(accountId));
+  if (!deferNavigation) window.loadURL(MERCHANT_URL);
+  window.on('closed', () => {
+    loginWindows.delete(accountId);
+    antiContentByAccount.delete(accountId);
+  });
   loginWindows.set(accountId, window);
   return window;
+}
+
+async function ensureBidPage(accountId, window, { refresh = false } = {}) {
+  if (!window || window.isDestroyed()) throw new AdapterNotConfiguredError();
+  const currentUrl = window.webContents.getURL();
+  if (refresh || !currentUrl.includes('/act-bidding/market-sign-list')) {
+    antiContentByAccount.delete(accountId);
+    await new Promise((resolve, reject) => {
+      const onFinished = () => { cleanup(); resolve(); };
+      const onFailed = (_event, errorCode, errorDescription) => {
+        cleanup();
+        reject(new Error(`拼多多营销竞价页面加载失败（${errorCode}: ${errorDescription}）`));
+      };
+      const cleanup = () => {
+        window.webContents.removeListener('did-finish-load', onFinished);
+        window.webContents.removeListener('did-fail-load', onFailed);
+      };
+      window.webContents.once('did-finish-load', onFinished);
+      window.webContents.once('did-fail-load', onFailed);
+      window.loadURL(BID_PAGE_URL).catch((error) => { cleanup(); reject(error); });
+    });
+  }
+  const deadline = Date.now() + 10_000;
+  while (!antiContentByAccount.has(accountId) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
 }
 
 function isMerchantLoggedIn(urlString) {
@@ -215,6 +261,8 @@ function validateSettings(input) {
 async function syncAccount(adapter, accountId, source = 'manual') {
   const account = store.getAccount(accountId);
   if (!account) throw new Error('商家账号不存在');
+  const loginWindow = loginWindows.get(accountId);
+  if (!loginWindow || loginWindow.isDestroyed()) createLoginWindow(accountId, { deferNavigation: true, show: false });
   try {
     const incomingProducts = await adapter.syncProducts(account);
     const now = new Date().toISOString();
@@ -226,18 +274,58 @@ async function syncAccount(adapter, accountId, source = 'manual') {
     for (const change of reconciliation.changes) {
       notificationErrors.push(...await sendConfiguredNotifications(publicSettings(store.getSettings()), buildStatusAlert(account, change)));
     }
+    if (hasAbnormalActivityProducts(reconciliation.products)) {
+      notificationErrors.push(...await sendConfiguredNotifications(publicSettings(store.getSettings()), buildActivitySummaryAlert(account, reconciliation.products)));
+    }
     return { ok: true, source: 'api', products: reconciliation.products, syncedAt: now, notificationErrors };
   } catch (error) {
     if (error instanceof AdapterNotConfiguredError) {
+      await markAccountOffline(account, error, source);
       return { ok: false, source: 'cache', code: error.code, message: error.message, products: store.getProducts(accountId) };
     }
+    if (isAccountOfflineError(error)) await markAccountOffline(account, error, source);
     store.updateAccount(accountId, { syncStatus: 'error', lastSyncError: error.message, lastSyncSource: source });
     throw error;
   }
 }
 
+function isAccountOfflineError(error) {
+  const message = String(error?.message || error || '').toLowerCase();
+  if (error instanceof AdapterNotConfiguredError) return true;
+  return /http\s*(401|403)|未登录|登录失效|账号失效|凭证失效|身份验证失败|anti-content/.test(message);
+}
+
+async function markAccountOffline(account, error, source) {
+  const current = store.getAccount(account.id);
+  if (!current) return;
+  const wasOnline = current.status === 'active';
+  store.updateAccount(account.id, {
+    status: 'needs_login',
+    syncStatus: 'error',
+    lastSyncError: error.message,
+    lastSyncSource: source
+  });
+  sendToRenderer('accounts:changed');
+  if (wasOnline) {
+    await sendConfiguredNotifications(publicSettings(store.getSettings()), buildAccountOfflineAlert(account));
+  }
+}
+
+function enforceManualSyncCooldown(accountId) {
+  const lastSyncAt = manualSyncAtByAccount.get(accountId) || 0;
+  const remainingMs = MANUAL_SYNC_COOLDOWN_MS - (Date.now() - lastSyncAt);
+  if (remainingMs > 0) {
+    const seconds = Math.ceil(remainingMs / 1000);
+    throw new Error(`同步操作冷却中，请在 ${seconds} 秒后再试`);
+  }
+  manualSyncAtByAccount.set(accountId, Date.now());
+}
+
 function registerIpc(adapter) {
-  ipcMain.handle('accounts:list', () => store.getAccounts());
+  ipcMain.handle('accounts:list', () => store.getAccounts().map((account) => ({
+    ...account,
+    abnormalProductCount: store.getProducts(account.id).filter(isAbnormalActivityProduct).length
+  })));
   ipcMain.handle('accounts:startLogin', (_event, accountId) => {
     let id = accountId;
     if (!id) {
@@ -272,17 +360,23 @@ function registerIpc(adapter) {
     });
     window.hide();
     sendToRenderer('accounts:changed');
+    scheduler?.refreshAccounts();
     return account;
   });
   ipcMain.handle('accounts:remove', (_event, accountId) => {
     store.removeAccount(accountId);
+    manualSyncAtByAccount.delete(accountId);
     const window = loginWindows.get(accountId);
     if (window && !window.isDestroyed()) window.close();
     sendToRenderer('accounts:changed');
+    scheduler?.refreshAccounts();
     return true;
   });
   ipcMain.handle('products:list', (_event, accountId) => store.getProducts(accountId));
-  ipcMain.handle('products:sync', (_event, accountId) => syncAccount(adapter, accountId));
+  ipcMain.handle('products:sync', (_event, accountId) => {
+    enforceManualSyncCooldown(accountId);
+    return syncAccount(adapter, accountId);
+  });
   ipcMain.handle('settings:get', () => publicSettings(store.getSettings()));
   ipcMain.handle('settings:save', (_event, input) => {
     const validated = validateSettings(input);
@@ -301,17 +395,27 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock.setIcon(nativeImage.createFromPath(dockIconPath()));
   const userDataPath = app.getPath('userData');
   store = new SqliteStore(path.join(userDataPath, 'monitor.db'), { legacyJsonPath: path.join(userDataPath, 'monitor-data.json') });
-  const adapter = new PddActivityAdapter({ getLoginWindow: (id) => loginWindows.get(id) });
-  scheduler = new MonitorScheduler(async () => {
-    for (const account of store.getAccounts().filter((item) => item.status === 'active')) {
-      try {
-        await syncAccount(adapter, account.id, 'scheduled');
-      } catch (error) {
-        // A transient failure for one shop must not block the remaining accounts.
-        console.error(`Scheduled sync failed for ${account.id}:`, error.message);
-      }
-    }
+  const adapter = new PddActivityAdapter({
+    getLoginWindow: (id) => loginWindows.get(id),
+    getAntiContent: (id) => antiContentByAccount.get(id) || '',
+    ensureBidPage
   });
+  scheduler = new MonitorScheduler(async (accountId) => {
+    const account = store.getAccount(accountId);
+    if (!account) return;
+    if (account.status !== 'active') {
+      await sendConfiguredNotifications(
+        publicSettings(store.getSettings()),
+        buildAccountOfflineAlert(account)
+      );
+      return;
+    }
+    try {
+      await syncAccount(adapter, accountId, 'scheduled');
+    } catch (error) {
+      console.error(`Scheduled sync failed for ${accountId}:`, error.message);
+    }
+  }, () => store.getAccounts());
   registerIpc(adapter);
   scheduler.configure(publicSettings(store.getSettings()));
   createMainWindow();
