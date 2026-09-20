@@ -63,6 +63,17 @@ test('reads response body only after loadingFinished, including base64 data', as
   assert.deepEqual(result.query, query);
 });
 
+test('ignores extra same-page requests until one valid response completes', async t => {
+  const f = await setup(t);
+  const result = f.capture.collectPage({ page: 1, timeoutMs: 100, trigger: async () => {
+    f.request('extra', { ...query, status_list: [] });
+    f.response('extra'); f.emit('loadingFinished', { requestId: 'extra' });
+    f.request('valid', { ...query, status_list: [501] });
+    f.response('valid'); f.emit('loadingFinished', { requestId: 'valid' });
+  } });
+  assert.equal((await result).requestId, 'valid');
+});
+
 test('ignores old request IDs, foreign hosts, GETs and responses for another page', async (t) => {
   const f = await setup(t);
   f.request('old');

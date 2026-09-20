@@ -28,6 +28,10 @@ function queryKey(query) {
   return JSON.stringify(normalize(filters));
 }
 
+function isPrimaryQuery(query) {
+  return Array.isArray(query.status_list) && query.status_list.length > 0;
+}
+
 class PddResponseCapture {
   constructor() {
     this.debuggerSession = null;
@@ -54,7 +58,7 @@ class PddResponseCapture {
     let resolve;
     let reject;
     const response = new Promise((yes, no) => { resolve = yes; reject = no; });
-    const active = { page, expectedQuery, requests: new Map(), resolve, reject };
+    const active = { page, expectedQuery, requests: new Map(), resolve, reject, fallbackTimer: null };
     this.active = active;
     const action = Promise.resolve().then(() => { signal?.throwIfAborted(); return trigger(); });
     // The deadline must also cover a stalled navigation after its response arrived.
@@ -67,6 +71,7 @@ class PddResponseCapture {
       return result;
     } finally {
       clearTimeout(boundedTimer);
+      if (active.fallbackTimer) clearTimeout(active.fallbackTimer);
       signal?.removeEventListener('abort', timeoutAbort);
       if (this.active === active) this.active = null;
     }
@@ -83,12 +88,11 @@ class PddResponseCapture {
         try { query = JSON.parse(request.postData); } catch { throw new AdapterResponseError('无法识别营销页面请求参数'); }
         if (Number(query.page_number) !== active.page) return;
         if (!Number.isSafeInteger(Number(query.page_size)) || Number(query.page_size) < 1 ||
-            !Array.isArray(query.status_list) || query.status_list.length !== 1 || Number(query.status_list[0]) !== 501 ||
+            !Array.isArray(query.status_list) ||
+            (query.status_list.length !== 0 && (query.status_list.length !== 1 || Number(query.status_list[0]) !== 501)) ||
             (active.expectedQuery && queryKey(query) !== queryKey(active.expectedQuery))) {
           throw new AdapterResponseError('营销页面筛选条件已变化，保留原缓存');
         }
-        // One pending page request per action: duplicates must never form a partial snapshot.
-        if (active.requests.size) throw new AdapterResponseError('营销页面产生重复分页请求，请稍后同步');
         active.requests.set(params.requestId, { query });
         return;
       }
@@ -110,10 +114,28 @@ class PddResponseCapture {
   }
 
   async readBody(active, requestId, request) {
-    const result = await this.debuggerSession.sendCommand('Network.getResponseBody', { requestId });
+    const bodyResult = await this.debuggerSession.sendCommand('Network.getResponseBody', { requestId });
     if (this.active !== active) return;
-    const body = result.base64Encoded ? Buffer.from(result.body, 'base64').toString('utf8') : result.body;
-    active.resolve({ page: active.page, query: request.query, requestId, ...parseBidListResponseBody(body) });
+    const body = bodyResult.base64Encoded ? Buffer.from(bodyResult.body, 'base64').toString('utf8') : bodyResult.body;
+    const parsed = { page: active.page, query: request.query, requestId, ...parseBidListResponseBody(body) };
+    request.result = parsed;
+    if (isPrimaryQuery(request.query)) {
+      active.resolve(parsed);
+      return;
+    }
+    // PDD sometimes emits an unfiltered same-page request alongside the normal
+    // status=501 request. Keep it as a fallback, but let the primary request win.
+    const primaryPending = [...active.requests.values()].some(candidate =>
+      !candidate.ignored && isPrimaryQuery(candidate.query));
+    if (primaryPending) return;
+    if (active.fallbackTimer) clearTimeout(active.fallbackTimer);
+    active.fallbackTimer = setTimeout(() => {
+      active.fallbackTimer = null;
+      if (this.active !== active) return;
+      const primary = [...active.requests.values()].find(candidate =>
+        !candidate.ignored && isPrimaryQuery(candidate.query));
+      if (!primary) active.resolve(parsed);
+    }, 0);
   }
 
   cancel(error = new Error('营销页面响应捕获已关闭')) { this.active?.reject(error); }
