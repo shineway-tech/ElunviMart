@@ -114,29 +114,25 @@ trialing → active → past_due → grace_period → expired
 | --- | ---: | ---: | ---: |
 | 工作区数量 | 1 | 3 | 10 |
 | 子账号数量 | 2 | 10 | 50 |
-| 拼多多店铺数量 | 1 | 5 | 20 |
-| 单店商品监控上限 | 200 | 2,000 | 10,000 |
+| 拼多多店铺数量 | 1 | 5 | 10 |
 | 最短自动同步间隔 | 30 分钟 | 10 分钟 | 5 分钟 |
-| 商品历史保留 | 7 天 | 90 天 | 365 天 |
 | 桌面通知 | 支持 | 支持 | 支持 |
 | 企业微信/钉钉通知 | 1 个 | 多个 | 多组配置 |
 | 数据导出 | 不支持 | 支持 | 支持 |
 | 操作审计 | 不支持 | 基础审计 | 完整审计 |
-| API/Webhook | 不支持 | 基础 Webhook | 完整 API |
 | 技术支持 | 标准 | 优先 | 专属 |
+
+拼多多店铺数量是产品级硬上限，任何会员档位最多只能绑定 10 个店铺。会员权益只能限制各档位的实际可用数量，不能突破这个上限。
 
 推荐权益键包括：
 
 - `max_workspaces`；
 - `max_members`；
 - `max_merchants`；
-- `max_products_per_merchant`；
 - `min_sync_interval_minutes`；
-- `history_retention_days`；
 - `notification_channels`；
 - `can_export`；
-- `can_audit`；
-- `can_use_api`。
+- `can_audit`。
 
 当会员降级时，已存在的数据不立即删除；新建成员、店铺和同步任务按新额度阻止，并提示用户处理超额数据。会员恢复或升级后立即解除对应限制。
 
@@ -210,4 +206,3 @@ trialing → active → past_due → grace_period → expired
 - 企业版是否需要人工审核开通；
 - 邮件服务商和发件域名；
 - 支付渠道和退款规则；
-- 企业版 API/Webhook 的具体调用额度。
