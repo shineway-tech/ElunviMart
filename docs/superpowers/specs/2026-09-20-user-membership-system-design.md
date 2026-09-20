@@ -190,6 +190,17 @@ trialing → active → past_due → grace_period → expired
 | 前端配置 | 开发 API 地址 | 构建时注入线上 API 地址 |
 | 数据 | 测试账号和测试会员 | 真实用户和订阅数据 |
 
+线上邮件服务使用腾讯企业邮 SMTP，非敏感连接参数如下：
+
+- Host：`smtp.exmail.qq.com`；
+- Port：`465`；
+- Secure：`true`；
+- Username：`support@honeykid.cn`；
+- From email：`support@honeykid.cn`；
+- From name：`support`。
+
+SMTP 密码只通过线上 Secret 注入，不写入仓库、`.env.example`、日志或设计文档。开发环境继续使用 Mailpit，不连接线上邮箱。
+
 后端配置按环境拆分为公共配置、开发配置和生产配置。仓库只提交 `.env.example`，不提交真实密钥、数据库密码、JWT 签名密钥、邮件凭证或支付凭证。生产环境必须显式设置环境标识，缺少关键配置时服务拒绝启动。
 
 前端只保存 API 地址和非敏感环境标识，不把后端密钥打包进 Electron。登录令牌继续使用系统安全存储；本地开发和线上环境使用不同的令牌签名密钥，开发令牌不能访问生产 API。
@@ -248,7 +259,6 @@ trialing → active → past_due → grace_period → expired
 - 三档会员的正式名称和价格；
 - 是否提供注册试用期，以及试用期天数；
 - 企业版是否需要人工审核开通；
-- 邮件服务商；
 - 支付渠道和退款规则；
 - 线上部署平台、数据库和 Redis 服务商；
 - 线上 API 域名和邮件发件域名；
