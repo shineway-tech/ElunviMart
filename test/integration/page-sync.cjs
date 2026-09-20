@@ -6,12 +6,13 @@ const os = require('node:os');
 const path = require('node:path');
 const { MerchantSessionManager } = require('../../src/main/merchant-session');
 const { PddActivityAdapter } = require('../../src/main/pdd-adapter');
+const { clickBidPageControl } = require('../../src/main/bid-page-controls');
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'elunvi-page-test-'));
 app.setPath('userData', temporary);
 app.on('window-all-closed', () => {});
 const watchdog = setTimeout(() => { console.error('Electron integration deadline exceeded'); app.exit(1); }, 30_000);
 
-const html = `<!doctype html><meta charset="utf-8"><button id="query">查询</button>
+const html = `<!doctype html><meta charset="utf-8"><button id="query">查 询</button>
 <ul class="ant-pagination"><li class="ant-pagination-item-active" aria-current="page">1</li>
 <li title="1"><button id="first">1</button></li><li title="下一页"><button id="next" aria-label="下一页">下一页</button></li></ul>
 <script>
@@ -60,6 +61,31 @@ app.whenReady().then(async () => {
     assert.deepEqual(pages, [1, 2, 3, 1, 2, 3]);
     const entry = await manager.ensureMonitoringPage('test');
     assert.equal(entry.window.isVisible(), false);
+    // Exercise control recognition in a real DOM, without sending any further requests.
+    const controlChecks = await entry.webContents.executeJavaScript(`(() => {
+      const click = ${clickBidPageControl.toString()};
+      document.querySelector('[aria-current]').textContent = '1';
+      const next = document.querySelector('#next');
+      next.removeAttribute('aria-label'); next.textContent = '→';
+      next.onclick = () => { window.testClicks = (window.testClicks || 0) + 1; };
+      next.disabled = true;
+      const disabled = click(2).clicked;
+      next.disabled = false;
+      const enabled = click(2).clicked;
+      const query = document.querySelector('#query');
+      query.onclick = () => { window.testClicks++; };
+      const duplicate = query.cloneNode(true); document.body.append(duplicate);
+      let ambiguous = false;
+      try { click(1); } catch { ambiguous = true; }
+      duplicate.remove();
+      const queried = click(1).clicked;
+      query.remove();
+      const missing = click(1).clicked;
+      return { disabled, enabled, ambiguous, queried, missing, clicks: window.testClicks };
+    })()`);
+    assert.deepEqual(controlChecks, { disabled: false, enabled: true, ambiguous: true, queried: true, missing: false, clicks: 2 });
+    // Return to a later page so the next sync uses the untouched first-page control.
+    await entry.webContents.executeJavaScript("document.querySelector('[aria-current]').textContent = '3'");
     failure = true;
     const closed = new Promise(resolve => entry.window.once('closed', resolve));
     await assert.rejects(adapter.syncProducts({ id: 'test' }), { apiCode: 54001 });
@@ -67,7 +93,7 @@ app.whenReady().then(async () => {
     assert.equal(navigations, 1);
     await closed;
     assert.equal(entry.window.isDestroyed(), true);
-    console.log('PASS Electron: real hidden page + CDP, two fresh 3-page syncs, one navigation, page-generated headers, 54001 stops without retry.');
+    console.log('PASS Electron: real hidden page + CDP, two fresh 3-page syncs, one navigation, page-generated headers, disabled/ambiguous/missing controls, 54001 stops without retry.');
     clearTimeout(watchdog); app.exit(0);
   } catch (error) {
     console.error(error); manager?.closeAll(); clearTimeout(watchdog); app.exit(1);

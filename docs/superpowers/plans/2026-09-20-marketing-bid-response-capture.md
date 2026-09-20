@@ -239,6 +239,10 @@
 - [x] 每账号只允许一项运行中的任务，不累积队列；共享手动/自动失败冷却并在 SQLite 持久化。关闭/移除账号取消任务。
 - [x] scheduler 防止运行中重排、停止后重排，优先遵守失败冷却。
 - [x] 全量 Node 测试与真实 Electron 本地集成验证。测试命令：`node --test test/*.test.js`、`electron test/integration/page-sync.cjs`。
-- [ ] 独立复核、修复重要问题，最终复验。
+- [x] 独立复核、修复重要问题，最终复验。
 
 仅缺真实商家页面的线上控件适配验证，不能将本地夹具测试描述为线上验证通过。不会为验证而对真实商家接口进行循环抓取。
+
+Final verification: 61 tests pass under both Node 24 and the project Electron Node runtime. Real Electron local integration passes, including disabled, missing, ambiguous, parent-titled/icon-only and spaced Chinese controls. All 13 production JavaScript files pass syntax checks. Independent read-only review found no remaining confirmed Critical/Important bugs and no deferred minors.
+
+Execution decisions: Native implementation uses the current directory on codex/page-response-sync; the earlier assumption about implementing directly on main was corrected. The skill package lacks task-start/task-done, so task-brief plus explicit test/commit records were used. Cleanup was combined with the page-only switch because legacy replay interfaces contradict the requirement. Capture waits for loadingFinished and is armed before each action instead of buffering unsolicited responses; unknown controls cause a failed sync with the old cache retained. Backoff is persisted so restart/settings cannot bypass waiting; this can delay recovery after a transient failure. Live merchant UI compatibility remains unverified and may require selector adaptation after real-login testing. No merge or remote push was performed.

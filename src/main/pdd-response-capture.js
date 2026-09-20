@@ -13,7 +13,8 @@ function parseBidListResponseBody(body) {
   const products = mapBidListResponse(payload);
   const rawTotal = payload?.result?.total;
   const total = Number(rawTotal);
-  if (rawTotal == null || rawTotal === '' || !Number.isSafeInteger(total) || total < 0) {
+  const numericTotal = typeof rawTotal === 'number' || (typeof rawTotal === 'string' && /^(0|[1-9]\d*)$/.test(rawTotal));
+  if (!numericTotal || !Number.isSafeInteger(total) || total < 0) {
     throw new AdapterResponseError('营销竞价商品总数无效，保留原缓存');
   }
   return { total, products };

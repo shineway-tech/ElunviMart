@@ -43,7 +43,7 @@ test('only the exact HTTPS merchant endpoint is accepted', () => {
 
 test('requires a valid total before accepting a complete empty snapshot', () => {
   assert.deepEqual(parseBidListResponseBody(JSON.stringify(empty)), { total: 0, products: [] });
-  for (const total of [undefined, null, '', -1, 1.5, 'bad']) {
+  for (const total of [undefined, null, '', -1, 1.5, 'bad', false, true, [], {}, ' ']) {
     assert.throws(() => parseBidListResponseBody(JSON.stringify({ success: true, result: { total, result: [] } })), /总数/);
   }
   assert.throws(() => parseBidListResponseBody('{'), /JSON/);
