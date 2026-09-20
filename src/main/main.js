@@ -4,7 +4,6 @@ const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage } = requi
 const { SqliteStore } = require('./store');
 const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./merchant-profile');
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
-const { MerchantSessionManager } = require('./merchant-session');
 const { SyncQueue } = require('./sync-queue');
 const { assertWebhook, sendChannelTest, sendConfiguredNotifications } = require('./notifier');
 const { MonitorScheduler } = require('./scheduler');
@@ -18,6 +17,7 @@ const {
 } = require('./product-monitor');
 
 const MERCHANT_URL = 'https://mms.pinduoduo.com/';
+const BID_PAGE_URL = 'https://mms.pinduoduo.com/act-bidding/market-sign-list?activity_status=IN_PROGRESS';
 const MAX_ACCOUNTS = 10;
 const APP_NAME = 'Elunvi Mart';
 
@@ -26,9 +26,10 @@ app.setName(APP_NAME);
 let mainWindow;
 let store;
 let scheduler;
-let merchantSessions;
 let syncQueue;
 const loginWindows = new Map();
+const antiContentByAccount = new Map();
+const configuredPartitions = new Set();
 const manualSyncAtByAccount = new Map();
 const MANUAL_SYNC_COOLDOWN_MS = 60_000;
 
@@ -71,13 +72,20 @@ function accountPartition(accountId) {
   return `persist:pdd-account-${accountId}`;
 }
 
-function configureMerchantSession(partition) {
+function configureMerchantSession(partition, accountId) {
   const merchantSession = session.fromPartition(partition);
   merchantSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  if (configuredPartitions.has(partition)) return merchantSession;
+  configuredPartitions.add(partition);
+  merchantSession.webRequest.onBeforeSendHeaders({ urls: ['*://mms.pinduoduo.com/lakemms/bid/query/bidList*'] }, (details, callback) => {
+    const antiContentEntry = Object.entries(details.requestHeaders).find(([name]) => name.toLowerCase() === 'anti-content');
+    if (antiContentEntry?.[1]) antiContentByAccount.set(accountId, String(antiContentEntry[1]));
+    callback({ requestHeaders: details.requestHeaders });
+  });
   return merchantSession;
 }
 
-function createLoginWindow(accountId) {
+function createLoginWindow(accountId, { deferNavigation = false, show = true } = {}) {
   const existing = loginWindows.get(accountId);
   if (existing && !existing.isDestroyed()) {
     existing.show();
@@ -85,7 +93,7 @@ function createLoginWindow(accountId) {
     return existing;
   }
   const partition = accountPartition(accountId);
-  configureMerchantSession(partition);
+  configureMerchantSession(partition, accountId);
   const window = new BrowserWindow({
     width: 1180,
     height: 820,
@@ -93,7 +101,7 @@ function createLoginWindow(accountId) {
     minHeight: 640,
     title: `${APP_NAME} - 拼多多商家后台登录`,
     icon: appIconPath(),
-    show: true,
+    show,
     webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -103,12 +111,39 @@ function createLoginWindow(accountId) {
     } catch {}
     return { action: 'deny' };
   });
-  window.loadURL(MERCHANT_URL);
+  if (!deferNavigation) window.loadURL(MERCHANT_URL);
   window.on('closed', () => {
     loginWindows.delete(accountId);
+    antiContentByAccount.delete(accountId);
   });
   loginWindows.set(accountId, window);
   return window;
+}
+
+async function ensureBidPage(accountId, window, { refresh = false } = {}) {
+  if (!window || window.isDestroyed()) throw new AdapterNotConfiguredError();
+  const currentUrl = window.webContents.getURL();
+  if (refresh || !currentUrl.includes('/act-bidding/market-sign-list')) {
+    antiContentByAccount.delete(accountId);
+    await new Promise((resolve, reject) => {
+      const onFinished = () => { cleanup(); resolve(); };
+      const onFailed = (_event, errorCode, errorDescription) => {
+        cleanup();
+        reject(new Error(`拼多多营销竞价页面加载失败（${errorCode}: ${errorDescription}）`));
+      };
+      const cleanup = () => {
+        window.webContents.removeListener('did-finish-load', onFinished);
+        window.webContents.removeListener('did-fail-load', onFailed);
+      };
+      window.webContents.once('did-finish-load', onFinished);
+      window.webContents.once('did-fail-load', onFailed);
+      window.loadURL(BID_PAGE_URL).catch(error => { cleanup(); reject(error); });
+    });
+  }
+  const deadline = Date.now() + 15_000;
+  while (!antiContentByAccount.has(accountId) && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 200));
+  }
 }
 
 function isMerchantLoggedIn(urlString) {
@@ -232,6 +267,8 @@ async function syncAccount(adapter, accountId, source = 'manual') {
   return syncQueue.run(accountId, async (signal) => {
     const account = store.getAccount(accountId);
     if (!account) throw new Error('商家账号不存在');
+    const loginWindow = loginWindows.get(accountId);
+    if (!loginWindow || loginWindow.isDestroyed()) createLoginWindow(accountId, { deferNavigation: true, show: false });
     try {
       const incomingProducts = await adapter.syncProducts(account, { signal });
       signal.throwIfAborted();
@@ -321,7 +358,7 @@ function registerIpc(adapter) {
     const duplicate = store.findAccountByMallId(profile.mallId, accountId);
     if (duplicate) throw new Error('店铺已经添加过了');
     if (syncQueue?.isRunning(accountId)) throw new Error('该账号同步进行中，请稍后完成登录');
-    merchantSessions?.close(accountId);
+    antiContentByAccount.delete(accountId);
     const now = new Date().toISOString();
     const account = store.upsertAccount({
       id: accountId,
@@ -345,7 +382,7 @@ function registerIpc(adapter) {
     manualSyncAtByAccount.delete(accountId);
     const window = loginWindows.get(accountId);
     if (window && !window.isDestroyed()) window.close();
-    merchantSessions?.close(accountId);
+    antiContentByAccount.delete(accountId);
     sendToRenderer('accounts:changed');
     scheduler?.refreshAccounts();
     return true;
@@ -373,15 +410,11 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock.setIcon(nativeImage.createFromPath(dockIconPath()));
   const userDataPath = app.getPath('userData');
   store = new SqliteStore(path.join(userDataPath, 'monitor.db'), { legacyJsonPath: path.join(userDataPath, 'monitor-data.json') });
-  merchantSessions = new MerchantSessionManager({
-    createWindow: (options) => new BrowserWindow(options),
-    partitionForAccount: (id) => {
-      const partition = accountPartition(id);
-      configureMerchantSession(partition);
-      return partition;
-    }
+  const adapter = new PddActivityAdapter({
+    getLoginWindow: id => loginWindows.get(id),
+    getAntiContent: id => antiContentByAccount.get(id) || '',
+    ensureBidPage
   });
-  const adapter = new PddActivityAdapter({ sessions: merchantSessions });
   syncQueue = new SyncQueue({
     loadState: (id) => store.getSyncState(id),
     saveState: (id, state) => store.setSyncState(id, state)
@@ -415,6 +448,5 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   scheduler?.stop();
   syncQueue?.cancelAll();
-  merchantSessions?.closeAll();
   store?.close();
 });

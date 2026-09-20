@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const { SqliteStore } = require('../src/main/store');
 const { SyncQueue } = require('../src/main/sync-queue');
-const { PddActivityAdapter, AdapterResponseError } = require('../src/main/pdd-adapter');
+const { AdapterResponseError } = require('../src/main/pdd-adapter');
 const source = path.resolve(__dirname, '../src/main/main.js');
 const localRequire = createRequire(source);
 function setup(t) {
@@ -23,14 +23,12 @@ function setup(t) {
     process, console, structuredClone, __dirname: path.dirname(source), fixtureStore: store, fixtureQueue: queue
   });
   vm.runInContext(fs.readFileSync(source, 'utf8'), context);
-  vm.runInContext('store = fixtureStore; syncQueue = fixtureQueue;', context);
+  vm.runInContext('store = fixtureStore; syncQueue = fixtureQueue; loginWindows.set("a", { isDestroyed: () => false });', context);
   return { store, queue, notifications, sync: vm.runInContext('syncAccount', context) };
 }
 test('an incomplete snapshot cannot overwrite cached products or send dropped-product alerts', async t => {
   const f = setup(t);
-  const adapter = new PddActivityAdapter({ pageDelayMs: () => 0, sessions: {
-    readPage: async () => ({ page: 1, total: 11, products: [], query: { page_size: 10 } }), close() {}
-  } });
+  const adapter = { syncProducts: async () => { throw new AdapterResponseError('营销列表分页不完整，保留原缓存'); } };
   await assert.rejects(f.sync(adapter, 'a'), /不完整/);
   assert.deepEqual(f.store.getProducts('a').map(p => p.id), ['old']);
   assert.equal(f.store.getAccount('a').lastSyncAt, null);

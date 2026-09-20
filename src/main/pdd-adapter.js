@@ -1,3 +1,9 @@
+const { setTimeout: delay } = require('node:timers/promises');
+
+const BID_LIST_PATH = '/lakemms/bid/query/bidList';
+const BID_LIST_PAGE_SIZE = 40;
+const BID_ACTIVITY_TYPES = Object.freeze([205, 212, 219, 220, 221, 223, 213, 216, 218, 211, 215, 217, 224, 214]);
+
 class AdapterNotConfiguredError extends Error {
   constructor(message = '尚未配置拼多多营销活动商品接口，当前继续显示本地缓存') {
     super(message);
@@ -13,6 +19,18 @@ class AdapterResponseError extends Error {
     this.code = 'ADAPTER_RESPONSE_ERROR';
     this.apiCode = apiCode;
   }
+}
+
+function buildBidListRequest(page = 1) {
+  return {
+    page_number: page,
+    page_size: BID_LIST_PAGE_SIZE,
+    activity_type_list: [...BID_ACTIVITY_TYPES],
+    status_list: [501],
+    is_wait_handle_invite_cut_price: false,
+    standard_temp_id_list: [],
+    activity_sub_type_list: []
+  };
 }
 
 function isoDate(value) {
@@ -66,57 +84,110 @@ function mapBidListResponse(payload) {
   return rows.map(mapBidItem);
 }
 
+async function executeBidListRequest(window, request, antiContent = '') {
+  const body = JSON.stringify(request);
+  const headers = { 'content-type': 'application/json' };
+  if (antiContent) headers['Anti-Content'] = antiContent;
+  const response = await window.webContents.executeJavaScript(`(async () => {
+    const response = await fetch(${JSON.stringify(BID_LIST_PATH)}, {
+      method: 'POST', credentials: 'include', cache: 'no-store',
+      headers: ${JSON.stringify(headers)}, body: ${JSON.stringify(body)}
+    });
+    let payload;
+    try { payload = await response.json(); }
+    catch { return { __transportError: '营销竞价接口返回的不是 JSON', status: response.status }; }
+    if (!response.ok) return { __transportError: '营销竞价接口请求失败（HTTP ' + response.status + '）', status: response.status, payload };
+    return payload;
+  })()`);
+  if (response?.__transportError) {
+    const apiCode = Number(response.payload?.error_code);
+    throw new AdapterResponseError(response.payload?.error_msg || response.__transportError, Number.isFinite(apiCode) ? apiCode : null);
+  }
+  return response;
+}
+
+function validateTotal(payload) {
+  const raw = payload?.result?.total;
+  const total = Number(raw);
+  const valid = typeof raw === 'number' || (typeof raw === 'string' && /^(0|[1-9]\d*)$/.test(raw));
+  if (!valid || !Number.isSafeInteger(total) || total < 0) {
+    throw new AdapterResponseError('营销竞价商品总数无效，保留原缓存');
+  }
+  return total;
+}
+
 class PddActivityAdapter {
-  constructor({ sessions, pageDelayMs = () => 1000, pageTimeoutMs = 15_000, maxPages = 100, maxProducts = 2000, syncTimeoutMs = 300_000 }) {
-    Object.assign(this, { sessions, pageDelayMs, pageTimeoutMs, maxPages, maxProducts, syncTimeoutMs });
+  constructor({ getLoginWindow, getAntiContent = () => '', ensureBidPage = async () => {}, pageDelayMs = () => 1000, maxPages = 100, maxProducts = 2000, syncTimeoutMs = 300_000 }) {
+    Object.assign(this, { getLoginWindow, getAntiContent, ensureBidPage, pageDelayMs, maxPages, maxProducts, syncTimeoutMs });
   }
 
   async syncProducts(account, { signal } = {}) {
     const timeout = AbortSignal.timeout(this.syncTimeoutMs);
     const boundedSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const window = this.getLoginWindow(account.id);
+    if (!window || window.isDestroyed?.()) throw new AdapterNotConfiguredError();
+    let antiContent = this.getAntiContent(account.id);
+    if (!antiContent) await this.ensureBidPage(account.id, window);
+    antiContent = this.getAntiContent(account.id);
+    if (!antiContent) throw new AdapterNotConfiguredError('尚未捕获拼多多后台请求签名，请先完成商家后台登录');
+
     const products = [];
     const ids = new Set();
-    let total;
-    let query;
-    let pageSize;
+    let total = null;
+    let page = 1;
+    let refreshed = false;
     try {
-      for (let page = 1; page <= this.maxPages; page++) {
+      while (page <= this.maxPages) {
         boundedSignal.throwIfAborted();
-        if (page > 1) {
-          const { setTimeout: delay } = require('node:timers/promises');
-          await delay(this.pageDelayMs(), undefined, { signal: boundedSignal });
-        }
-        const result = await this.sessions.readPage(account.id, {
-          page, expectedQuery: query, timeoutMs: this.pageTimeoutMs, signal: boundedSignal
-        });
-        if (page === 1) {
-          total = result.total;
-          query = result.query;
-          pageSize = Number(query?.page_size);
-          if (!Number.isSafeInteger(total) || total < 0 || !Number.isSafeInteger(pageSize) || pageSize < 1) {
-            throw new AdapterResponseError('营销列表总数或分页参数无效');
+        if (page > 1) await delay(this.pageDelayMs(), undefined, { signal: boundedSignal });
+        try {
+          const payload = await executeBidListRequest(window, buildBidListRequest(page), antiContent);
+          boundedSignal.throwIfAborted();
+          const pageProducts = mapBidListResponse(payload);
+          const pageTotal = validateTotal(payload);
+          if (total === null) {
+            total = pageTotal;
+            if (total > this.maxProducts || Math.ceil(total / BID_LIST_PAGE_SIZE) > this.maxPages) {
+              throw new AdapterResponseError('营销商品数量或页数超过同步上限，保留原缓存');
+            }
+          } else if (pageTotal !== total) {
+            throw new AdapterResponseError('营销列表总数已变化，保留原缓存');
           }
-          if (total > this.maxProducts || Math.ceil(total / pageSize) > this.maxPages) {
-            throw new AdapterResponseError('营销商品数量或页数超过同步上限，保留原缓存');
+          const expectedRows = Math.min(BID_LIST_PAGE_SIZE, total - products.length);
+          if (pageProducts.length !== expectedRows) {
+            throw new AdapterResponseError('营销列表分页不完整，保留原缓存');
           }
+          for (const product of pageProducts) {
+            if (!product.id || ids.has(product.id)) throw new AdapterResponseError('营销列表缺少商品 ID 或包含重复商品，保留原缓存');
+            ids.add(product.id);
+            products.push(product);
+          }
+          if (products.length === total) return products;
+          page += 1;
+        } catch (error) {
+          if (error.apiCode !== 54001 || refreshed) throw error;
+          await this.ensureBidPage(account.id, window, { refresh: true });
+          antiContent = this.getAntiContent(account.id);
+          if (!antiContent) throw new AdapterNotConfiguredError('后台请求签名未能刷新，请检查商家后台登录状态');
+          refreshed = true;
         }
-        if (result.page !== page || result.total !== total ||
-            result.products.length !== Math.min(pageSize, total - products.length)) {
-          throw new AdapterResponseError('营销列表分页不完整或总数已变化，保留原缓存');
-        }
-        for (const product of result.products) {
-          if (!product.id || ids.has(product.id)) throw new AdapterResponseError('营销列表缺少商品 ID 或包含重复商品，保留原缓存');
-          ids.add(product.id);
-          products.push(product);
-        }
-        if (products.length === total) return products;
       }
-      throw new AdapterResponseError('营销列表页数超过同步上限');
+      throw new AdapterResponseError('营销列表页数超过同步上限，保留原缓存');
     } catch (error) {
-      this.sessions.close(account.id);
       throw error;
     }
   }
 }
 
-module.exports = { AdapterNotConfiguredError, AdapterResponseError, PddActivityAdapter, mapActivityStatus, mapBidListResponse };
+module.exports = {
+  AdapterNotConfiguredError,
+  AdapterResponseError,
+  BID_LIST_PAGE_SIZE,
+  BID_LIST_PATH,
+  PddActivityAdapter,
+  buildBidListRequest,
+  executeBidListRequest,
+  mapActivityStatus,
+  mapBidListResponse,
+  validateTotal
+};
