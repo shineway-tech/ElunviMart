@@ -5,6 +5,3 @@ node_modules/
 *.log
 .DS_Store
 user-data/
-
-# Independent backend repository
-/backend/
