@@ -229,3 +229,16 @@
   git add PROJECT_GUIDELINES.md docs/superpowers/specs/2026-09-20-marketing-bid-response-capture-design.md
   git commit -m "docs: document page response sync behavior"
   ```
+
+## Native 执行记录与替代决策
+
+原 Task 1–2 中的 `requestPage(fetch)`、复制请求头、无条件缓存响应等实现步骤由下列实际接口替代；以修订后的设计规格为准。
+
+- [x] 捕获器改为 `attach(webContents)` / `collectPage({ page, trigger, expectedQuery, timeoutMs, signal })` / `close()`。请求前登记等待，loadingFinished 后读取响应，无跨轮缓冲、无签名保存。
+- [x] 会话管理改为 `readPage(accountId, options)`：首次自然导航，之后点击现有页面控件。移除所有主动 bidList fetch、签名缓存、请求构造器及对应旧测试。
+- [x] 每账号只允许一项运行中的任务，不累积队列；共享手动/自动失败冷却并在 SQLite 持久化。关闭/移除账号取消任务。
+- [x] scheduler 防止运行中重排、停止后重排，优先遵守失败冷却。
+- [x] 全量 Node 测试与真实 Electron 本地集成验证。测试命令：`node --test test/*.test.js`、`electron test/integration/page-sync.cjs`。
+- [ ] 独立复核、修复重要问题，最终复验。
+
+仅缺真实商家页面的线上控件适配验证，不能将本地夹具测试描述为线上验证通过。不会为验证而对真实商家接口进行循环抓取。

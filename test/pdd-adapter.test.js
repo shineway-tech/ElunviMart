@@ -1,156 +1,56 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {
-  AdapterResponseError,
-  PddActivityAdapter,
-  buildBidListRequest,
-  mapBidListResponse
-} = require('../src/main/pdd-adapter');
-
-function responseRows(start, count) {
-  return Array.from({ length: count }, (_, index) => ({
-    my_bid_goods_id: start + index,
-    my_bid_goods_name: `商品 ${start + index}`,
-    activity_id: 24109,
-    activity_name: '营销竞价',
-    activity_status: 101,
-    mall_bid_price: '100000',
-    left_activity_quantity: 3,
-    enroll_end_time: 1988096400000,
-    image_url: '',
-    my_bid_goods_url: ''
-  }));
+const { PddActivityAdapter, AdapterResponseError, mapBidListResponse } = require('../src/main/pdd-adapter');
+const rows = (start, count) => Array.from({ length: count }, (_, i) => ({ id: String(start + i), status: 'active' }));
+const result = (page, total, products) => ({ page, total, products, query: { page_number: page, page_size: 10, status_list: [501] } });
+function setup(pages, options = {}) {
+  const actions = [];
+  let closed = 0;
+  const sessions = {
+    readPage: async (id, args) => {
+      actions.push([id, args.page]);
+      const value = pages.shift();
+      if (value instanceof Error) throw value;
+      return value;
+    },
+    close: () => { closed++; }
+  };
+  const adapter = new PddActivityAdapter({ sessions, pageDelayMs: () => 0, ...options });
+  return { adapter, actions, get closed() { return closed; } };
 }
-
-test('PddActivityAdapter fetches every bid-list page with page_size 10', async () => {
-  const requests = [];
-  const payloads = [
-    { success: true, result: { total: 11, result: responseRows(1, 10) } },
-    { success: true, result: { total: 11, result: responseRows(11, 1) } }
-  ];
-  const window = {
-    isDestroyed: () => false,
-    webContents: { executeJavaScript: async (script) => { requests.push(script); return payloads.shift(); } }
-  };
-  const adapter = new PddActivityAdapter({ getLoginWindow: () => window, getAntiContent: () => 'anti-content-test' });
-
-  const products = await adapter.syncProducts({ id: 'account-1' });
-
-  assert.equal(products.length, 11);
-  assert.match(requests[0], /page_number\\":1/);
-  assert.match(requests[0], /page_size\\":10/);
-  assert.match(requests[0], /Anti-Content/);
-  assert.match(requests[1], /page_number\\":2/);
+test('collects a complete three-page snapshot through page actions', async () => {
+  const f = setup([result(1, 21, rows(1, 10)), result(2, 21, rows(11, 10)), result(3, 21, rows(21, 1))]);
+  const products = await f.adapter.syncProducts({ id: 'shop' });
+  assert.equal(products.length, 21);
+  assert.deepEqual(f.actions, [['shop', 1], ['shop', 2], ['shop', 3]]);
 });
-
-test('buildBidListRequest matches the merchant page request contract', () => {
-  assert.deepEqual(buildBidListRequest(1), {
-    page_number: 1,
-    page_size: 10,
-    activity_type_list: [205, 212, 219, 220, 221, 223, 213, 216, 218, 211, 215, 217, 224, 214],
-    status_list: [501],
-    is_wait_handle_invite_cut_price: false,
-    standard_temp_id_list: [],
-    activity_sub_type_list: []
+test('each sync starts with a fresh page action, never reuses last snapshot', async () => {
+  const f = setup([result(1, 0, []), result(1, 1, rows(99, 1))]);
+  assert.deepEqual(await f.adapter.syncProducts({ id: 'shop' }), []);
+  assert.equal((await f.adapter.syncProducts({ id: 'shop' }))[0].id, '99');
+});
+for (const [name, pages, opts] of [
+  ['missing page', [result(1, 11, rows(1, 10)), result(2, 11, [])], {}],
+  ['duplicate product', [result(1, 11, rows(1, 10)), result(2, 11, rows(1, 1))], {}],
+  ['changed total', [result(1, 11, rows(1, 10)), result(2, 12, rows(11, 2))], {}],
+  ['wrong page', [result(1, 11, rows(1, 10)), result(3, 11, rows(11, 1))], {}],
+  ['excess rows', [result(1, 1, rows(1, 2))], {}],
+  ['page budget', [result(1, 21, rows(1, 10))], { maxPages: 2 }],
+  ['product budget', [result(1, 21, rows(1, 10))], { maxProducts: 20 }],
+  ['timeout', [new Error('等待响应超时')], {}]
+]) {
+  test(`rejects ${name}, closes session and never returns a partial snapshot`, async () => {
+    const f = setup(pages, opts);
+    await assert.rejects(f.adapter.syncProducts({ id: 'shop' }));
+    assert.equal(f.closed, 1);
+    if (name.includes('budget')) assert.equal(f.actions.length, 1);
   });
+}
+test('54001 is propagated without any refresh or immediate retry', async () => {
+  const f = setup([new AdapterResponseError('操作太过频繁', 54001)]);
+  await assert.rejects(f.adapter.syncProducts({ id: 'shop' }), { apiCode: 54001 });
+  assert.equal(f.actions.length, 1);
 });
-
-test('PddActivityAdapter prepares the merchant page before an unsigned sync', async () => {
-  let antiContent = '';
-  let ensured = 0;
-  const requests = [];
-  const window = {
-    isDestroyed: () => false,
-    webContents: { executeJavaScript: async (script) => {
-      requests.push(script);
-      return { success: true, error_code: 1000000, error_msg: null, result: { total: 0, result: [] } };
-    } }
-  };
-  const adapter = new PddActivityAdapter({
-    getLoginWindow: () => window,
-    getAntiContent: () => antiContent,
-    ensureBidPage: async () => { ensured += 1; antiContent = 'anti-content-test'; }
-  });
-
-  const products = await adapter.syncProducts({ id: 'account-1' });
-
-  assert.deepEqual(products, []);
-  assert.equal(ensured, 1);
-  assert.match(requests[0], /anti-content-test/);
-});
-
-test('PddActivityAdapter refreshes the merchant page once after an expired anti-content response', async () => {
-  let antiContent = 'stale-anti-content';
-  const ensureOptions = [];
-  const payloads = [
-    { success: false, error_code: 54001, error_msg: '操作太过频繁，请稍后再试！', result: {} },
-    { success: true, error_code: 1000000, error_msg: null, result: { total: 0, result: [] } }
-  ];
-  const window = {
-    isDestroyed: () => false,
-    webContents: { executeJavaScript: async () => payloads.shift() }
-  };
-  const adapter = new PddActivityAdapter({
-    getLoginWindow: () => window,
-    getAntiContent: () => antiContent,
-    ensureBidPage: async (_accountId, _window, options) => {
-      ensureOptions.push(options);
-      antiContent = 'fresh-anti-content';
-    }
-  });
-
-  const products = await adapter.syncProducts({ id: 'account-1' });
-
-  assert.deepEqual(products, []);
-  assert.deepEqual(ensureOptions, [{ refresh: true }]);
-});
-
-test('mapBidListResponse surfaces the API business error code', () => {
-  assert.throws(
-    () => mapBidListResponse({
-      error_code: 54001,
-      error_msg: '操作太过频繁，请稍后再试！',
-      result: { verifyAuthToken: 'redacted-in-test' }
-    }),
-    (error) => error instanceof AdapterResponseError
-      && error.apiCode === 54001
-      && error.message === '操作太过频繁，请稍后再试！'
-  );
-});
-
-test('a repeated 54001 stops after one refresh', async () => {
-  let calls = 0;
-  let refreshes = 0;
-  const window = { isDestroyed: () => false, webContents: {
-    executeJavaScript: async () => {
-      calls += 1;
-      return { error_code: 54001, error_msg: '操作太过频繁，请稍后再试！' };
-    }
-  } };
-  const adapter = new PddActivityAdapter({
-    getLoginWindow: () => window,
-    getAntiContent: () => 'test-value',
-    ensureBidPage: async () => { refreshes += 1; }
-  });
-  await assert.rejects(adapter.syncProducts({ id: 'shop' }), { apiCode: 54001 });
-  assert.equal(calls, 2);
-  assert.equal(refreshes, 1);
-});
-
-test('failed signature refresh does not send an unsigned retry', async () => {
-  let signature = 'test-value';
-  let calls = 0;
-  const window = { isDestroyed: () => false, webContents: {
-    executeJavaScript: async () => {
-      calls += 1;
-      return { error_code: 54001, error_msg: '操作太过频繁，请稍后再试！' };
-    }
-  } };
-  const adapter = new PddActivityAdapter({
-    getLoginWindow: () => window,
-    getAntiContent: () => signature,
-    ensureBidPage: async () => { signature = ''; }
-  });
-  await assert.rejects(adapter.syncProducts({ id: 'shop' }), { code: 'ADAPTER_NOT_CONFIGURED' });
-  assert.equal(calls, 1);
+test('business errors preserve the API error code', () => {
+  assert.throws(() => mapBidListResponse({ error_code: 54001, error_msg: '操作太过频繁' }), { apiCode: 54001 });
 });

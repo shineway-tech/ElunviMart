@@ -59,3 +59,19 @@ test('SqliteStore finds an existing shop by mall id while excluding the current 
   store.close();
   fs.rmSync(directory, { recursive: true, force: true });
 });
+
+test('sync backoff survives reopening and is removed with the account', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-backoff-'));
+  const file = path.join(directory, 'monitor.db');
+  let store = new SqliteStore(file);
+  try {
+    store.upsertAccount({ id: 'a', displayName: 'test' });
+    store.setSyncState('a', { failures: 2, nextAllowedAt: 123456 });
+    store.close(); store = new SqliteStore(file);
+    assert.deepEqual(store.getSyncState('a'), { failures: 2, nextAllowedAt: 123456 });
+    store.removeAccount('a');
+    assert.equal(store.getSyncState('a'), null);
+    store.setSyncState('a', { failures: 1, nextAllowedAt: 99 });
+    assert.equal(store.getSyncState('a'), null);
+  } finally { store.close(); fs.rmSync(directory, { recursive: true, force: true }); }
+});

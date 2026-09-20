@@ -38,3 +38,32 @@ test('MonitorScheduler keeps an independent timer for each active account', () =
     global.clearTimeout = originalClearTimeout;
   }
 });
+
+test('refreshing settings or other accounts during work never schedules a duplicate', async t => {
+  const timers = [];
+  t.mock.method(global, 'setTimeout', (fn, delay) => { const timer = { fn, delay }; timers.push(timer); return timer; });
+  t.mock.method(global, 'clearTimeout', () => {});
+  let finish;
+  const scheduler = new MonitorScheduler(() => new Promise(resolve => { finish = resolve; }), () => [{ id: 'a', status: 'active' }]);
+  scheduler.configure({ intervalMinMinutes: 1, intervalMaxMinutes: 1 });
+  const running = timers[0].fn();
+  scheduler.refreshAccounts();
+  scheduler.configure({ intervalMinMinutes: 2, intervalMaxMinutes: 2 });
+  assert.equal(timers.length, 1);
+  finish(); await running;
+  assert.equal(timers.length, 2);
+  assert.equal(timers[1].delay, 120_000);
+  scheduler.stop();
+});
+test('backoff takes priority over configured interval and stop prevents rescheduling', async t => {
+  const timers = [];
+  t.mock.method(global, 'setTimeout', (fn, delay) => { const timer = { fn, delay }; timers.push(timer); return timer; });
+  t.mock.method(global, 'clearTimeout', () => {});
+  let finish;
+  const scheduler = new MonitorScheduler(() => new Promise(resolve => { finish = resolve; }),
+    () => [{ id: 'a', status: 'active' }], { remainingMs: () => 1800_000 });
+  scheduler.configure({ intervalMinMinutes: 1, intervalMaxMinutes: 1 });
+  assert.equal(timers[0].delay, 1800_000);
+  const running = timers[0].fn(); scheduler.stop(); finish(); await running;
+  assert.equal(timers.length, 1);
+});

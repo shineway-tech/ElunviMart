@@ -1,118 +1,119 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const {
-  PddResponseCapture,
-  isBidListResponse,
-  parseBidListResponseBody
-} = require('../src/main/pdd-response-capture');
+const { PddResponseCapture, isBidListResponse, parseBidListResponseBody } = require('../src/main/pdd-response-capture');
+const url = 'https://mms.pinduoduo.com/lakemms/bid/query/bidList';
+const query = { page_number: 1, page_size: 10, status_list: [501] };
+const empty = { success: true, result: { total: 0, result: [] } };
+const tick = () => new Promise(setImmediate);
 
-function createDebugger() {
-  const debuggerEmitter = new EventEmitter();
-  debuggerEmitter.bodies = new Map();
-  debuggerEmitter.send = async (method, params) => {
-    if (method === 'Network.enable') return {};
-    if (method === 'Network.getResponseBody') return { body: debuggerEmitter.bodies.get(params.requestId), base64Encoded: false };
-    throw new Error(`unexpected debugger method: ${method}`);
+async function setup(t) {
+  const debug = new EventEmitter();
+  let attached = false;
+  debug.attach = () => { attached = true; };
+  debug.detach = () => { attached = false; debug.emit('detach', {}, 'closed'); };
+  debug.isAttached = () => attached;
+  const bodies = new Map();
+  const commands = [];
+  debug.sendCommand = async (method, params) => {
+    commands.push(method);
+    if (method === 'Network.getResponseBody') return bodies.get(params.requestId);
+    return {};
   };
-  debuggerEmitter.attach = async () => {};
-  debuggerEmitter.detach = async () => {};
-  return debuggerEmitter;
-}
-
-function createWebContents(debuggerEmitter) {
-  return { debugger: debuggerEmitter, executeJavaScript: async () => null };
-}
-
-function emitBidResponse(debuggerEmitter, { requestId, page, body, status = 200 }) {
-  debuggerEmitter.emit('message', {}, 'Network.requestWillBeSent', {
-    requestId,
-    request: {
-      method: 'POST',
-      url: 'https://mms.pinduoduo.com/lakemms/bid/query/bidList',
-      postData: JSON.stringify({ page_number: page, page_size: 10 })
-    }
-  });
-  debuggerEmitter.bodies.set(requestId, JSON.stringify(body));
-  debuggerEmitter.emit('message', {}, 'Network.responseReceived', {
-    requestId,
-    response: {
-      url: 'https://mms.pinduoduo.com/lakemms/bid/query/bidList',
-      status
-    }
-  });
-}
-
-test('isBidListResponse only accepts the merchant bid list endpoint', () => {
-  assert.equal(isBidListResponse('https://mms.pinduoduo.com/lakemms/bid/query/bidList'), true);
-  assert.equal(isBidListResponse('https://mms.pinduoduo.com/lakemms/bid/query/bidList?x=1'), true);
-  assert.equal(isBidListResponse('https://mms.pinduoduo.com/earth/api/mallInfo/commonMallInfo'), false);
-});
-
-test('parseBidListResponseBody maps a valid response and rejects malformed JSON', () => {
-  const result = parseBidListResponseBody(JSON.stringify({ success: true, result: { total: 0, result: [] } }));
-  assert.deepEqual(result, { total: 0, products: [] });
-  assert.throws(() => parseBidListResponseBody('{bad-json'), /不是 JSON/);
-});
-
-test('captures a page response body by matching its request id', async () => {
-  const debuggerEmitter = createDebugger();
   const capture = new PddResponseCapture();
-  capture.attach(createWebContents(debuggerEmitter));
-  const pending = capture.waitForPage({ page: 1, timeoutMs: 100 });
-  emitBidResponse(debuggerEmitter, {
-    requestId: 'req-1',
-    page: 1,
-    body: { success: true, result: { total: 1, result: [{ my_bid_goods_id: 1 }] } }
+  await capture.attach({ debugger: debug });
+  t.after(() => capture.close());
+  const emit = (method, params) => debug.emit('message', {}, `Network.${method}`, params);
+  const request = (id, data = query, method = 'POST', target = url) => emit('requestWillBeSent', {
+    requestId: id, request: { url: target, method, postData: JSON.stringify(data) }
   });
+  const response = (id, payload = empty, status = 200, base64 = false) => {
+    bodies.set(id, { body: base64 ? Buffer.from(JSON.stringify(payload)).toString('base64') : JSON.stringify(payload), base64Encoded: base64 });
+    emit('responseReceived', { requestId: id, response: { url, status } });
+  };
+  return { capture, debug, commands, emit, request, response };
+}
+
+test('only the exact HTTPS merchant endpoint is accepted', () => {
+  assert.equal(isBidListResponse(url), true);
+  for (const target of [url.replace('mms.', 'evil.'), url.replace('https:', 'http:'), `${url}/other`, 'invalid']) {
+    assert.equal(isBidListResponse(target), false);
+  }
+});
+
+test('requires a valid total before accepting a complete empty snapshot', () => {
+  assert.deepEqual(parseBidListResponseBody(JSON.stringify(empty)), { total: 0, products: [] });
+  for (const total of [undefined, null, '', -1, 1.5, 'bad']) {
+    assert.throws(() => parseBidListResponseBody(JSON.stringify({ success: true, result: { total, result: [] } })), /总数/);
+  }
+  assert.throws(() => parseBidListResponseBody('{'), /JSON/);
+});
+
+test('reads response body only after loadingFinished, including base64 data', async (t) => {
+  const f = await setup(t);
+  const pending = f.capture.collectPage({ page: 1, timeoutMs: 100, trigger: async () => {
+    f.request('a'); f.response('a', empty, 200, true);
+    await tick();
+    assert.equal(f.commands.includes('Network.getResponseBody'), false);
+    f.emit('loadingFinished', { requestId: 'a' });
+  } });
   const result = await pending;
+  assert.equal(result.total, 0);
   assert.equal(result.page, 1);
-  assert.equal(result.total, 1);
-  assert.equal(result.products[0].id, '1');
-  capture.close();
+  assert.deepEqual(result.query, query);
 });
 
-test('buffers a response that arrives before a waiter is registered', async () => {
-  const debuggerEmitter = createDebugger();
-  const capture = new PddResponseCapture();
-  capture.attach(createWebContents(debuggerEmitter));
-  emitBidResponse(debuggerEmitter, {
-    requestId: 'req-2',
-    page: 2,
-    body: { success: true, result: { total: 2, result: [] } }
+test('ignores old request IDs, foreign hosts, GETs and responses for another page', async (t) => {
+  const f = await setup(t);
+  f.request('old');
+  const result = await f.capture.collectPage({ page: 1, timeoutMs: 100, trigger: async () => {
+    for (const id of ['old', 'get', 'foreign', 'page2']) {
+      if (id === 'get') f.request(id, query, 'GET');
+      if (id === 'foreign') f.request(id, query, 'POST', url.replace('mms.', 'evil.'));
+      if (id === 'page2') f.request(id, { ...query, page_number: 2 });
+      f.response(id); f.emit('loadingFinished', { requestId: id });
+    }
+    f.request('fresh'); f.response('fresh'); f.emit('loadingFinished', { requestId: 'fresh' });
+  } });
+  assert.equal(result.requestId, 'fresh');
+});
+
+for (const [name, run, pattern] of [
+  ['HTTP 403', f => { f.request('a'); f.response('a', empty, 403); }, /HTTP 403/],
+  ['54001', f => { f.request('a'); f.response('a', { error_code: 54001, error_msg: '操作太过频繁' }); f.emit('loadingFinished', { requestId: 'a' }); }, /操作太过频繁/],
+  ['network failure', f => { f.request('a'); f.emit('loadingFailed', { requestId: 'a', errorText: 'ERR_FAILED' }); }, /加载失败/],
+  ['detach', f => f.debug.emit('detach', {}, 'target_closed'), /断开/],
+  ['changed filters', f => f.request('a', { ...query, status_list: [999] }), /筛选/]
+]) {
+  test(`rejects ${name} without waiting for a retry`, async t => {
+    const f = await setup(t);
+    await assert.rejects(f.capture.collectPage({ page: 1, timeoutMs: 100, trigger: () => run(f) }), pattern);
   });
-  const result = await capture.waitForPage({ page: 2, timeoutMs: 100 });
-  assert.equal(result.page, 2);
-  capture.close();
+}
+
+test('failed actions and timeouts clean up; late responses cannot satisfy next run', async t => {
+  const f = await setup(t);
+  await assert.rejects(f.capture.collectPage({ page: 1, timeoutMs: 10, trigger: () => { f.request('late'); } }), /超时/);
+  await assert.rejects(f.capture.collectPage({ page: 1, timeoutMs: 10, trigger: () => { throw new Error('missing control'); } }), /missing control/);
+  await assert.rejects(f.capture.collectPage({ page: 1, timeoutMs: 10, trigger: () => {
+    f.response('late'); f.emit('loadingFinished', { requestId: 'late' });
+  } }), /超时/);
 });
 
-test('rejects a non-success response and times out when no response arrives', async () => {
-  const debuggerEmitter = createDebugger();
-  const capture = new PddResponseCapture();
-  capture.attach(createWebContents(debuggerEmitter));
-  const failed = capture.waitForPage({ page: 1, timeoutMs: 100 });
-  emitBidResponse(debuggerEmitter, {
-    requestId: 'req-3',
-    page: 1,
-    status: 403,
-    body: { success: false, error_code: 54001, error_msg: 'expired' }
-  });
-  await assert.rejects(failed, /HTTP 403/);
-  await assert.rejects(capture.waitForPage({ page: 9, timeoutMs: 5 }), /超时/);
-  capture.close();
+test('close cancels pending wait, removes listeners and detaches debugger', async t => {
+  const f = await setup(t);
+  const pending = f.capture.collectPage({ page: 1, timeoutMs: 100, trigger: () => {} });
+  f.capture.close();
+  await assert.rejects(pending, /关闭/);
+  assert.equal(f.debug.isAttached(), false);
+  assert.equal(f.debug.listenerCount('message'), 0);
 });
 
-test('requestPage runs pagination inside the page context', async () => {
-  const debuggerEmitter = createDebugger();
-  let executedScript = '';
-  const webContents = {
-    debugger: debuggerEmitter,
-    executeJavaScript: async (script) => { executedScript = script; return { accepted: true }; }
-  };
+test('attach errors are propagated instead of silently timing out', async () => {
+  const debug = new EventEmitter();
+  debug.attach = () => { throw new Error('attach failed'); };
+  debug.isAttached = () => false;
   const capture = new PddResponseCapture();
-  capture.attach(webContents);
-  const result = await capture.requestPage(webContents, { page: 2, request: { page_number: 2, page_size: 10 } });
-  assert.deepEqual(result, { accepted: true });
-  assert.match(executedScript, /page_number/);
-  capture.close();
+  await assert.rejects(capture.attach({ debugger: debug }), /attach failed/);
+  assert.equal(debug.listenerCount('message'), 0);
 });

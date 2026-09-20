@@ -69,6 +69,10 @@ class SqliteStore {
         PRIMARY KEY (account_id, product_id), FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS products_account_idx ON products(account_id);
+      CREATE TABLE IF NOT EXISTS sync_backoff (
+        account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        failures INTEGER NOT NULL DEFAULT 0, next_allowed_at INTEGER NOT NULL DEFAULT 0
+      );
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), data_json TEXT NOT NULL);
     `);
     this.ensureSettings();
@@ -142,6 +146,19 @@ class SqliteStore {
     this.database.prepare('DELETE FROM products WHERE account_id = ?').run(accountId);
     const insert = this.database.prepare('INSERT INTO products (account_id, product_id, status, lost_at, updated_at, data_json) VALUES (?, ?, ?, ?, ?, ?)');
     for (const product of products) insert.run(accountId, String(product.id), String(product.status || 'active'), product.lostAt || null, product.updatedAt || null, JSON.stringify(product));
+  }
+
+  getSyncState(accountId) {
+    const row = this.database.prepare('SELECT failures, next_allowed_at AS nextAllowedAt FROM sync_backoff WHERE account_id = ?').get(accountId);
+    return row ? { ...row } : null;
+  }
+
+  setSyncState(accountId, { failures, nextAllowedAt }) {
+    // An account may have been removed while a request or notification was in flight.
+    if (!this.getAccount(accountId)) return;
+    this.database.prepare(`INSERT INTO sync_backoff (account_id, failures, next_allowed_at) VALUES (?, ?, ?)
+      ON CONFLICT(account_id) DO UPDATE SET failures=excluded.failures, next_allowed_at=excluded.next_allowed_at`)
+      .run(accountId, failures, nextAllowedAt);
   }
 
   getSettings() {

@@ -8,19 +8,7 @@ const {
   isAbnormalActivityProduct,
   hasAbnormalActivityProducts
 } = require('../src/main/product-monitor');
-const { buildBidListRequest, mapActivityStatus, mapBidListResponse } = require('../src/main/pdd-adapter');
-
-test('buildBidListRequest uses the bid list pagination contract', () => {
-  assert.deepEqual(buildBidListRequest(), {
-    page_number: 1,
-    page_size: 10,
-    activity_type_list: [205, 212, 219, 220, 221, 223, 213, 216, 218, 211, 215, 217, 224, 214],
-    status_list: [501],
-    is_wait_handle_invite_cut_price: false,
-    standard_temp_id_list: [],
-    activity_sub_type_list: []
-  });
-});
+const { mapActivityStatus, mapBidListResponse } = require('../src/main/pdd-adapter');
 
 test('mapBidListResponse maps bid registrations into monitor products', () => {
   const result = mapBidListResponse({

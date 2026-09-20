@@ -31,12 +31,6 @@ function loadWindowFactory() {
   return vm.runInContext('createLoginWindow', context);
 }
 
-test('manual sync can create a session window without racing a home navigation', () => {
-  const createWindow = loadWindowFactory();
-  const window = createWindow('shop-1', { deferNavigation: true });
-  assert.deepEqual(window.urls, []);
-});
-
 test('normal login still opens the merchant homepage', () => {
   const createWindow = loadWindowFactory();
   const window = createWindow('shop-1');

@@ -1,172 +1,130 @@
 const { AdapterResponseError, mapBidListResponse } = require('./pdd-adapter');
 
-const BID_LIST_PATH = '/lakemms/bid/query/bidList';
-const DEFAULT_MAX_BUFFERED_RESPONSES = 20;
-
-function isBidListResponse(url) {
+function isBidListResponse(value) {
   try {
-    return new URL(url).pathname === BID_LIST_PATH;
-  } catch {
-    return false;
-  }
+    const url = new URL(value);
+    return url.origin === 'https://mms.pinduoduo.com' && url.pathname === '/lakemms/bid/query/bidList';
+  } catch { return false; }
 }
 
 function parseBidListResponseBody(body) {
   let payload;
-  try {
-    payload = typeof body === 'string' ? JSON.parse(body) : body;
-  } catch {
-    throw new AdapterResponseError('营销竞价接口返回的不是 JSON');
-  }
+  try { payload = JSON.parse(body); } catch { throw new AdapterResponseError('营销竞价接口返回的不是 JSON'); }
   const products = mapBidListResponse(payload);
-  const total = Number(payload?.result?.total);
-  return { total: Number.isFinite(total) ? total : products.length, products };
-}
-
-function postDataPage(request) {
-  if (!request?.postData) return null;
-  try {
-    const payload = JSON.parse(request.postData);
-    const page = Number(payload.page_number);
-    return Number.isInteger(page) && page > 0 ? page : null;
-  } catch {
-    return null;
+  const rawTotal = payload?.result?.total;
+  const total = Number(rawTotal);
+  if (rawTotal == null || rawTotal === '' || !Number.isSafeInteger(total) || total < 0) {
+    throw new AdapterResponseError('营销竞价商品总数无效，保留原缓存');
   }
+  return { total, products };
 }
 
-async function sendCommand(debuggerSession, method, params) {
-  if (typeof debuggerSession.sendCommand === 'function') return debuggerSession.sendCommand(method, params);
-  if (typeof debuggerSession.send === 'function') return debuggerSession.send(method, params);
-  throw new Error('页面调试会话不支持发送 Network 命令');
+// Compare all filters, independently of property order. Never retain request headers.
+function queryKey(query) {
+  const normalize = value => Array.isArray(value) ? value.map(normalize) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, normalize(value[key])])) : value;
+  const { page_number: _page, ...filters } = query;
+  return JSON.stringify(normalize(filters));
 }
 
 class PddResponseCapture {
-  constructor({ maxBufferedResponses = DEFAULT_MAX_BUFFERED_RESPONSES } = {}) {
-    this.maxBufferedResponses = Math.max(1, Number(maxBufferedResponses) || DEFAULT_MAX_BUFFERED_RESPONSES);
+  constructor() {
     this.debuggerSession = null;
-    this.webContents = null;
-    this.requestPages = new Map();
-    this.buffered = new Map();
-    this.waiters = new Map();
+    this.active = null;
     this.onMessage = this.onMessage.bind(this);
+    this.onDetach = () => this.cancel(new Error('营销页面网络监听已断开'));
   }
 
-  attach(webContents) {
-    this.detach();
-    if (!webContents?.debugger) throw new Error('营销页面不支持网络响应捕获');
-    this.webContents = webContents;
-    this.debuggerSession = webContents.debugger;
-    this.debuggerSession.on('message', this.onMessage);
-    Promise.resolve()
-      .then(() => this.debuggerSession.attach?.('1.3'))
-      .then(() => sendCommand(this.debuggerSession, 'Network.enable'))
-      .catch(() => {});
-    return this;
+  async attach(webContents) {
+    this.close();
+    const debug = webContents.debugger;
+    if (debug.isAttached()) throw new Error('营销页面已有调试会话，请关闭开发者工具');
+    debug.attach('1.3');
+    this.debuggerSession = debug;
+    debug.on('message', this.onMessage);
+    debug.on('detach', this.onDetach);
+    try { await debug.sendCommand('Network.enable'); } catch (error) { this.close(); throw error; }
   }
 
-  detach() {
-    if (this.debuggerSession?.removeListener) this.debuggerSession.removeListener('message', this.onMessage);
-    this.requestPages.clear();
-    this.debuggerSession = null;
-    this.webContents = null;
-  }
-
-  async onMessage(_event, method, params = {}) {
-    if (method === 'Network.requestWillBeSent') {
-      const page = postDataPage(params.request);
-      if (page && isBidListResponse(params.request?.url)) this.requestPages.set(params.requestId, page);
-      return;
-    }
-    if (method !== 'Network.responseReceived' || !isBidListResponse(params.response?.url)) return;
-    const page = this.requestPages.get(params.requestId) || null;
-    this.requestPages.delete(params.requestId);
+  async collectPage({ page, trigger, expectedQuery, timeoutMs = 15_000, signal }) {
+    if (!this.debuggerSession?.isAttached()) throw new Error('营销页面网络监听未连接');
+    if (this.active) throw new Error('正在等待营销页面响应');
+    signal?.throwIfAborted();
+    let resolve;
+    let reject;
+    const response = new Promise((yes, no) => { resolve = yes; reject = no; });
+    const active = { page, expectedQuery, requests: new Map(), resolve, reject };
+    this.active = active;
+    const action = Promise.resolve().then(() => { signal?.throwIfAborted(); return trigger(); });
+    // The deadline must also cover a stalled navigation after its response arrived.
+    const deadline = new Promise((_, no) => { active.reject = error => { reject(error); no(error); }; });
+    const timeoutAbort = () => active.reject(signal.reason || new Error('同步已取消'));
+    signal?.addEventListener('abort', timeoutAbort, { once: true });
+    const boundedTimer = setTimeout(() => active.reject(new Error(`等待营销竞价第 ${page} 页响应超时`)), timeoutMs);
     try {
-      if (Number(params.response?.status) < 200 || Number(params.response?.status) >= 300) {
-        throw new AdapterResponseError(`营销竞价接口请求失败（HTTP ${params.response?.status}）`);
+      const [result] = await Promise.race([Promise.all([response, action]), deadline]);
+      return result;
+    } finally {
+      clearTimeout(boundedTimer);
+      signal?.removeEventListener('abort', timeoutAbort);
+      if (this.active === active) this.active = null;
+    }
+  }
+
+  onMessage(_event, method, params = {}) {
+    const active = this.active;
+    if (!active) return;
+    try {
+      if (method === 'Network.requestWillBeSent') {
+        const request = params.request;
+        if (request?.method !== 'POST' || !isBidListResponse(request.url)) return;
+        let query;
+        try { query = JSON.parse(request.postData); } catch { throw new AdapterResponseError('无法识别营销页面请求参数'); }
+        if (Number(query.page_number) !== active.page) return;
+        if (!Number.isSafeInteger(Number(query.page_size)) || Number(query.page_size) < 1 ||
+            !Array.isArray(query.status_list) || query.status_list.length !== 1 || Number(query.status_list[0]) !== 501 ||
+            (active.expectedQuery && queryKey(query) !== queryKey(active.expectedQuery))) {
+          throw new AdapterResponseError('营销页面筛选条件已变化，保留原缓存');
+        }
+        // One pending page request per action: duplicates must never form a partial snapshot.
+        if (active.requests.size) throw new AdapterResponseError('营销页面产生重复分页请求，请稍后同步');
+        active.requests.set(params.requestId, { query });
+        return;
       }
-      const bodyResult = await sendCommand(this.debuggerSession, 'Network.getResponseBody', { requestId: params.requestId });
-      const parsed = parseBidListResponseBody(bodyResult?.body || '');
-      this.resolvePage({ page, ...parsed, requestId: params.requestId });
-    } catch (error) {
-      this.rejectPage(page, error);
-    }
+      const request = active.requests.get(params.requestId);
+      if (!request) return;
+      if (method === 'Network.responseReceived') {
+        if (!isBidListResponse(params.response?.url)) throw new AdapterResponseError('营销页面响应地址已变化');
+        request.status = Number(params.response.status);
+        if (request.status < 200 || request.status >= 300) throw new AdapterResponseError(`营销竞价接口请求失败（HTTP ${request.status}）`);
+      } else if (method === 'Network.loadingFailed') {
+        throw new AdapterResponseError('营销页面请求加载失败');
+      } else if (method === 'Network.loadingFinished' && request.status && !request.reading) {
+        request.reading = true;
+        this.readBody(active, params.requestId, request).catch(error => {
+          if (this.active === active) active.reject(error);
+        });
+      }
+    } catch (error) { active.reject(error); }
   }
 
-  resolvePage(result) {
-    const waiters = this.waiters.get(result.page);
-    if (waiters?.length) {
-      const waiter = waiters.shift();
-      if (!waiters.length) this.waiters.delete(result.page);
-      clearTimeout(waiter.timer);
-      waiter.resolve(result);
-      return;
-    }
-    const buffered = this.buffered.get(result.page) || [];
-    buffered.push(result);
-    while (buffered.length > this.maxBufferedResponses) buffered.shift();
-    this.buffered.set(result.page, buffered);
+  async readBody(active, requestId, request) {
+    const result = await this.debuggerSession.sendCommand('Network.getResponseBody', { requestId });
+    if (this.active !== active) return;
+    const body = result.base64Encoded ? Buffer.from(result.body, 'base64').toString('utf8') : result.body;
+    active.resolve({ page: active.page, query: request.query, requestId, ...parseBidListResponseBody(body) });
   }
 
-  rejectPage(page, error) {
-    const waiters = this.waiters.get(page);
-    if (waiters?.length) {
-      const waiter = waiters.shift();
-      if (!waiters.length) this.waiters.delete(page);
-      clearTimeout(waiter.timer);
-      waiter.reject(error);
-      return;
-    }
-    const buffered = this.buffered.get(page) || [];
-    buffered.push({ page, error });
-    while (buffered.length > this.maxBufferedResponses) buffered.shift();
-    this.buffered.set(page, buffered);
-  }
-
-  waitForPage({ page, timeoutMs = 15_000 }) {
-    const buffered = this.buffered.get(page);
-    if (buffered?.length) {
-      const result = buffered.shift();
-      if (!buffered.length) this.buffered.delete(page);
-      return result.error ? Promise.reject(result.error) : Promise.resolve(result);
-    }
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        const waiters = this.waiters.get(page) || [];
-        const index = waiters.findIndex((item) => item.resolve === resolve);
-        if (index >= 0) waiters.splice(index, 1);
-        if (!waiters.length) this.waiters.delete(page);
-        reject(new Error(`等待营销竞价第 ${page} 页响应超时`));
-      }, timeoutMs);
-      const waiters = this.waiters.get(page) || [];
-      waiters.push({ resolve, reject, timer });
-      this.waiters.set(page, waiters);
-    });
-  }
-
-  async requestPage(webContents, { path = BID_LIST_PATH, request, headers = {} }) {
-    const script = `(async () => {
-      const response = await fetch(${JSON.stringify(path)}, {
-        method: 'POST', credentials: 'include', cache: 'no-store',
-        headers: ${JSON.stringify({ 'content-type': 'application/json', ...headers })},
-        body: ${JSON.stringify(JSON.stringify(request || {}))}
-      });
-      if (!response.ok) throw new Error('营销竞价接口请求失败（HTTP ' + response.status + '）');
-      return true;
-    })()`;
-    return webContents.executeJavaScript(script);
-  }
+  cancel(error = new Error('营销页面响应捕获已关闭')) { this.active?.reject(error); }
 
   close() {
-    const error = new Error('营销竞价响应捕获已关闭');
-    for (const waiters of this.waiters.values()) {
-      for (const waiter of waiters) {
-        clearTimeout(waiter.timer);
-        waiter.reject(error);
-      }
-    }
-    this.waiters.clear();
-    this.buffered.clear();
-    this.detach();
+    this.cancel();
+    const debug = this.debuggerSession;
+    this.debuggerSession = null;
+    if (!debug) return;
+    debug.removeListener('message', this.onMessage);
+    debug.removeListener('detach', this.onDetach);
+    if (debug.isAttached()) debug.detach();
   }
 }
 
