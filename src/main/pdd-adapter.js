@@ -147,5 +147,6 @@ module.exports = {
   PddActivityAdapter,
   buildBidListRequest,
   mapActivityStatus,
-  mapBidListResponse
+  mapBidListResponse,
+  AdapterResponseError
 };
