@@ -117,16 +117,16 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 /* The account gate is a focused product surface rather than a generic form modal. */
 .platform-auth-modal{width:min(760px,100%);padding:0;overflow:hidden}
 .platform-auth-layout{display:grid;grid-template-columns:minmax(220px,.78fr) minmax(0,1.22fr);min-height:500px}
-.platform-auth-brand{display:flex;flex-direction:column;align-items:flex-start;padding:38px 30px 28px;color:#f5f6f7;background:#15191d}
+.platform-auth-brand{display:flex;flex-direction:column;align-items:flex-start;padding:54px 30px 28px;color:#f5f6f7;background:#181d21}
 .platform-auth-brand-heading{display:flex;align-items:center;gap:10px}
 .platform-auth-brand-mark{width:34px;height:34px;overflow:hidden;border-radius:9px;box-shadow:0 4px 12px rgba(0,0,0,.18)}
 .platform-auth-brand-mark img{display:block;width:100%;height:100%;object-fit:cover}
-.platform-auth-brand-heading>strong{font-size:18px;font-weight:650;letter-spacing:.01em}
-.platform-auth-brand>p{margin:42px 0 0;color:#f5f6f7;font-size:13px;font-weight:400;line-height:1.45}
-.platform-auth-brand-subtitle{margin-top:7px;color:#aeb5be;font-size:12px;line-height:1.4}
-.platform-auth-illustration{display:block;width:min(100%,220px);height:auto;margin:44px auto 0;object-fit:contain}
-.platform-auth-brand-footer{display:grid;gap:4px;margin-top:auto;color:#aeb5be;font-size:11px;line-height:1.35}
-.platform-auth-brand-footer strong{color:#d5d9de;font-size:11px;font-weight:500}
+.platform-auth-brand-heading>strong{font-size:17px;font-weight:600;letter-spacing:.01em}
+.platform-auth-brand>p{margin:18px 0 0;color:rgba(245,246,247,.78);font-size:12px;font-weight:400;line-height:1.45}
+.platform-auth-brand-subtitle{margin-top:6px;color:rgba(174,181,190,.72);font-size:11px;line-height:1.4}
+.platform-auth-illustration{display:block;width:min(100%,200px);height:auto;margin:40px auto 0;object-fit:contain;opacity:.86}
+.platform-auth-brand-footer{display:grid;gap:3px;margin-top:auto;color:rgba(174,181,190,.58);font-size:11px;line-height:1.35}
+.platform-auth-brand-footer strong{color:rgba(213,217,222,.72);font-size:11px;font-weight:500}
 .platform-auth-pane{display:flex;flex-direction:column;padding:28px 34px 26px;background:var(--surface)}
 .platform-auth-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:26px}
 .platform-auth-header h2{margin:0;font-size:24px;font-weight:650;line-height:1.2}
@@ -150,7 +150,7 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-wechat .platform-wechat-icon{width:20px;height:20px;flex:0 0 auto}
 .platform-auth-divider{display:flex;align-items:center;gap:12px;color:#9aa2ab;font-size:12px}
 .platform-auth-divider:before,.platform-auth-divider:after{content:"";height:1px;flex:1;background:var(--line)}
-.platform-auth-links{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:3px;color:var(--muted);font-size:12px}
+.platform-auth-links{display:flex;align-items:baseline;justify-content:center;gap:6px;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.4}
 .link-button{padding:0;border:0;color:var(--accent);background:transparent;cursor:pointer;font:inherit}
 .link-button:hover{text-decoration:underline}
 .platform-auth-modal .login-error{margin:0;padding:9px 11px;border-radius:7px}
@@ -158,4 +158,4 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-modal .platform-wechat-panel{flex:1;align-content:center;justify-items:center;gap:10px;padding:0}
 .platform-auth-modal .platform-wechat-frame{width:260px;height:260px}
 .platform-auth-modal .platform-wechat-panel .button{min-height:36px;border-radius:7px}
-@media(max-height:700px){.platform-auth-layout{min-height:0}.platform-auth-brand{padding:26px 26px 22px}.platform-auth-brand>p{margin-top:26px;font-size:12px}.platform-auth-illustration{max-width:165px;margin-top:24px}.platform-auth-pane{padding:22px 28px}.platform-auth-header{margin-bottom:18px}.platform-auth-modal form{gap:12px}}
+@media(max-height:700px){.platform-auth-layout{min-height:0}.platform-auth-brand{padding:36px 26px 22px}.platform-auth-brand>p{margin-top:16px;font-size:12px}.platform-auth-illustration{max-width:170px;margin-top:28px}.platform-auth-pane{padding:22px 28px}.platform-auth-header{margin-bottom:18px}.platform-auth-modal form{gap:12px}}
