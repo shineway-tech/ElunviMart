@@ -59,12 +59,15 @@ const elements = {
   platformLoginModal: document.querySelector('#platform-login-modal'),
   platformLoginForm: document.querySelector('#platform-login-form'),
   platformLoginClose: document.querySelector('#platform-login-close'),
-  platformLoginCancel: document.querySelector('#platform-login-cancel'),
   platformLoginSubmit: document.querySelector('#platform-login-submit'),
   platformLoginError: document.querySelector('#platform-login-error'),
   platformLoginErrorText: document.querySelector('#platform-login-error-text'),
-  platformAuthTabs: document.querySelector('#platform-auth-tabs'),
   platformAuthCopy: document.querySelector('#platform-auth-copy'),
+  platformAuthLinks: document.querySelector('#platform-auth-links'),
+  platformAuthLinksCopy: document.querySelector('#platform-auth-links-copy'),
+  platformAuthRegisterLink: document.querySelector('#platform-auth-register-link'),
+  platformAuthResetLink: document.querySelector('#platform-auth-reset-link'),
+  platformAuthLoginLink: document.querySelector('#platform-auth-login-link'),
   platformEmailField: document.querySelector('#platform-email-field'),
   platformCodeField: document.querySelector('#platform-code-field'),
   platformCode: document.querySelector('#platform-code'),
@@ -74,6 +77,7 @@ const elements = {
   platformConfirmPasswordField: document.querySelector('#platform-confirm-password-field'),
   platformConfirmPassword: document.querySelector('#platform-confirm-password'),
   platformLoginActions: document.querySelector('#platform-login-actions'),
+  platformAuthDivider: document.querySelector('#platform-auth-divider'),
   platformWechatStart: document.querySelector('#platform-wechat-start'),
   platformWechatPanel: document.querySelector('#platform-wechat-panel'),
   platformWechatFrame: document.querySelector('#platform-wechat-frame'),
@@ -280,10 +284,9 @@ function setPlatformAuthMode(mode) {
   const isBinding = mode === 'email-binding';
   const isLogin = mode === 'login';
   const isRegister = mode === 'register';
-  document.querySelector('#platform-login-title').textContent = isWechat ? '微信扫码登录' : isBinding ? '绑定邮箱' : isLogin ? '登录 Elunvi' : isRegister ? '注册 Elunvi' : '找回密码';
+  document.querySelector('#platform-login-title').textContent = isWechat ? '微信扫码登录' : isBinding ? '绑定邮箱' : isLogin ? '登录' : isRegister ? '注册' : '忘记密码';
   const login = mode === 'login';
   const register = isRegister;
-  elements.platformAuthTabs.hidden = isWechat || isBinding;
   elements.platformAuthCopy.hidden = isWechat;
   elements.platformEmailField.hidden = isWechat;
   elements.platformCodeField.hidden = isLogin || isWechat;
@@ -291,14 +294,20 @@ function setPlatformAuthMode(mode) {
   elements.platformConfirmPasswordField.hidden = login || isWechat || isBinding;
   elements.platformLoginActions.hidden = isWechat;
   elements.platformWechatStart.hidden = !isLogin;
+  elements.platformAuthDivider.hidden = !isLogin;
   elements.platformWechatPanel.hidden = !isWechat;
-  elements.platformLoginError.hidden = isWechat;
+  elements.platformAuthLinks.hidden = isWechat || isBinding;
+  elements.platformAuthLinksCopy.textContent = isLogin ? '还没有 Elunvi 账号？' : '已有 Elunvi 账号？';
+  elements.platformAuthRegisterLink.hidden = !isLogin;
+  elements.platformAuthResetLink.hidden = !isLogin;
+  elements.platformAuthLoginLink.hidden = isLogin;
+  elements.platformLoginError.hidden = true;
   if (!isWechat) elements.platformWechatFrame.src = 'about:blank';
   document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.platformAuthMode === mode);
     button.setAttribute('aria-selected', button.dataset.platformAuthMode === mode ? 'true' : 'false');
   });
-  elements.platformAuthCopy.textContent = isBinding ? '微信账号已授权，请绑定邮箱以完成登录。' : login ? '登录后才能使用店铺、商品、监控和团队功能。' : register ? '注册 Elunvi 账号后即可在 Mart 中使用完整功能。' : '输入邮箱验证码后设置新密码。';
+  elements.platformAuthCopy.textContent = isBinding ? '为微信账号绑定邮箱' : login ? '使用 Elunvi 账号继续' : register ? '创建账号后即可使用 Mart' : '输入验证码并设置新密码';
   elements.platformPasswordField.hidden = isWechat;
   elements.platformPassword.required = mode !== 'login' && !isBinding;
   elements.platformPassword.autocomplete = register || mode === 'reset' ? 'new-password' : 'current-password';
@@ -306,7 +315,7 @@ function setPlatformAuthMode(mode) {
   elements.platformConfirmPassword.required = !login && !isBinding;
   elements.platformLoginSubmit.querySelector('span').textContent = isBinding ? (state.platformAuthChallengeId ? '完成绑定' : '先获取验证码') : login ? '登录' : register ? (state.platformAuthChallengeId ? '完成注册' : '先获取验证码') : (state.platformAuthChallengeId ? '重置密码' : '先获取验证码');
   elements.platformRequestCode.textContent = state.platformAuthChallengeId ? '重新获取' : '获取验证码';
-  elements.platformLoginError.hidden = isWechat;
+  elements.platformLoginError.hidden = true;
 }
 
 async function requestPlatformCode() {
@@ -1217,7 +1226,7 @@ elements.platformWechatBack.addEventListener('click', async () => {
   setPlatformAuthMode('login');
 });
 elements.platformLoginClose.addEventListener('click', closePlatformLogin);
-elements.platformLoginCancel.addEventListener('click', closePlatformLogin);
+// The redesigned auth surface uses the close icon as its only dismiss action.
 elements.platformLoginModal.addEventListener('click', (event) => { if (event.target === elements.platformLoginModal) closePlatformLogin(); });
 elements.teamActionForm.addEventListener('submit', submitTeamAction);
 elements.teamActionCancel.addEventListener('click', closeTeamAction);

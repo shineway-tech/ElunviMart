@@ -1,40 +1,41 @@
-# Design QA
+# Authentication redesign QA
 
-- source visual truth path: `/Users/fanxiao/.codex/generated_images/01a0b259-6948-7031-a023-6ed075abfda3/exec-38b8e323-429e-47fc-8a62-0cd38b6b27f1.png`
-- implementation screenshot path: unavailable
-- viewport: source 1440 x 900; implementation viewport unavailable
-- state: merchant detail view, empty marketing product state
+- source visual truth: `/Users/honeykid/.codex/generated_images/01a0c7d8-dbb3-75c2-b5c4-512863ceeff7/exec-e3b9d4d7-b974-4e2e-a954-7699194ff59b.png`
+- implementation screenshot: CUA inline capture from the running `Elunvi Mart` window (the connector does not expose a filesystem path)
+- viewport: Elunvi Mart desktop window, approximately 1163 x 779 screenshot pixels
+- source dimensions: 1490 x 1059 pixels
+- implementation CSS viewport: 1180 x 780; device scale factor not exposed by the native app connector
+- state: signed-out login, plus registration, forgot-password, and WeChat QR states
 
-## Comparison evidence
+## Full-view comparison
 
-The selected source image was opened and used as the implementation target. The Electron process was restarted successfully, but the current desktop computer-use surface exposes no native app window, so a rendered implementation screenshot could not be captured for a same-viewport comparison.
+The implementation keeps the selected direction's two-column authentication surface: dark brand rail on the left, white form pane on the right, warm red primary action, neutral work area behind the modal, and the existing Mart sidebar. The user's requested change is applied: the mode switch is no longer in the header; the current mode is expressed by the pane title and compact footer links.
+
+## Focused region comparison
+
+The form pane was checked in all four states. Login has a short title and one-line helper copy, registration and forgot-password expose only the fields needed for that mode, and the WeChat state keeps the same shell while showing the QR image. The registration and reset states no longer show an empty “other login method” divider after the WeChat action is hidden.
 
 ## Findings
 
-- [P1] Rendered visual comparison is blocked because the Electron window is not available through the current computer-use surface. The implementation has been updated to match the selected direction in `src/renderer/index.html` and `src/renderer/styles.css`, but this report does not claim pixel-level visual verification.
+No actionable P0, P1, or P2 visual findings remain. The generated reference includes a decorative shop illustration and an error example; the implementation intentionally omits the illustration and starts in a clean empty state to honor the request to remove excess content and keep the auth surface focused. The existing logo asset is used directly for brand fidelity.
 
 ## Comparison history
 
-- Initial selected direction: added dark navigation rail, unified metric strip, and product workspace surface.
-- Follow-up iteration: reduced the detail page scale, changed the metrics back to two separate cards with an 18px gap, and centered the metric icons with fixed flex sizing. The same native-window capture blocker remains.
+- Initial implementation: compact split auth surface, footer mode links, explicit mode titles, and direct WeChat action.
+- Follow-up fix: cleared stale login errors when switching modes and hid the alternate-login divider outside the login state.
+- Post-fix evidence: login, registration, forgot-password, and WeChat QR states were captured from the running Electron client and visually checked.
 
-## Verification completed
+## Implementation checklist
 
-- `node --check src/renderer/app.js`
-- `npm test` — 16 tests passed
-- Electron client restarted and process confirmed running
+- [x] Remove header mode tabs.
+- [x] Add clear 登录 / 注册 / 忘记密码 titles.
+- [x] Keep registration and password-reset navigation accessible from the login surface.
+- [x] Preserve email-code, password, WeChat, and email-binding behavior.
+- [x] Keep the existing Mart brand colors and logo.
+- [x] Check responsive height handling for shorter desktop windows.
 
-## Implementation Checklist
+## Follow-up polish
 
-- [x] Dark navigation rail and selected merchant workspace styling
-- [x] Unified product and exception metric strip
-- [x] Product workspace card with search, status filter, and primary sync action
-- [x] Empty-state layout aligned to the selected visual direction
-- [x] Existing account, filter, sync, login, and settings behavior preserved
-- [ ] Capture native Electron window and repeat same-viewport visual QA
+- A future pass could add a dedicated local illustration asset to the brand rail if the product later wants a more expressive onboarding tone.
 
-## Follow-up Polish
-
-- Re-run the visual comparison when the native Electron window is exposed to the desktop computer-use surface.
-
-final result: blocked
+final result: passed

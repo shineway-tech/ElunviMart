@@ -151,28 +151,41 @@
   </div>
 
   <div class="modal-backdrop" id="platform-login-modal" hidden>
-    <section class="modal platform-login-modal" role="dialog" aria-modal="true" aria-labelledby="platform-login-title">
-      <div class="modal-header"><h2 id="platform-login-title">登录 Elunvi</h2><button class="icon-button" type="button" id="platform-login-close" aria-label="关闭"><i data-lucide="x"></i></button></div>
-      <form id="platform-login-form">
-        <div class="platform-auth-tabs" id="platform-auth-tabs" role="tablist" aria-label="账号操作">
-          <button class="platform-auth-tab is-active" type="button" data-platform-auth-mode="login">登录</button>
-          <button class="platform-auth-tab" type="button" data-platform-auth-mode="register">注册</button>
-          <button class="platform-auth-tab" type="button" data-platform-auth-mode="reset">找回密码</button>
+    <section class="modal platform-auth-modal" role="dialog" aria-modal="true" aria-labelledby="platform-login-title">
+      <div class="platform-auth-layout">
+        <aside class="platform-auth-brand">
+          <div class="platform-auth-brand-mark"><img src="assets/elunvi-mart.png" alt="Elunvi Mart"></div>
+          <strong>Elunvi Mart</strong>
+          <p>本地商家的<br>店铺监控助手</p>
+          <small>让店铺监控更清晰</small>
+        </aside>
+        <div class="platform-auth-pane">
+          <div class="platform-auth-header">
+            <div><h2 id="platform-login-title">登录</h2><p id="platform-auth-copy">使用 Elunvi 账号继续</p></div>
+            <button class="icon-button" type="button" id="platform-login-close" aria-label="关闭"><i data-lucide="x"></i></button>
+          </div>
+          <form id="platform-login-form">
+            <label class="field-label" id="platform-email-field"><span>邮箱</span><div class="platform-auth-input"><i data-lucide="mail"></i><input class="input" id="platform-email" type="email" autocomplete="email" required placeholder="name@example.com"></div></label>
+            <label class="field-label" id="platform-code-field" hidden><span>验证码</span><div class="inline-field"><input class="input" id="platform-code" inputmode="numeric" autocomplete="one-time-code" placeholder="请输入邮箱验证码"><button class="button" type="button" id="platform-request-code">获取验证码</button></div></label>
+            <label class="field-label" id="platform-password-field"><span>密码</span><div class="platform-auth-input"><i data-lucide="lock-keyhole"></i><input class="input" id="platform-password" type="password" autocomplete="current-password" required placeholder="请输入密码"></div></label>
+            <label class="field-label" id="platform-confirm-password-field" hidden><span>确认密码</span><div class="platform-auth-input"><i data-lucide="lock-keyhole"></i><input class="input" id="platform-confirm-password" type="password" autocomplete="new-password" placeholder="请再次输入密码"></div></label>
+            <div class="login-error" id="platform-login-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong>登录失败</strong><p id="platform-login-error-text"></p></div></div>
+            <div class="platform-auth-actions" id="platform-login-actions"><button class="button button-primary platform-auth-submit" type="submit" id="platform-login-submit"><i data-lucide="log-in"></i><span>登录</span></button><div class="platform-auth-divider" id="platform-auth-divider"><span>其他登录方式</span></div><button class="button button-accent-outline platform-auth-wechat" type="button" id="platform-wechat-start"><i data-lucide="scan-line"></i><span>微信扫码登录</span></button></div>
+            <div class="platform-wechat-panel" id="platform-wechat-panel" hidden>
+              <div class="platform-wechat-frame"><img id="platform-wechat-frame" alt="微信官方登录二维码" referrerpolicy="no-referrer"></div>
+              <p id="platform-wechat-status">请使用微信扫描二维码</p>
+              <small id="platform-wechat-countdown"></small>
+              <button class="button" type="button" id="platform-wechat-back">返回其他登录方式</button>
+            </div>
+            <div class="platform-auth-links" id="platform-auth-links">
+              <span id="platform-auth-links-copy">还没有 Elunvi 账号？</span>
+              <button class="link-button" type="button" data-platform-auth-mode="register" id="platform-auth-register-link">立即注册</button>
+              <button class="link-button" type="button" data-platform-auth-mode="reset" id="platform-auth-reset-link">忘记密码</button>
+              <button class="link-button" type="button" data-platform-auth-mode="login" id="platform-auth-login-link" hidden>返回登录</button>
+            </div>
+          </form>
         </div>
-        <p class="modal-copy" id="platform-auth-copy">登录后才能使用店铺、商品、监控和团队功能。</p>
-        <label class="field-label" id="platform-email-field">邮箱<input class="input" id="platform-email" type="email" autocomplete="email" required placeholder="name@example.com"></label>
-        <label class="field-label" id="platform-code-field" hidden>验证码<div class="inline-field"><input class="input" id="platform-code" inputmode="numeric" autocomplete="one-time-code" placeholder="请输入邮箱验证码"><button class="button" type="button" id="platform-request-code">获取验证码</button></div></label>
-        <label class="field-label" id="platform-password-field">密码<input class="input" id="platform-password" type="password" autocomplete="current-password" required placeholder="请输入密码"></label>
-        <label class="field-label" id="platform-confirm-password-field" hidden>确认密码<input class="input" id="platform-confirm-password" type="password" autocomplete="new-password" placeholder="请再次输入密码"></label>
-        <div class="login-error" id="platform-login-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong>登录失败</strong><p id="platform-login-error-text"></p></div></div>
-        <div class="modal-actions" id="platform-login-actions"><button class="button" type="button" id="platform-login-cancel">取消</button><button class="button button-primary" type="submit" id="platform-login-submit"><i data-lucide="log-in"></i><span>登录</span></button><button class="button button-accent-outline" type="button" id="platform-wechat-start"><i data-lucide="scan-line"></i><span>微信扫码登录</span></button></div>
-        <div class="platform-wechat-panel" id="platform-wechat-panel" hidden>
-          <div class="platform-wechat-frame"><img id="platform-wechat-frame" alt="微信官方登录二维码" referrerpolicy="no-referrer"></div>
-          <p id="platform-wechat-status">请使用微信扫描二维码</p>
-          <small id="platform-wechat-countdown"></small>
-          <button class="button" type="button" id="platform-wechat-back">返回其他登录方式</button>
-        </div>
-      </form>
+      </div>
     </section>
   </div>
 
