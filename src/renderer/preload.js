@@ -18,5 +18,18 @@ contextBridge.exposeInMainWorld('pddMonitor', {
   notifications: {
     test: (kind, config) => ipcRenderer.invoke('notifications:test', { kind, config })
   },
+  platform: {
+    status: () => ipcRenderer.invoke('platform:status'),
+    loginWithPassword: (email, password) => ipcRenderer.invoke('platform:login:password', { email, password }),
+    startWechatLogin: () => ipcRenderer.invoke('platform:login:startWechat'),
+    completeWechatLogin: () => ipcRenderer.invoke('platform:login:completeWechat'),
+    refresh: () => ipcRenderer.invoke('platform:refresh'),
+    logout: () => ipcRenderer.invoke('platform:logout'),
+    packages: () => ipcRenderer.invoke('platform:packages'),
+    createCheckout: (packageCode, idempotencyKey) => ipcRenderer.invoke('platform:checkout', { packageCode, idempotencyKey }),
+    createPaymentAttempt: (checkoutId, channel) => ipcRenderer.invoke('platform:payment', { checkoutId, channel }),
+    getCheckout: (checkoutId) => ipcRenderer.invoke('platform:getCheckout', checkoutId),
+    closeCheckout: (checkoutId) => ipcRenderer.invoke('platform:checkout:close', checkoutId)
+  },
   onAccountsChanged: (callback) => ipcRenderer.on('accounts:changed', callback)
 });
