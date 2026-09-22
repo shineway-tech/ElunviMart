@@ -1,11 +1,12 @@
 const state = {
-  platform: { status: 'loading', profile: null, security: null, team: null, billing: null },
+  platform: { status: 'loading', profile: null, security: null, team: null, billing: null, accountEmail: null },
   accounts: [],
   currentAccount: null,
   products: [],
   productPage: 1,
   syncCooldownUntilByAccount: new Map(),
   syncCooldownTimer: null,
+  toastTimer: null,
   syncInProgress: false,
   loginAccountId: null,
   loginMode: 'create',
@@ -35,7 +36,6 @@ const elements = {
   pageMeta: document.querySelector('#page-meta'),
   pageBack: document.querySelector('#page-back'),
   addAccount: document.querySelector('#add-account'),
-  accountLimit: document.querySelector('#account-limit'),
   accountsBody: document.querySelector('#accounts-body'),
   accountsTable: document.querySelector('#accounts-table-frame'),
   accountsEmpty: document.querySelector('#accounts-empty'),
@@ -49,6 +49,7 @@ const elements = {
   productsPageNext: document.querySelector('#products-page-next'),
   syncProducts: document.querySelector('#sync-products'),
   notice: document.querySelector('#notice'),
+  toast: document.querySelector('#toast'),
   modal: document.querySelector('#account-modal'),
   loginStartStep: document.querySelector('#login-start-step'),
   loginConfirmStep: document.querySelector('#login-confirm-step'),
@@ -66,6 +67,8 @@ const elements = {
   platformAccountName: document.querySelector('#platform-account-name'),
   platformAccountMeta: document.querySelector('#platform-account-meta'),
   platformAccountMenu: document.querySelector('#platform-account-menu'),
+  platformAccountMenuAvatar: document.querySelector('#platform-account-menu-avatar'),
+  platformAccountMenuName: document.querySelector('#platform-account-menu-name'),
   platformAccountMenuEmail: document.querySelector('#platform-account-menu-email'),
   platformAccountChangePassword: document.querySelector('#platform-account-change-password'),
   platformAccountLogout: document.querySelector('#platform-account-logout'),
@@ -161,8 +164,7 @@ function renderAccountAvatar(container, avatarUrl) {
   }
 }
 
-function renderPlatformAvatar(profile) {
-  const container = elements.platformAccountAvatar;
+function renderPlatformAvatarInto(container, profile) {
   if (!container) return;
   container.replaceChildren();
   if (profile?.avatarUrl) {
@@ -248,13 +250,30 @@ function showNotice(message, error = false) {
     hideNotice();
     return;
   }
+  if (state.toastTimer) {
+    window.clearTimeout(state.toastTimer);
+    state.toastTimer = null;
+  }
+  elements.toast.hidden = true;
+  if (!error) {
+    elements.notice.hidden = true;
+    elements.toast.querySelector('span').textContent = message;
+    elements.toast.hidden = false;
+    state.toastTimer = window.setTimeout(() => { elements.toast.hidden = true; state.toastTimer = null; }, 1500);
+    return;
+  }
   elements.notice.querySelector('span').textContent = message;
-  elements.notice.classList.toggle('is-error', error);
+  elements.notice.classList.add('is-error');
   elements.notice.hidden = false;
 }
 
 function hideNotice() {
   elements.notice.hidden = true;
+  elements.toast.hidden = true;
+  if (state.toastTimer) {
+    window.clearTimeout(state.toastTimer);
+    state.toastTimer = null;
+  }
 }
 
 function isPlatformSignedIn() {
@@ -272,6 +291,11 @@ function formatMicroPoints(value) {
   }
 }
 
+function renderPlatformAvatar(profile) {
+  renderPlatformAvatarInto(elements.platformAccountAvatar, profile);
+  renderPlatformAvatarInto(elements.platformAccountMenuAvatar, profile);
+}
+
 function billingContextName(context, wallet) {
   return context?.kind === 'team' ? (wallet?.displayName || '团队钱包') : '个人钱包';
 }
@@ -281,19 +305,22 @@ function setPlatformShell(status) {
   state.platform.status = status;
   elements.platformSignin.hidden = signedIn;
   elements.platformAccount.hidden = !signedIn;
-  document.querySelectorAll('.platform-nav').forEach((button) => { button.hidden = !signedIn; });
+  document.querySelectorAll('[data-platform-nav]').forEach((button) => { button.hidden = !signedIn; });
   elements.addAccount.disabled = !signedIn;
   if (signedIn) {
     const profile = state.platform.profile || {};
-    const email = state.platform.security?.maskedEmail || 'Elunvi 用户';
+    const email = state.platform.security?.maskedEmail || state.platform.accountEmail || 'Elunvi 用户';
+    const displayName = profile.displayName || email;
     renderPlatformAvatar(profile);
     elements.platformAccountMenuEmail.textContent = email;
-    elements.platformAccountName.textContent = profile.avatarUrl ? (profile.displayName || email) : email;
+    elements.platformAccountMenuName.textContent = displayName;
+    elements.platformAccountName.textContent = profile.avatarUrl ? displayName : email;
     elements.platformAccountMeta.textContent = profile.avatarUrl ? email : (profile.displayName || 'Elunvi 用户');
   } else {
     closePlatformAccountMenu();
     renderPlatformAvatar(null);
     elements.platformAccountMenuEmail.textContent = '未登录';
+    elements.platformAccountMenuName.textContent = '未登录';
     elements.platformAccountName.textContent = '未登录';
     elements.platformAccountMeta.textContent = '登录后使用软件';
   }
@@ -321,7 +348,7 @@ function openPasswordChange() {
   state.platformAuthCodeCooldownUntil.reset = 0;
   setPlatformAuthMode('password-change');
   const fields = authFields('password-change');
-  fields.email.value = '';
+  fields.email.value = state.platform.accountEmail || state.platform.security?.maskedEmail || '';
   fields.code.value = '';
   fields.password.value = '';
   fields.confirm.value = '';
@@ -562,6 +589,7 @@ function setPlatformAuthMode(mode) {
   const isRegister = key === 'register';
   const isBinding = mode === 'email-binding';
   const isPasswordChange = mode === 'password-change';
+  elements.platformLoginModal.querySelector('.platform-auth-modal').classList.toggle('is-password-change', isPasswordChange);
   document.querySelector('#platform-login-title').textContent = isWechat ? '微信扫码登录' : isBinding ? '绑定邮箱' : isPasswordChange ? '修改密码' : isLogin ? '登录' : isRegister ? '注册' : '忘记密码';
   elements.platformAuthCopy.hidden = isWechat;
   elements.platformAuthCopy.textContent = isBinding
@@ -577,6 +605,8 @@ function setPlatformAuthMode(mode) {
   clearAuthErrors(mode);
   updateAuthFormLabels(mode);
   updateEmailBindingFields(mode);
+  const resetEmail = document.querySelector('#platform-reset-email');
+  if (resetEmail) resetEmail.readOnly = isPasswordChange;
   if (!isWechat) elements.platformWechatFrame.src = 'about:blank';
   document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.platformAuthMode === mode);
@@ -639,7 +669,7 @@ async function requestPlatformCode(mode = state.platformAuthMode) {
     updateAuthFormLabels(mode);
     startAuthCodeCooldown(mode);
     fields.code.focus();
-    setServerError(mode, mode === 'reset'
+    setServerError(mode, mode === 'password-change' ? '' : mode === 'reset'
       ? '如果该邮箱已注册，验证码会发送到邮箱，请注意查收。'
       : '验证码已发送，请检查邮箱。');
     return true;
@@ -823,6 +853,19 @@ function renderTeam(teamData) {
   }
   elements.teamSummary.replaceChildren();
   elements.teamMembers.replaceChildren();
+  if (teamData?.loadError) {
+    const copy = document.createElement('p');
+    copy.className = 'empty-copy';
+    copy.textContent = '团队信息暂时无法加载，请稍后重试。';
+    const action = document.createElement('button');
+    action.className = 'button button-primary';
+    action.type = 'button';
+    action.textContent = '重新加载';
+    action.addEventListener('click', () => void loadTeamData());
+    elements.teamSummary.append(copy, action);
+    elements.teamHistory.replaceChildren();
+    return;
+  }
   if (!team) {
     const copy = document.createElement('p');
     copy.className = 'empty-copy';
@@ -876,10 +919,11 @@ function renderTeam(teamData) {
     elements.teamSummary.append(invite);
   }
   const members = teamData.members?.members || [];
-  if (!members.length) {
+  const memberRequests = (teamData.members?.requests || []).filter((request) => request.status === 'pending');
+  if (!members.length && !memberRequests.length) {
     const empty = document.createElement('p');
     empty.className = 'empty-copy';
-    empty.textContent = '成员信息暂时无法加载。';
+    empty.textContent = team.role === 'owner' ? '成员信息暂时无法加载。' : '当前为团队成员，成员列表由负责人管理。';
     elements.teamMembers.append(empty);
   } else {
     for (const member of members) {
@@ -892,6 +936,16 @@ function renderTeam(teamData) {
       row.append(name, status);
       elements.teamMembers.append(row);
     }
+    for (const request of memberRequests) {
+      const row = document.createElement('div');
+      row.className = 'team-member-row';
+      const name = document.createElement('strong');
+      name.textContent = request.recipient_display_name || request.recipient_masked_email || '待确认成员';
+      const status = document.createElement('small');
+      status.textContent = '邀请待接受';
+      row.append(name, status);
+      elements.teamMembers.append(row);
+    }
   }
   refreshIcons();
 }
@@ -899,8 +953,10 @@ function renderTeam(teamData) {
 async function loadTeamData() {
   try {
     const teamData = await window.pddMonitor.platform.team();
-    if (teamData?.teams?.team) {
+    if (teamData?.teams?.team?.role === 'owner') {
       teamData.members = await window.pddMonitor.platform.teamMembers(teamData.teams.team.id);
+    } else {
+      teamData.members = { members: [], requests: teamData?.teams?.requests || [] };
     }
     renderTeam(teamData);
     const teamId = teamData?.teams?.team?.id;
@@ -910,7 +966,7 @@ async function loadTeamData() {
     }
   } catch (error) {
     showNotice(error.message || '团队信息暂时无法加载', true);
-    renderTeam(null);
+    renderTeam({ teams: { team: null, requests: [] }, members: { members: [], requests: [] }, loadError: true });
   }
 }
 
@@ -1014,7 +1070,7 @@ async function logoutPlatform() {
   state.accounts = [];
   state.platformAuthBindingKind = null;
   state.platformAuthChallengeId = null;
-  state.platform = { status: 'signed_out', profile: null, team: null, billing: null };
+  state.platform = { status: 'signed_out', profile: null, security: null, team: null, billing: null, accountEmail: null };
   setPlatformShell('signed_out');
   document.querySelectorAll('.view').forEach((view) => { view.hidden = true; });
   showPlatformLogin();
@@ -1027,6 +1083,7 @@ async function loadPlatformState() {
       state.platform.status = 'signed_in';
       state.platform.profile = result.profile;
       state.platform.security = result.security || null;
+      state.platform.accountEmail = result.accountEmail || null;
       setPlatformShell('signed_in');
       await loadAccounts();
       return;
@@ -1126,7 +1183,7 @@ function showView(name) {
     return;
   }
   document.querySelectorAll('.view').forEach((view) => { view.hidden = view.id !== `${name}-view`; });
-  document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('is-active', button.dataset.view === name));
+  document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('is-active', button.dataset.view === name));
   const isAccounts = name === 'accounts';
   const isSettings = name === 'settings';
   elements.addAccount.hidden = !isAccounts;
@@ -1138,7 +1195,7 @@ function showView(name) {
     elements.title.textContent = '监控设置';
     loadSettings();
   } else if (name === 'wallet') {
-    elements.title.textContent = '钱包与支付';
+    elements.title.textContent = '钱包';
     void loadWalletData();
   } else if (name === 'team') {
     elements.title.textContent = '我的团队';
@@ -1159,7 +1216,6 @@ function accountStatus(account) {
 
 function renderAccounts() {
   elements.accountsBody.replaceChildren();
-  elements.accountLimit.textContent = `已添加 ${state.accounts.length} / 10 个账号`;
   elements.accountsEmpty.hidden = state.accounts.length > 0;
   elements.accountsTable.hidden = state.accounts.length === 0;
   for (const account of state.accounts) {
@@ -1170,7 +1226,7 @@ function renderAccounts() {
       <td>${Number(account.productCount || 0)} 个</td>
       <td><span class="status ${Number(account.abnormalProductCount || 0) > 0 ? 'status-lost' : 'status-active'}">${Number(account.abnormalProductCount || 0)} 个</span></td>
       <td class="time">${formatDate(account.lastSyncAt)}</td>
-      <td><div class="account-actions"><button class="icon-button account-action" type="button" data-account-action="view" aria-label="查看营销活动商品" title="查看营销活动商品"><i data-lucide="eye"></i></button><button class="icon-button account-action" type="button" data-account-action="login" aria-label="${account.status === 'active' ? '重新登录' : '登录'}" title="${account.status === 'active' ? '重新登录' : '登录'}"><i data-lucide="refresh-cw"></i></button><button class="icon-button account-action account-remove" type="button" data-account-action="remove" aria-label="移除账号" title="移除账号"><i data-lucide="trash-2"></i></button></div></td>`;
+      <td><div class="account-actions"><button class="icon-button account-action" type="button" data-account-action="view" aria-label="查看营销活动商品" title="查看营销活动商品"><i data-lucide="external-link"></i></button><button class="icon-button account-action" type="button" data-account-action="login" aria-label="${account.status === 'active' ? '重新登录' : '登录'}" title="${account.status === 'active' ? '重新登录' : '登录'}"><i data-lucide="log-in"></i></button><button class="icon-button account-action account-remove" type="button" data-account-action="remove" aria-label="移除账号" title="移除账号"><i data-lucide="trash-2"></i></button></div></td>`;
     row.querySelector('.primary-text').textContent = account.displayName || '未命名店铺';
     row.querySelector('.secondary-text').textContent = account.mallId ? `店铺 ID ${account.mallId}` : '店铺 ID 待接口识别';
     renderAccountAvatar(row.querySelector('.account-avatar'), account.avatarUrl);
@@ -1404,6 +1460,7 @@ async function submitLoginForm(event) {
   setServerError('login');
   fields.submit.disabled = true;
   try {
+    state.platform.accountEmail = fields.email.value.trim();
     const result = await window.pddMonitor.platform.login({
       email: fields.email.value.trim(),
       password: fields.password.value
@@ -1432,6 +1489,7 @@ async function submitRegistrationForm(event) {
   setServerError(mode);
   fields.submit.disabled = true;
   try {
+    state.platform.accountEmail = fields.email.value.trim();
     const result = await window.pddMonitor.platform.completeRegistration({
       challengeId: state.platformAuthChallenges.register,
       code: fields.code.value.trim(),
@@ -1624,10 +1682,15 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
   }
 }
 
-document.querySelectorAll('.nav-button').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
+document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => {
+  showView(button.dataset.view);
+  if (button.closest('.platform-account-menu')) closePlatformAccountMenu();
+}));
 document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => button.addEventListener('click', () => setPlatformAuthMode(button.dataset.platformAuthMode)));
 document.querySelector('#platform-register-request-code').addEventListener('click', () => void requestPlatformCode('register'));
-document.querySelector('#platform-reset-request-code').addEventListener('click', () => void requestPlatformCode(state.platformAuthMode === 'email-binding' ? 'email-binding' : 'reset'));
+document.querySelector('#platform-reset-request-code').addEventListener('click', () => void requestPlatformCode(
+  state.platformAuthMode === 'email-binding' ? 'email-binding' : state.platformAuthMode === 'password-change' ? 'password-change' : 'reset'
+));
 document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', () => openLoginModal()));
 elements.addAccount.addEventListener('click', () => openLoginModal());
 elements.platformSignin.addEventListener('click', () => showPlatformLogin());
@@ -1733,11 +1796,12 @@ window.pddMonitor.onPlatformChanged((payload) => {
     state.platform.status = 'signed_in';
     state.platform.profile = payload.profile || state.platform.profile;
     state.platform.security = payload.security || state.platform.security;
+    state.platform.accountEmail = payload.accountEmail || state.platform.accountEmail;
     setPlatformShell('signed_in');
     return;
   }
   if (payload?.status === 'signed_out') {
-    state.platform = { status: 'signed_out', profile: null, security: null, team: null, billing: null };
+    state.platform = { status: 'signed_out', profile: null, security: null, team: null, billing: null, accountEmail: null };
     setPlatformShell('signed_out');
     showPlatformLogin();
   }

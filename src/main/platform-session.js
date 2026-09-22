@@ -7,7 +7,8 @@ function copyTokens(tokens) {
     accessToken: String(tokens.accessToken),
     refreshToken: String(tokens.refreshToken),
     ...(tokens.accessExpiresAt ? { accessExpiresAt: String(tokens.accessExpiresAt) } : {}),
-    ...(tokens.refreshExpiresAt ? { refreshExpiresAt: String(tokens.refreshExpiresAt) } : {})
+    ...(tokens.refreshExpiresAt ? { refreshExpiresAt: String(tokens.refreshExpiresAt) } : {}),
+    ...(tokens.accountEmail ? { accountEmail: String(tokens.accountEmail) } : {})
   };
 }
 
@@ -63,11 +64,24 @@ class PlatformSession {
     return (await this.tokens())?.accessToken || null;
   }
 
+  async accountEmail() {
+    return (await this.tokens())?.accountEmail || null;
+  }
+
   async save(tokens) {
-    const normalized = copyTokens(tokens);
+    const current = await this.tokens();
+    const normalized = copyTokens({ ...current, ...tokens });
     if (!normalized?.accessToken || !normalized?.refreshToken) throw new Error('Platform 会话响应无效');
     await this.tokenStore.save(normalized);
     return normalized;
+  }
+
+  async saveAccountEmail(email) {
+    const current = await this.tokens();
+    if (!current) return null;
+    const normalized = copyTokens({ ...current, accountEmail: String(email || '').trim() });
+    await this.tokenStore.save(normalized);
+    return normalized.accountEmail || null;
   }
 
   async clear() {

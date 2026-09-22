@@ -81,10 +81,23 @@ class PlatformService {
     this.fetchImpl = fetchImpl;
     this.registrationFlows = new Map();
     this.wechatFlow = null;
+    this.authenticatedEmail = null;
   }
 
   async requireSignedIn() {
     if (!(await this.session.accessToken())) throw new Error('请先登录 Elunvi 账号');
+  }
+
+  async accountEmail() {
+    return this.authenticatedEmail || await this.session.accountEmail();
+  }
+
+  async rememberAuthenticatedEmail(email) {
+    const normalized = String(email || '').trim();
+    if (!normalized) return null;
+    this.authenticatedEmail = normalized;
+    await this.session.saveAccountEmail(normalized);
+    return normalized;
   }
 
   async getProfile() {
@@ -112,6 +125,7 @@ class PlatformService {
       method: 'POST',
       body: { email: String(email).trim() }
     });
+    await this.rememberAuthenticatedEmail(email);
     return { challengeId: response.data.challenge_id, expiresAt: response.data.expires_at };
   }
 
@@ -129,10 +143,13 @@ class PlatformService {
 
   async requestAuthenticatedPasswordCode(email) {
     await this.requireSignedIn();
-    if (!String(email || '').trim()) throw new Error('请输入邮箱');
-    const response = await this.client.request('/v1/me/email-binding-challenges', {
+    const requestedEmail = String(email || '').trim();
+    const effectiveEmail = requestedEmail.includes('*') ? await this.accountEmail() : requestedEmail;
+    if (!effectiveEmail) throw new Error('请重新使用邮箱登录后再修改密码');
+    const response = await this.client.request('/v1/auth/email/password-reset-challenges', {
       method: 'POST',
-      body: { email: String(email).trim() }
+      auth: false,
+      body: { email: effectiveEmail }
     });
     return { challengeId: response.data.challenge_id, expiresAt: response.data.expires_at };
   }
@@ -339,6 +356,7 @@ class PlatformService {
       }
     });
     await this.exchangeDeviceFlow(pending.flow);
+    await this.rememberAuthenticatedEmail(pending.email);
     return this.getProfile();
   }
 
@@ -350,6 +368,7 @@ class PlatformService {
       body: { device_session_id: flow.deviceSessionId, email, password }
     });
     await this.exchangeDeviceFlow(flow);
+    await this.rememberAuthenticatedEmail(email);
     return this.getProfile();
   }
 
@@ -462,6 +481,7 @@ class PlatformService {
       auth: false,
       body: { email: String(email).trim() }
     });
+    await this.rememberAuthenticatedEmail(email);
     this.wechatFlow.emailBindingChallengeId = response.data.challenge_id;
     return { challengeId: this.wechatFlow.emailBindingChallengeId, expiresAt: response.data.expires_at };
   }

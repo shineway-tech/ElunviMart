@@ -116,6 +116,11 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 
 /* The account gate is a focused product surface rather than a generic form modal. */
 .platform-auth-modal{width:min(760px,100%);padding:0;overflow:hidden}
+.platform-auth-modal.is-password-change{width:min(430px,100%)}
+.platform-auth-modal.is-password-change .platform-auth-layout{display:block;min-height:0}
+.platform-auth-modal.is-password-change .platform-auth-brand{display:none}
+.platform-auth-modal.is-password-change .platform-auth-pane{padding:30px 34px 28px}
+.platform-auth-modal.is-password-change .platform-auth-forms{min-height:0}
 .platform-auth-layout{display:grid;grid-template-columns:minmax(220px,.78fr) minmax(0,1.22fr);min-height:500px}
 .platform-auth-brand{display:flex;flex-direction:column;align-items:flex-start;padding:90px 30px 28px;color:#f5f6f7;background:#181d21}
 .platform-auth-brand-heading{display:flex;align-items:center;gap:10px}
@@ -186,12 +191,26 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-avatar svg{width:17px;height:17px;color:#d7dee7}
 .platform-account-menu{position:absolute;right:0;bottom:calc(100% + 10px);z-index:15;width:218px;padding:8px;border:1px solid #dfe4ea;border-radius:10px;background:#fff;box-shadow:0 14px 34px rgba(14,23,35,.22)}
 .platform-account-menu:after{content:"";position:absolute;right:24px;bottom:-7px;width:12px;height:12px;border-right:1px solid #dfe4ea;border-bottom:1px solid #dfe4ea;background:#fff;transform:rotate(45deg)}
-.platform-account-menu-heading{display:grid;gap:3px;padding:7px 9px 9px;border-bottom:1px solid #edf0f3}
-.platform-account-menu-heading span{color:#252b33;font-size:12px;font-weight:600}
-.platform-account-menu-heading small{overflow:hidden;color:#8b95a1;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.platform-account-menu{right:auto;left:12px}
+.platform-account-menu:after{right:auto;left:calc(50% - 6px)}
+.app-shell{overflow:visible}
+.sidebar{position:relative;z-index:2;overflow:visible}
+.platform-account-menu-profile{display:flex;align-items:center;gap:9px;padding:7px 9px 10px;border-bottom:1px solid #edf0f3}
+.platform-account-menu-profile>span:last-child{display:grid;min-width:0;gap:3px}
+.platform-account-menu-profile strong,.platform-account-menu-profile small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.platform-account-menu-profile strong{color:#252b33;font-size:12px;font-weight:600}
+.platform-account-menu-profile small{color:#8b95a1;font-size:11px}
+.platform-account-menu-avatar{display:grid;place-items:center;flex:0 0 auto;width:32px;height:32px;overflow:hidden;border-radius:50%;color:#d93025;background:#fff0ee}
+.platform-account-menu-avatar img{display:block;width:100%;height:100%;object-fit:cover}
+.platform-account-menu-avatar svg{width:16px;height:16px}
 .platform-account-menu-item{position:relative;z-index:1;display:flex;align-items:center;gap:9px;width:100%;min-height:38px;padding:8px 9px;border:0;border-radius:7px;color:#303844;background:transparent;cursor:pointer;text-align:left;font-size:13px}
 .platform-account-menu-item:hover{background:#f5f7f9}
+.platform-account-menu-item.is-active{color:var(--accent);background:var(--accent-soft)}
+.platform-account-menu-item.is-active svg{color:var(--accent)}
 .platform-account-menu-item svg{width:17px;height:17px;color:#707b88}
 .platform-account-menu-item.is-danger{margin-top:5px;border-top:1px solid #edf0f3;border-radius:0 0 7px 7px;color:var(--accent)}
 .platform-account-menu-item.is-danger svg{color:var(--accent)}
 .platform-account-menu[hidden]{display:none}
+.toast{position:fixed;left:50%;top:50%;z-index:100;display:flex;align-items:center;gap:9px;max-width:min(420px,calc(100vw - 40px));padding:12px 18px;border:1px solid #cfe8dc;border-radius:10px;color:#176b4e;background:#f0faf5;box-shadow:0 12px 34px rgba(20,53,39,.2);font-size:13px;line-height:1.45;pointer-events:none;transform:translate(-50%,-50%);animation:toast-in .16s ease-out}
+.toast svg{width:17px;height:17px;flex:0 0 auto;color:#16845b}
+@keyframes toast-in{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
