@@ -62,10 +62,11 @@ function toAttempt(value) {
 }
 
 class PlatformService {
-  constructor({ client, session, config }) {
+  constructor({ client, session, config, fetchImpl = globalThis.fetch?.bind(globalThis) }) {
     this.client = client;
     this.session = session;
     this.config = config;
+    this.fetchImpl = fetchImpl;
     this.registrationFlows = new Map();
     this.wechatFlow = null;
   }
@@ -338,9 +339,11 @@ class PlatformService {
   async startWechatLogin() {
     this.wechatFlow = await this.createDeviceFlow();
     const wechatStartUri = resolveWechatStartUri(this.wechatFlow.authorizationUrl, this.config, this.wechatFlow.deviceSessionId);
+    const qrImageUrl = await fetchWechatQrImageUrl(wechatStartUri, this.fetchImpl);
     return {
       wechatStartUri,
       authorizationUrl: wechatStartUri,
+      qrImageUrl,
       expiresAt: this.wechatFlow.expiresAt,
       pollIntervalSeconds: this.wechatFlow.pollIntervalSeconds
     };
@@ -369,7 +372,9 @@ class PlatformService {
       this.wechatFlow = null;
       return { state: 'signed_in', profile: await this.getProfile() };
     } catch (error) {
-      if (error.status === 401) return { state: 'pending', retryAfterSeconds: flow.pollIntervalSeconds };
+      if (error.status === 401 || (error.status === 429 && error.code === 'AUTH_REQUIRED')) {
+        return { state: 'pending', retryAfterSeconds: flow.pollIntervalSeconds };
+      }
       if (error.status === 409 && error.code === 'AUTH_EMAIL_BINDING_REQUIRED') {
         return { state: 'binding_required' };
       }
@@ -446,6 +451,32 @@ function resolveWechatStartUri(value, config, deviceSessionId) {
     throw new Error('微信登录地址不受支持');
   }
   return parsed.toString();
+}
+
+async function fetchWechatQrImageUrl(startUri, fetchImpl) {
+  if (typeof fetchImpl !== 'function') throw new Error('当前运行环境不支持微信二维码加载');
+  let response;
+  try {
+    response = await fetchImpl(startUri, { redirect: 'follow' });
+  } catch {
+    throw new Error('微信二维码页面暂时无法加载，请检查网络后重试');
+  }
+  if (!response.ok) throw new Error('微信二维码页面暂时无法加载，请稍后重试');
+  let pageUrl;
+  try { pageUrl = new URL(response.url || startUri); } catch { throw new Error('微信二维码地址无效'); }
+  if (pageUrl.origin !== 'https://open.weixin.qq.com' || pageUrl.pathname !== '/connect/qrconnect') {
+    throw new Error('微信二维码地址不受支持');
+  }
+  const html = await response.text();
+  const match = html.match(/<img\b[^>]*class=["'][^"']*js_qrcode_img[^"']*["'][^>]*src=["']([^"']+)["']/i)
+    || html.match(/<img\b[^>]*src=["']([^"']+)["'][^>]*class=["'][^"']*js_qrcode_img[^"']*["']/i);
+  if (!match) throw new Error('微信二维码暂时没有生成，请稍后重试');
+  let imageUrl;
+  try { imageUrl = new URL(match[1], pageUrl); } catch { throw new Error('微信二维码地址无效'); }
+  if (imageUrl.origin !== pageUrl.origin || !imageUrl.pathname.startsWith('/connect/qrcode/')) {
+    throw new Error('微信二维码地址不受支持');
+  }
+  return imageUrl.toString();
 }
 
 module.exports = {

@@ -1153,7 +1153,7 @@ async function beginWechatLogin() {
     const result = await window.pddMonitor.platform.wechatStart();
     state.wechatExpiresAt = result.expiresAt;
     setPlatformAuthMode('wechat');
-    elements.platformWechatFrame.src = result.wechatStartUri;
+    elements.platformWechatFrame.src = result.qrImageUrl;
     elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
     elements.platformLoginModal.hidden = false;
     void pollWechatLogin(result.pollIntervalSeconds);
