@@ -19,6 +19,9 @@ const state = {
   platformAuthMode: 'login',
   platformAuthChallengeId: null,
   platformAuthChallenges: { register: null, reset: null },
+  platformAuthCodeCooldownUntil: { register: 0, reset: 0 },
+  platformAuthCodeCooldownTimers: { register: null, reset: null },
+  platformAuthCodeRequesting: { register: false, reset: false },
   wechatExpiresAt: null,
   wechatPollTimer: null,
   wechatCountdownTimer: null
@@ -393,6 +396,52 @@ function validateAuthFields(mode, { requireCode = true, onlyEmail = false } = {}
   return valid;
 }
 
+function authCodeKey(mode) {
+  return authModeKey(mode) === 'register' ? 'register' : 'reset';
+}
+
+function authCodeCooldownRemaining(mode) {
+  const remaining = state.platformAuthCodeCooldownUntil[authCodeKey(mode)] - Date.now();
+  return Math.max(0, remaining);
+}
+
+function updateAuthCodeButton(mode) {
+  const fields = authFields(mode);
+  if (!fields.requestCode) return;
+  const key = authCodeKey(mode);
+  const remaining = authCodeCooldownRemaining(mode);
+  if (state.platformAuthCodeRequesting[key]) {
+    fields.requestCode.disabled = true;
+    fields.requestCode.textContent = '发送中…';
+  } else if (remaining > 0) {
+    fields.requestCode.disabled = true;
+    fields.requestCode.textContent = `${Math.ceil(remaining / 1000)}秒后重试`;
+  } else {
+    fields.requestCode.disabled = false;
+    const hasChallenge = mode === 'email-binding'
+      ? Boolean(state.platformAuthChallengeId)
+      : Boolean(state.platformAuthChallenges[key]);
+    fields.requestCode.textContent = hasChallenge ? '重新获取' : '获取验证码';
+  }
+}
+
+function startAuthCodeCooldown(mode) {
+  const key = authCodeKey(mode);
+  if (state.platformAuthCodeCooldownTimers[key]) window.clearInterval(state.platformAuthCodeCooldownTimers[key]);
+  state.platformAuthCodeCooldownUntil[key] = Date.now() + 60_000;
+  updateAuthCodeButton(mode);
+  state.platformAuthCodeCooldownTimers[key] = window.setInterval(() => {
+    if (authCodeCooldownRemaining(mode) > 0) {
+      updateAuthCodeButton(mode);
+      return;
+    }
+    window.clearInterval(state.platformAuthCodeCooldownTimers[key]);
+    state.platformAuthCodeCooldownTimers[key] = null;
+    state.platformAuthCodeCooldownUntil[key] = 0;
+    updateAuthCodeButton(mode);
+  }, 1000);
+}
+
 function updateAuthFormLabels(mode) {
   const key = authModeKey(mode);
   const fields = authFields(mode);
@@ -414,10 +463,7 @@ function updateAuthFormLabels(mode) {
     if (span) span.textContent = label;
   }
   if (fields.requestCode) {
-    const hasChallenge = mode === 'email-binding'
-      ? Boolean(state.platformAuthChallengeId)
-      : Boolean(state.platformAuthChallenges[key]);
-    fields.requestCode.textContent = hasChallenge ? '重新获取' : '获取验证码';
+    updateAuthCodeButton(mode);
   }
 }
 
@@ -457,8 +503,13 @@ function setPlatformAuthMode(mode) {
 async function requestPlatformCode(mode = state.platformAuthMode) {
   const key = authModeKey(mode);
   const fields = authFields(mode);
+  if (authCodeCooldownRemaining(mode) > 0) {
+    updateAuthCodeButton(mode);
+    return false;
+  }
   if (!validateAuthFields(mode, { onlyEmail: true })) return false;
-  fields.requestCode.disabled = true;
+  state.platformAuthCodeRequesting[authCodeKey(mode)] = true;
+  updateAuthCodeButton(mode);
   setServerError(mode);
   try {
     const result = key === 'register'
@@ -469,6 +520,7 @@ async function requestPlatformCode(mode = state.platformAuthMode) {
     if (mode === 'email-binding') state.platformAuthChallengeId = result.challengeId;
     else state.platformAuthChallenges[key] = result.challengeId;
     updateAuthFormLabels(mode);
+    startAuthCodeCooldown(mode);
     fields.code.focus();
     setServerError(mode, '验证码已发送，请检查邮箱。');
     return true;
@@ -476,7 +528,8 @@ async function requestPlatformCode(mode = state.platformAuthMode) {
     setServerError(mode, friendlyError(error) || '验证码发送失败，请稍后重试');
     return false;
   } finally {
-    fields.requestCode.disabled = false;
+    state.platformAuthCodeRequesting[authCodeKey(mode)] = false;
+    updateAuthCodeButton(mode);
   }
 }
 
