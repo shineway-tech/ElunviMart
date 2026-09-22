@@ -1,7 +1,12 @@
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage } = require('electron');
-const { SqliteStore } = require('./store');
+const fs = require('node:fs');
+const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
+const { SqliteStore, DEFAULT_DATA } = require('./store');
+const { PlatformClient } = require('./platform-client');
+const { PlatformSession, SafeStorageTokenStore } = require('./platform-session');
+const { PlatformService } = require('./platform-service');
+const { platformConfigFor } = require('./platform-config');
 const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./merchant-profile');
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
 const { SyncQueue } = require('./sync-queue');
@@ -25,6 +30,11 @@ app.setName(APP_NAME);
 
 let mainWindow;
 let store;
+let platformService;
+let platformSession;
+let platformConfig;
+let userDataRoot;
+let activePlatformUserId = null;
 let scheduler;
 let syncQueue;
 const loginWindows = new Map();
@@ -43,6 +53,44 @@ function appIconPath() {
 
 function dockIconPath() {
   return rendererPath('assets/elunvi-mart-dock.png');
+}
+
+function legacyOwnerPath() {
+  return path.join(userDataRoot, 'monitor-owner.json');
+}
+
+function userStorePath(userId) {
+  const legacyDatabase = path.join(userDataRoot, 'monitor.db');
+  let legacyOwner = null;
+  try { legacyOwner = JSON.parse(fs.readFileSync(legacyOwnerPath(), 'utf8')).userId || null; } catch {}
+  if ((!legacyOwner || legacyOwner === userId) && fs.existsSync(legacyDatabase)) {
+    if (!legacyOwner) fs.writeFileSync(legacyOwnerPath(), JSON.stringify({ userId }), { mode: 0o600 });
+    return legacyDatabase;
+  }
+  return path.join(userDataRoot, 'users', userId, 'monitor.db');
+}
+
+function closeActiveStore() {
+  scheduler?.stop();
+  syncQueue?.cancelAll();
+  store?.close();
+  store = null;
+  activePlatformUserId = null;
+}
+
+function activateUserStore(userId) {
+  if (activePlatformUserId === userId && store) return;
+  closeActiveStore();
+  const filePath = userStorePath(userId);
+  store = new SqliteStore(filePath);
+  activePlatformUserId = userId;
+  scheduler?.configure(store.getSettings());
+  scheduler?.refreshAccounts();
+}
+
+function requireSignedInStore() {
+  if (!platformService || !activePlatformUserId || !store) throw new Error('请先登录 Elunvi 账号');
+  return store;
 }
 
 function sendToRenderer(channel, payload) {
@@ -333,11 +381,77 @@ function enforceManualSyncCooldown(accountId) {
 }
 
 function registerIpc(adapter) {
-  ipcMain.handle('accounts:list', () => store.getAccounts().map((account) => ({
+  ipcMain.handle('platform:state', async () => {
+    if (!platformService || !(await platformSession.accessToken())) return { status: 'signed_out' };
+    try {
+      const profile = await platformService.getProfile();
+      activateUserStore(profile.userId);
+      return { status: 'signed_in', profile };
+    } catch (error) {
+      if (['AUTH_REQUIRED', 'authentication_required'].includes(error.code) || error.status === 401) {
+        await platformService.logout();
+        closeActiveStore();
+        return { status: 'signed_out' };
+      }
+      return { status: 'error', message: error.message || '暂时无法连接 Elunvi Platform' };
+    }
+  });
+  ipcMain.handle('platform:login', async (_event, { email, password }) => {
+    const profile = await platformService.loginWithPassword(String(email || '').trim(), String(password || ''));
+    activateUserStore(profile.userId);
+    sendToRenderer('platform:changed', { status: 'signed_in', profile });
+    return { status: 'signed_in', profile };
+  });
+  ipcMain.handle('platform:requestRegistrationCode', (_event, email) => platformService.requestRegistrationCode(String(email || '').trim()));
+  ipcMain.handle('platform:completeRegistration', async (_event, input) => {
+    const profile = await platformService.completeRegistration(input || {});
+    activateUserStore(profile.userId);
+    sendToRenderer('platform:changed', { status: 'signed_in', profile });
+    return { status: 'signed_in', profile };
+  });
+  ipcMain.handle('platform:requestPasswordResetCode', (_event, email) => platformService.requestPasswordResetCode(String(email || '').trim()));
+  ipcMain.handle('platform:resetPassword', (_event, input) => platformService.resetPassword(input || {}));
+  ipcMain.handle('platform:logout', async () => {
+    await platformService.logout();
+    closeActiveStore();
+    sendToRenderer('platform:changed', { status: 'signed_out' });
+    return { status: 'signed_out' };
+  });
+  ipcMain.handle('platform:profile', () => platformService.getProfile());
+  ipcMain.handle('platform:security', () => platformService.getSecurity());
+  ipcMain.handle('platform:team', async () => ({
+    accountState: await platformService.getTeamAccountState(),
+    teams: await platformService.getTeams()
+  }));
+  ipcMain.handle('platform:teamMembers', (_event, teamId) => platformService.getTeamMembers(String(teamId)));
+  ipcMain.handle('platform:createTeam', (_event, name) => platformService.createTeam(String(name || '')));
+  ipcMain.handle('platform:addTeamMember', (_event, input) => platformService.addTeamMember(input || {}));
+  ipcMain.handle('platform:respondTeamRequest', (_event, input) => platformService.respondToTeamRequest(String(input.requestId), input.action));
+  ipcMain.handle('platform:billingContexts', () => platformService.getBillingContexts());
+  ipcMain.handle('platform:wallet', (_event, walletOwnerId) => platformService.getWallet(String(walletOwnerId)));
+  ipcMain.handle('platform:walletTransactions', (_event, cursor) => platformService.getWalletTransactions(cursor ? String(cursor) : null));
+  ipcMain.handle('platform:teamHistory', (_event, { teamId, kind, cursor }) => platformService.getTeamHistory(String(teamId), kind, cursor ? String(cursor) : null));
+  ipcMain.handle('platform:packages', (_event, amountFen) => platformService.listPaymentPackages(amountFen ? String(amountFen) : null));
+  ipcMain.handle('platform:createCheckout', (_event, input) => platformService.createCheckout(input));
+  ipcMain.handle('platform:createPaymentAttempt', (_event, input) => platformService.createPaymentAttempt(String(input.checkoutId), input.channel));
+  ipcMain.handle('platform:getCheckout', (_event, input) => platformService.getCheckout(String(input.checkoutId), input.paymentContext || null));
+  ipcMain.handle('platform:closeCheckout', (_event, checkoutId) => platformService.closeCheckout(String(checkoutId)));
+  ipcMain.handle('platform:openPayment', async (_event, paymentUrl) => {
+    const value = String(paymentUrl || '');
+    let parsed;
+    try { parsed = new URL(value); } catch { throw new Error('支付入口地址无效'); }
+    const safe = parsed.protocol === 'weixin:' || parsed.protocol === 'elunvi-pay:' || (parsed.protocol === 'https:' && (parsed.hostname === 'alipay.com' || parsed.hostname.endsWith('.alipay.com')));
+    if (!safe) throw new Error('支付入口地址不受支持');
+    await shell.openExternal(parsed.toString());
+    return true;
+  });
+
+  ipcMain.handle('accounts:list', () => requireSignedInStore().getAccounts().map((account) => ({
     ...account,
     abnormalProductCount: store.getProducts(account.id).filter(isAbnormalActivityProduct).length
   })));
   ipcMain.handle('accounts:startLogin', (_event, accountId) => {
+    requireSignedInStore();
     let id = accountId;
     if (!id) {
       if (store.getAccounts().length >= MAX_ACCOUNTS) throw new Error('单个客户端最多添加 10 个商家账号');
@@ -348,6 +462,7 @@ function registerIpc(adapter) {
     return { accountId: id };
   });
   ipcMain.handle('accounts:completeLogin', async (_event, { accountId }) => {
+    requireSignedInStore();
     const window = loginWindows.get(accountId);
     if (!window || window.isDestroyed()) throw new Error('登录窗口已关闭，请重新打开');
     const currentUrl = window.webContents.getURL();
@@ -377,6 +492,7 @@ function registerIpc(adapter) {
     return account;
   });
   ipcMain.handle('accounts:remove', (_event, accountId) => {
+    requireSignedInStore();
     syncQueue?.cancel(accountId);
     store.removeAccount(accountId);
     manualSyncAtByAccount.delete(accountId);
@@ -387,19 +503,22 @@ function registerIpc(adapter) {
     scheduler?.refreshAccounts();
     return true;
   });
-  ipcMain.handle('products:list', (_event, accountId) => store.getProducts(accountId));
+  ipcMain.handle('products:list', (_event, accountId) => requireSignedInStore().getProducts(accountId));
   ipcMain.handle('products:sync', (_event, accountId) => {
+    requireSignedInStore();
     enforceManualSyncCooldown(accountId);
     return syncAccount(adapter, accountId);
   });
-  ipcMain.handle('settings:get', () => publicSettings(store.getSettings()));
+  ipcMain.handle('settings:get', () => publicSettings(requireSignedInStore().getSettings()));
   ipcMain.handle('settings:save', (_event, input) => {
+    requireSignedInStore();
     const validated = validateSettings(input);
     const saved = store.setSettings(protectedSettings(validated));
     scheduler.configure(publicSettings(saved));
     return publicSettings(saved);
   });
   ipcMain.handle('notifications:test', async (_event, { kind, config }) => {
+    requireSignedInStore();
     if (!['wecom', 'dingtalk'].includes(kind)) throw new Error('不支持的提醒方式');
     await sendChannelTest(kind, config);
     return true;
@@ -408,8 +527,20 @@ function registerIpc(adapter) {
 
 app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock.setIcon(nativeImage.createFromPath(dockIconPath()));
-  const userDataPath = app.getPath('userData');
-  store = new SqliteStore(path.join(userDataPath, 'monitor.db'), { legacyJsonPath: path.join(userDataPath, 'monitor-data.json') });
+  userDataRoot = app.getPath('userData');
+  platformConfig = platformConfigFor(process.platform);
+  platformSession = new PlatformSession({
+    tokenStore: new SafeStorageTokenStore({
+      filePath: path.join(userDataRoot, 'elunvi-platform-session.bin'),
+      safeStorage
+    })
+  });
+  const platformClient = new PlatformClient({
+    apiBaseUrl: platformConfig.apiBaseUrl,
+    clientId: platformConfig.clientId,
+    session: platformSession
+  });
+  platformService = new PlatformService({ client: platformClient, session: platformSession, config: platformConfig });
   const adapter = new PddActivityAdapter({
     getLoginWindow: id => loginWindows.get(id),
     getAntiContent: id => antiContentByAccount.get(id) || '',
@@ -417,9 +548,10 @@ app.whenReady().then(() => {
   });
   syncQueue = new SyncQueue({
     loadState: (id) => store.getSyncState(id),
-    saveState: (id, state) => store.setSyncState(id, state)
+    saveState: (id, state) => { if (store) store.setSyncState(id, state); }
   });
   scheduler = new MonitorScheduler(async (accountId) => {
+    if (!store) return;
     const account = store.getAccount(accountId);
     if (!account) return;
     if (account.status !== 'active') {
@@ -434,9 +566,9 @@ app.whenReady().then(() => {
     } catch (error) {
       console.error(`Scheduled sync failed for ${accountId}:`, error.message);
     }
-  }, () => store.getAccounts(), { remainingMs: (id) => syncQueue.remainingMs(id) });
+  }, () => store ? store.getAccounts() : [], { remainingMs: (id) => syncQueue.remainingMs(id) });
   registerIpc(adapter);
-  scheduler.configure(publicSettings(store.getSettings()));
+  scheduler.configure(DEFAULT_DATA.settings);
   createMainWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createMainWindow(); });
 });

@@ -1,4 +1,5 @@
 const state = {
+  platform: { status: 'loading', profile: null, team: null, billing: null },
   accounts: [],
   currentAccount: null,
   products: [],
@@ -8,7 +9,15 @@ const state = {
   syncInProgress: false,
   loginAccountId: null,
   loginMode: 'create',
-  pendingRemoval: null
+  pendingRemoval: null,
+  paymentContext: null,
+  paymentOrder: null,
+  paymentAttempt: null,
+  paymentTimer: null,
+  teamHistoryKind: 'usage',
+  teamActionMode: null,
+  platformAuthMode: 'login',
+  platformAuthChallengeId: null
 };
 
 const elements = {
@@ -40,7 +49,53 @@ const elements = {
   completeLogin: document.querySelector('#complete-login'),
   removeAccountModal: document.querySelector('#remove-account-modal'),
   removeAccountDescription: document.querySelector('#remove-account-description'),
-  confirmRemoveAccount: document.querySelector('#confirm-remove-account')
+  confirmRemoveAccount: document.querySelector('#confirm-remove-account'),
+  platformSignin: document.querySelector('#platform-signin'),
+  platformAccount: document.querySelector('#platform-account'),
+  platformAccountName: document.querySelector('#platform-account-name'),
+  platformAccountMeta: document.querySelector('#platform-account-meta'),
+  platformLoginModal: document.querySelector('#platform-login-modal'),
+  platformLoginForm: document.querySelector('#platform-login-form'),
+  platformLoginClose: document.querySelector('#platform-login-close'),
+  platformLoginCancel: document.querySelector('#platform-login-cancel'),
+  platformLoginSubmit: document.querySelector('#platform-login-submit'),
+  platformLoginError: document.querySelector('#platform-login-error'),
+  platformLoginErrorText: document.querySelector('#platform-login-error-text'),
+  platformAuthCopy: document.querySelector('#platform-auth-copy'),
+  platformCodeField: document.querySelector('#platform-code-field'),
+  platformCode: document.querySelector('#platform-code'),
+  platformRequestCode: document.querySelector('#platform-request-code'),
+  platformPassword: document.querySelector('#platform-password'),
+  platformPasswordField: document.querySelector('#platform-password-field'),
+  platformConfirmPasswordField: document.querySelector('#platform-confirm-password-field'),
+  platformConfirmPassword: document.querySelector('#platform-confirm-password'),
+  walletContexts: document.querySelector('#wallet-context-list'),
+  walletTransactions: document.querySelector('#wallet-transactions-list'),
+  teamSummary: document.querySelector('#team-summary-card'),
+  teamMembers: document.querySelector('#team-members-list'),
+  teamHistory: document.querySelector('#team-history-list'),
+  paymentContexts: document.querySelector('#payment-context-options'),
+  paymentPackages: document.querySelector('#payment-package-list'),
+  paymentStatusCard: document.querySelector('#payment-status-card'),
+  paymentStatusCopy: document.querySelector('#payment-status-copy'),
+  paymentOrderDetail: document.querySelector('#payment-order-detail'),
+  paymentCloseOrder: document.querySelector('#payment-close-order'),
+  paymentRefreshOrder: document.querySelector('#payment-refresh-order'),
+  teamActionModal: document.querySelector('#team-action-modal'),
+  teamActionForm: document.querySelector('#team-action-form'),
+  teamActionTitle: document.querySelector('#team-action-title'),
+  teamActionDescription: document.querySelector('#team-action-description'),
+  teamActionName: document.querySelector('#team-action-name'),
+  teamActionEmail: document.querySelector('#team-action-email'),
+  teamActionDisplay: document.querySelector('#team-action-display'),
+  teamNameField: document.querySelector('#team-name-field'),
+  teamEmailField: document.querySelector('#team-email-field'),
+  teamDisplayField: document.querySelector('#team-display-field'),
+  teamActionError: document.querySelector('#team-action-error'),
+  teamActionErrorText: document.querySelector('#team-action-error-text'),
+  teamActionCancel: document.querySelector('#team-action-cancel'),
+  teamActionClose: document.querySelector('#team-action-close'),
+  teamActionSubmit: document.querySelector('#team-action-submit')
 };
 
 const PRODUCT_PAGE_SIZE = 10;
@@ -156,6 +211,489 @@ function hideNotice() {
   elements.notice.hidden = true;
 }
 
+function isPlatformSignedIn() {
+  return state.platform.status === 'signed_in' && Boolean(state.platform.profile);
+}
+
+function formatMicroPoints(value) {
+  try {
+    const points = BigInt(String(value ?? '0'));
+    const whole = points / 1000000n;
+    const fraction = String(points % 1000000n).padStart(6, '0').replace(/0+$/u, '');
+    return fraction ? `${whole}.${fraction}` : String(whole);
+  } catch {
+    return '—';
+  }
+}
+
+function billingContextName(context, wallet) {
+  return context?.kind === 'team' ? (wallet?.displayName || '团队钱包') : '个人钱包';
+}
+
+function setPlatformShell(status) {
+  const signedIn = status === 'signed_in';
+  state.platform.status = status;
+  elements.platformSignin.hidden = signedIn;
+  elements.platformAccount.hidden = !signedIn;
+  document.querySelectorAll('.platform-nav').forEach((button) => { button.hidden = !signedIn; });
+  elements.addAccount.disabled = !signedIn;
+  if (signedIn) {
+    const profile = state.platform.profile || {};
+    elements.platformAccountName.textContent = profile.displayName || 'Elunvi 用户';
+    elements.platformAccountMeta.textContent = profile.userId ? `用户 ID ${String(profile.userId).slice(0, 8)}` : '已登录';
+  } else {
+    elements.platformAccountName.textContent = '未登录';
+    elements.platformAccountMeta.textContent = '登录后使用软件';
+  }
+}
+
+function showPlatformLogin(message = '') {
+  setPlatformAuthMode('login');
+  elements.platformLoginError.hidden = !message;
+  elements.platformLoginErrorText.textContent = message;
+  elements.platformLoginModal.hidden = false;
+  document.querySelector('#platform-email').focus();
+}
+
+function setPlatformAuthMode(mode) {
+  state.platformAuthMode = mode;
+  state.platformAuthChallengeId = null;
+  document.querySelector('#platform-login-title').textContent = mode === 'login' ? '登录 Elunvi' : mode === 'register' ? '注册 Elunvi' : '找回密码';
+  const login = mode === 'login';
+  const register = mode === 'register';
+  document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.platformAuthMode === mode);
+    button.setAttribute('aria-selected', button.dataset.platformAuthMode === mode ? 'true' : 'false');
+  });
+  elements.platformAuthCopy.textContent = login ? '登录后才能使用店铺、商品、监控和团队功能。' : register ? '注册 Elunvi 账号后即可在 Mart 中使用完整功能。' : '输入邮箱验证码后设置新密码。';
+  elements.platformCodeField.hidden = login;
+  elements.platformPasswordField.hidden = false;
+  elements.platformPassword.required = mode !== 'login';
+  elements.platformPassword.autocomplete = register || mode === 'reset' ? 'new-password' : 'current-password';
+  elements.platformConfirmPasswordField.hidden = login;
+  elements.platformConfirmPassword.required = !login;
+  elements.platformLoginSubmit.querySelector('span').textContent = login ? '登录' : register ? (state.platformAuthChallengeId ? '完成注册' : '先获取验证码') : (state.platformAuthChallengeId ? '重置密码' : '先获取验证码');
+  elements.platformRequestCode.textContent = state.platformAuthChallengeId ? '重新获取' : '获取验证码';
+  elements.platformLoginError.hidden = true;
+}
+
+async function requestPlatformCode() {
+  const email = document.querySelector('#platform-email').value.trim();
+  if (!email) {
+    elements.platformLoginErrorText.textContent = '请先输入邮箱';
+    elements.platformLoginError.hidden = false;
+    return;
+  }
+  elements.platformRequestCode.disabled = true;
+  elements.platformLoginError.hidden = true;
+  try {
+    const result = state.platformAuthMode === 'register'
+      ? await window.pddMonitor.platform.requestRegistrationCode(email)
+      : await window.pddMonitor.platform.requestPasswordResetCode(email);
+    setPlatformAuthMode(state.platformAuthMode);
+    state.platformAuthChallengeId = result.challengeId;
+    elements.platformLoginSubmit.querySelector('span').textContent = state.platformAuthMode === 'register' ? '完成注册' : '重置密码';
+    elements.platformRequestCode.textContent = '重新获取';
+    elements.platformCode.focus();
+    elements.platformLoginErrorText.textContent = '验证码已发送，请检查邮箱。';
+    elements.platformLoginError.hidden = false;
+  } catch (error) {
+    elements.platformLoginErrorText.textContent = error.message || '验证码发送失败，请稍后重试';
+    elements.platformLoginError.hidden = false;
+  } finally {
+    elements.platformRequestCode.disabled = false;
+  }
+}
+
+function closePlatformLogin() {
+  if (state.platform.status !== 'signed_in') return;
+  elements.platformLoginModal.hidden = true;
+}
+
+function renderWalletContexts() {
+  const contexts = state.platform.billing?.contexts || [];
+  elements.walletContexts.replaceChildren();
+  elements.paymentContexts.replaceChildren();
+  for (const wallet of contexts) {
+    const context = wallet.billingContext;
+    const name = billingContextName(context, wallet);
+    const card = document.createElement('article');
+    card.className = `wallet-card${state.paymentContext && JSON.stringify(state.paymentContext) === JSON.stringify(context) ? ' is-selected' : ''}`;
+    const title = document.createElement('div');
+    title.className = 'wallet-card-title';
+    title.append(createIcon(context?.kind === 'team' ? 'users' : 'user-round'));
+    const titleText = document.createElement('div');
+    const heading = document.createElement('strong');
+    heading.textContent = name;
+    const meta = document.createElement('small');
+    meta.textContent = wallet.status === 'active' ? (wallet.role === 'owner' ? '负责人 · 可充值' : '可用支付身份') : '当前不可用';
+    titleText.append(heading, meta);
+    title.append(titleText);
+    const balance = document.createElement('strong');
+    balance.className = 'wallet-balance';
+    balance.textContent = formatMicroPoints(wallet.availableMicroPoints);
+    const unit = document.createElement('small');
+    unit.textContent = '点可用余额';
+    const actions = document.createElement('div');
+    actions.className = 'wallet-card-actions';
+    const choose = document.createElement('button');
+    choose.className = 'button';
+    choose.type = 'button';
+    choose.textContent = state.paymentContext && JSON.stringify(state.paymentContext) === JSON.stringify(context) ? '当前付款身份' : '选择付款身份';
+    choose.disabled = wallet.status !== 'active' || !wallet.canSpend;
+    choose.addEventListener('click', () => {
+      state.paymentContext = context;
+      renderWalletContexts();
+      showView('payment');
+    });
+    actions.append(choose);
+    if (wallet.canRecharge && wallet.status === 'active') {
+      const recharge = document.createElement('button');
+      recharge.className = 'button button-primary';
+      recharge.type = 'button';
+      recharge.textContent = '充值';
+      recharge.addEventListener('click', () => {
+        state.paymentContext = context;
+        renderWalletContexts();
+        showView('payment');
+      });
+      actions.append(recharge);
+    }
+    card.append(title, balance, unit, actions);
+    elements.walletContexts.append(card);
+
+    const option = document.createElement('button');
+    option.className = `payment-context-option${state.paymentContext && JSON.stringify(state.paymentContext) === JSON.stringify(context) ? ' is-selected' : ''}`;
+    option.type = 'button';
+    option.disabled = wallet.status !== 'active' || !wallet.canSpend;
+    option.textContent = `${name} · ${formatMicroPoints(wallet.availableMicroPoints)} 点`;
+    option.addEventListener('click', () => { state.paymentContext = context; renderWalletContexts(); });
+    elements.paymentContexts.append(option);
+  }
+  if (!contexts.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-copy';
+    empty.textContent = '暂时没有可用的钱包信息，请刷新重试。';
+    elements.walletContexts.append(empty);
+    elements.paymentContexts.append(empty.cloneNode(true));
+  }
+  refreshIcons();
+}
+
+function renderTransactions(container, page, emptyText = '暂无流水') {
+  container.replaceChildren();
+  const rows = page?.items || [];
+  if (!rows.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-copy';
+    empty.textContent = emptyText;
+    container.append(empty);
+    return;
+  }
+  for (const row of rows) {
+    const item = document.createElement('article');
+    item.className = 'finance-row';
+    const left = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = row.order_no || row.orderNo || row.event_type || row.business_type || '钱包流水';
+    const meta = document.createElement('small');
+    meta.textContent = row.created_at || row.createdAt || row.settled_at || '时间待同步';
+    left.append(title, meta);
+    const right = document.createElement('div');
+    right.className = 'finance-row-value';
+    const amount = row.amount_fen != null ? `¥${(Number(row.amount_fen) / 100).toFixed(2)}` : `${formatMicroPoints(row.charged_micro_points || row.amount_micro_points || row.available_delta_micro_points)} 点`;
+    right.textContent = amount;
+    item.append(left, right);
+    container.append(item);
+  }
+}
+
+async function loadWalletData() {
+  try {
+    state.platform.billing = await window.pddMonitor.platform.billingContexts();
+    renderWalletContexts();
+    const transactions = await window.pddMonitor.platform.walletTransactions();
+    renderTransactions(elements.walletTransactions, transactions);
+  } catch (error) {
+    showNotice(error.message || '钱包信息暂时无法加载', true);
+    renderWalletContexts();
+    renderTransactions(elements.walletTransactions, null, '钱包流水暂时无法加载');
+  }
+}
+
+function openTeamAction(mode) {
+  state.teamActionMode = mode;
+  elements.teamActionError.hidden = true;
+  elements.teamActionForm.reset();
+  const creating = mode === 'create';
+  elements.teamActionTitle.textContent = creating ? '创建团队' : '添加团队成员';
+  elements.teamActionDescription.textContent = creating ? '创建后你会成为团队负责人。店铺和监控数据仍然保存在各自电脑。' : '可以添加已有 Elunvi 用户，成员接受后才会加入团队。';
+  elements.teamNameField.hidden = !creating;
+  elements.teamEmailField.hidden = creating;
+  elements.teamDisplayField.hidden = creating;
+  elements.teamActionSubmit.textContent = creating ? '创建团队' : '发送邀请';
+  elements.teamActionModal.hidden = false;
+  (creating ? elements.teamActionName : elements.teamActionEmail).focus();
+}
+
+function closeTeamAction() {
+  elements.teamActionModal.hidden = true;
+  state.teamActionMode = null;
+}
+
+async function submitTeamAction(event) {
+  event.preventDefault();
+  const mode = state.teamActionMode;
+  if (!mode) return;
+  elements.teamActionSubmit.disabled = true;
+  elements.teamActionError.hidden = true;
+  try {
+    if (mode === 'create') {
+      await window.pddMonitor.platform.createTeam(elements.teamActionName.value.trim());
+    } else {
+      const teamId = state.platform.team?.teams?.team?.id;
+      if (!teamId) throw new Error('当前没有可操作的团队');
+      await window.pddMonitor.platform.addTeamMember({
+        teamId,
+        mode: 'existing',
+        email: elements.teamActionEmail.value.trim()
+      });
+    }
+    closeTeamAction();
+    await loadTeamData();
+    showNotice(mode === 'create' ? '团队已创建' : '成员邀请已发送');
+  } catch (error) {
+    elements.teamActionErrorText.textContent = error.message || '操作没有完成，请稍后重试';
+    elements.teamActionError.hidden = false;
+  } finally {
+    elements.teamActionSubmit.disabled = false;
+  }
+}
+
+function renderTeam(teamData) {
+  state.platform.team = teamData;
+  const snapshot = teamData?.teams || {};
+  const team = snapshot.team || null;
+  const topupTab = document.querySelector('[data-team-history="topup"]');
+  if (topupTab) {
+    topupTab.hidden = team?.role !== 'owner';
+    if (team?.role !== 'owner' && state.teamHistoryKind === 'topup') state.teamHistoryKind = 'usage';
+  }
+  elements.teamSummary.replaceChildren();
+  elements.teamMembers.replaceChildren();
+  if (!team) {
+    const copy = document.createElement('p');
+    copy.className = 'empty-copy';
+    copy.textContent = '当前账号还没有团队，可以继续以个人身份使用 Mart。';
+    const action = document.createElement('button');
+    action.className = 'button button-primary';
+    action.type = 'button';
+    action.textContent = '创建团队';
+    action.addEventListener('click', () => openTeamAction('create'));
+    elements.teamSummary.append(copy, action);
+    elements.teamHistory.replaceChildren();
+    return;
+  }
+  const heading = document.createElement('h3');
+  heading.textContent = team.name || '我的团队';
+  const meta = document.createElement('p');
+  meta.textContent = `${team.role === 'owner' ? '负责人' : '成员'} · ${team.status === 'active' ? '正常' : '已暂停'}`;
+  const action = document.createElement('button');
+  action.className = 'button button-primary';
+  action.type = 'button';
+  action.textContent = team.role === 'owner' ? '添加成员' : '刷新成员';
+  action.addEventListener('click', () => team.role === 'owner' ? openTeamAction('add') : void loadTeamData());
+  elements.teamSummary.append(heading, meta, action);
+  const pendingRequests = (snapshot.requests || []).filter((request) => request.status === 'pending');
+  for (const request of pendingRequests) {
+    const invite = document.createElement('div');
+    invite.className = 'team-invite';
+    const inviteCopy = document.createElement('span');
+    inviteCopy.textContent = `收到来自 ${request.owner_display_name || request.owner_masked_email || '团队负责人'} 的「${request.team_name}」邀请`;
+    const inviteActions = document.createElement('span');
+    inviteActions.className = 'team-invite-actions';
+    for (const decision of ['accept', 'reject']) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = decision === 'accept' ? 'button button-primary' : 'button';
+      button.textContent = decision === 'accept' ? '接受' : '拒绝';
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await window.pddMonitor.platform.respondTeamRequest({ requestId: request.id, action: decision });
+          await loadTeamData();
+          showNotice(decision === 'accept' ? '已加入团队' : '已拒绝团队邀请');
+        } catch (error) {
+          showNotice(error.message || '团队邀请状态暂时无法更新', true);
+          button.disabled = false;
+        }
+      });
+      inviteActions.append(button);
+    }
+    invite.append(inviteCopy, inviteActions);
+    elements.teamSummary.append(invite);
+  }
+  const members = teamData.members?.members || [];
+  if (!members.length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-copy';
+    empty.textContent = '成员信息暂时无法加载。';
+    elements.teamMembers.append(empty);
+  } else {
+    for (const member of members) {
+      const row = document.createElement('div');
+      row.className = 'team-member-row';
+      const name = document.createElement('strong');
+      name.textContent = member.display_name || member.masked_email || '未命名成员';
+      const status = document.createElement('small');
+      status.textContent = `${member.role === 'owner' ? '负责人' : '成员'} · ${member.status}`;
+      row.append(name, status);
+      elements.teamMembers.append(row);
+    }
+  }
+  refreshIcons();
+}
+
+async function loadTeamData() {
+  try {
+    const teamData = await window.pddMonitor.platform.team();
+    if (teamData?.teams?.team) {
+      teamData.members = await window.pddMonitor.platform.teamMembers(teamData.teams.team.id);
+    }
+    renderTeam(teamData);
+    const teamId = teamData?.teams?.team?.id;
+    if (teamId) {
+      const history = await window.pddMonitor.platform.teamHistory({ teamId, kind: state.teamHistoryKind });
+      renderTransactions(elements.teamHistory, history, '暂无团队流水');
+    }
+  } catch (error) {
+    showNotice(error.message || '团队信息暂时无法加载', true);
+    renderTeam(null);
+  }
+}
+
+async function loadPaymentPackages() {
+  try {
+    const packages = await window.pddMonitor.platform.packages();
+    elements.paymentPackages.replaceChildren();
+    for (const item of packages || []) {
+      const card = document.createElement('article');
+      card.className = 'payment-package';
+      const title = document.createElement('strong');
+      title.textContent = item.package_code || item.packageCode || '充值套餐';
+      const points = document.createElement('span');
+      points.textContent = `${formatMicroPoints(item.total_micro_points || item.totalMicroPoints || item.paid_micro_points || item.paidMicroPoints)} 点`;
+      const price = document.createElement('small');
+      price.textContent = `¥${(Number(item.amount_fen || item.amountFen || 0) / 100).toFixed(2)}`;
+      const actions = document.createElement('div');
+      for (const channel of ['wechat', 'alipay']) {
+        const button = document.createElement('button');
+        button.className = 'button button-primary';
+        button.type = 'button';
+        button.textContent = channel === 'wechat' ? '微信支付' : '支付宝';
+        button.addEventListener('click', () => startPayment(item.package_code || item.packageCode, channel));
+        actions.append(button);
+      }
+      card.append(title, points, price, actions);
+      elements.paymentPackages.append(card);
+    }
+    if (!(packages || []).length) {
+      const empty = document.createElement('p');
+      empty.className = 'empty-copy';
+      empty.textContent = '暂无可购买套餐。';
+      elements.paymentPackages.append(empty);
+    }
+  } catch (error) {
+    elements.paymentPackages.textContent = error.message || '充值套餐暂时无法加载';
+  }
+}
+
+async function startPayment(packageCode, channel) {
+  if (!state.paymentContext) {
+    showNotice('请先选择个人或团队付款身份', true);
+    return;
+  }
+  try {
+    const checkout = await window.pddMonitor.platform.createCheckout({
+      packageCode,
+      billingContext: state.paymentContext,
+      idempotencyKey: crypto.randomUUID()
+    });
+    state.paymentOrder = checkout;
+    state.paymentAttempt = await window.pddMonitor.platform.createPaymentAttempt({ checkoutId: checkout.checkoutId, channel });
+    renderPaymentOrder();
+    if (state.paymentTimer) window.clearInterval(state.paymentTimer);
+    state.paymentTimer = window.setInterval(() => { void refreshPaymentOrder(false); }, 3000);
+  } catch (error) {
+    showNotice(error.message || '支付订单创建失败', true);
+  }
+}
+
+function renderPaymentOrder() {
+  const order = state.paymentOrder;
+  const attempt = state.paymentAttempt;
+  elements.paymentStatusCard.hidden = !order;
+  if (!order) return;
+  elements.paymentStatusCopy.textContent = `订单 ${order.orderNo || order.checkoutId} · ${order.status || 'pending'}`;
+  elements.paymentOrderDetail.replaceChildren();
+  const copy = document.createElement('p');
+  copy.textContent = attempt?.qrPayload ? `请使用${attempt.channel === 'wechat' ? '微信' : '支付宝'}打开支付入口。` : '已创建支付订单，等待支付状态更新。';
+  elements.paymentOrderDetail.append(copy);
+  if (attempt?.qrPayload) {
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'button button-primary';
+    open.textContent = attempt.channel === 'wechat' ? '打开微信支付' : '打开支付宝';
+    open.addEventListener('click', async () => {
+      try { await window.pddMonitor.platform.openPayment(attempt.qrPayload); } catch (error) { showNotice(error.message, true); }
+    });
+    elements.paymentOrderDetail.append(open);
+  }
+}
+
+async function refreshPaymentOrder(showFeedback = true) {
+  if (!state.paymentOrder) return;
+  try {
+    state.paymentOrder = await window.pddMonitor.platform.getCheckout({ checkoutId: state.paymentOrder.checkoutId, paymentContext: state.paymentContext });
+    renderPaymentOrder();
+    if (state.paymentOrder.status === 'paid') {
+      if (state.paymentTimer) window.clearInterval(state.paymentTimer);
+      await loadWalletData();
+      if (showFeedback) showNotice('支付成功，钱包余额已刷新');
+    }
+  } catch (error) {
+    if (showFeedback) showNotice(error.message || '支付状态暂时无法确认', true);
+  }
+}
+
+async function logoutPlatform() {
+  if (!window.confirm('退出 Elunvi 账号后，监控任务会暂停。确定退出吗？')) return;
+  await window.pddMonitor.platform.logout();
+  state.accounts = [];
+  state.platform = { status: 'signed_out', profile: null, team: null, billing: null };
+  setPlatformShell('signed_out');
+  document.querySelectorAll('.view').forEach((view) => { view.hidden = true; });
+  showPlatformLogin();
+}
+
+async function loadPlatformState() {
+  try {
+    const result = await window.pddMonitor.platform.state();
+    if (result.status === 'signed_in') {
+      state.platform.status = 'signed_in';
+      state.platform.profile = result.profile;
+      setPlatformShell('signed_in');
+      await loadAccounts();
+      return;
+    }
+    setPlatformShell(result.status === 'error' ? 'error' : 'signed_out');
+    showPlatformLogin(result.message || '');
+  } catch (error) {
+    setPlatformShell('error');
+    showPlatformLogin(error.message || '暂时无法连接 Elunvi Platform');
+  }
+}
+
 function friendlyError(error) {
   const original = String(error?.message || error || '');
   if (original.includes('登录窗口已关闭')) {
@@ -233,6 +771,10 @@ function showLoginError(error) {
 }
 
 function showView(name) {
+  if (!isPlatformSignedIn()) {
+    showPlatformLogin('请先登录 Elunvi 账号');
+    return;
+  }
   document.querySelectorAll('.view').forEach((view) => { view.hidden = view.id !== `${name}-view`; });
   document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('is-active', button.dataset.view === name));
   const isAccounts = name === 'accounts';
@@ -245,6 +787,16 @@ function showView(name) {
   } else if (isSettings) {
     elements.title.textContent = '监控设置';
     loadSettings();
+  } else if (name === 'wallet') {
+    elements.title.textContent = '钱包与支付';
+    void loadWalletData();
+  } else if (name === 'team') {
+    elements.title.textContent = '我的团队';
+    void loadTeamData();
+  } else if (name === 'payment') {
+    elements.title.textContent = '充值';
+    void loadWalletData();
+    void loadPaymentPackages();
   }
   hideNotice();
 }
@@ -495,9 +1047,71 @@ function updateChannelVisibility() {
   document.querySelector('#dingtalk-channel').classList.toggle('is-enabled', document.querySelector('#dingtalk-enabled').checked);
 }
 
+async function submitPlatformLogin(event) {
+  event.preventDefault();
+  const submit = elements.platformLoginSubmit;
+  const email = document.querySelector('#platform-email').value.trim();
+  const password = document.querySelector('#platform-password').value;
+  const code = elements.platformCode.value.trim();
+  const confirmPassword = elements.platformConfirmPassword.value;
+  if (!email || (state.platformAuthMode === 'login' && !password)) return;
+  if (state.platformAuthMode !== 'login' && !state.platformAuthChallengeId) {
+    await requestPlatformCode();
+    return;
+  }
+  if (state.platformAuthMode !== 'login' && (!code || !confirmPassword || password !== confirmPassword)) {
+    elements.platformLoginErrorText.textContent = password !== confirmPassword ? '两次输入的密码不一致' : '请输入验证码和确认密码';
+    elements.platformLoginError.hidden = false;
+    return;
+  }
+  submit.disabled = true;
+  elements.platformLoginError.hidden = true;
+  try {
+    let result;
+    if (state.platformAuthMode === 'login') {
+      result = await window.pddMonitor.platform.login({ email, password });
+    } else if (state.platformAuthMode === 'register') {
+      result = await window.pddMonitor.platform.completeRegistration({ challengeId: state.platformAuthChallengeId, code, password });
+    } else {
+      await window.pddMonitor.platform.resetPassword({ challengeId: state.platformAuthChallengeId, code, newPassword: password });
+      setPlatformAuthMode('login');
+      elements.platformPassword.value = '';
+      elements.platformConfirmPassword.value = '';
+      elements.platformCode.value = '';
+      elements.platformLoginErrorText.textContent = '密码已重置，请使用新密码登录。';
+      elements.platformLoginError.hidden = false;
+      return;
+    }
+    state.platform.status = 'signed_in';
+    state.platform.profile = result.profile;
+    elements.platformLoginModal.hidden = true;
+    setPlatformShell('signed_in');
+    await loadAccounts();
+    showView('accounts');
+    showNotice('已登录 Elunvi，当前电脑上的店铺数据已准备就绪');
+  } catch (error) {
+    elements.platformLoginErrorText.textContent = error.message || '登录失败，请稍后重试';
+    elements.platformLoginError.hidden = false;
+  } finally {
+    submit.disabled = false;
+  }
+}
+
 document.querySelectorAll('.nav-button').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
+document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => button.addEventListener('click', () => setPlatformAuthMode(button.dataset.platformAuthMode)));
+elements.platformRequestCode.addEventListener('click', () => void requestPlatformCode());
 document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', () => openLoginModal()));
 elements.addAccount.addEventListener('click', () => openLoginModal());
+elements.platformSignin.addEventListener('click', () => showPlatformLogin());
+elements.platformAccount.addEventListener('click', logoutPlatform);
+elements.platformLoginForm.addEventListener('submit', submitPlatformLogin);
+elements.platformLoginClose.addEventListener('click', closePlatformLogin);
+elements.platformLoginCancel.addEventListener('click', closePlatformLogin);
+elements.platformLoginModal.addEventListener('click', (event) => { if (event.target === elements.platformLoginModal) closePlatformLogin(); });
+elements.teamActionForm.addEventListener('submit', submitTeamAction);
+elements.teamActionCancel.addEventListener('click', closeTeamAction);
+elements.teamActionClose.addEventListener('click', closeTeamAction);
+elements.teamActionModal.addEventListener('click', (event) => { if (event.target === elements.teamActionModal) closeTeamAction(); });
 document.querySelectorAll('[data-close-modal]').forEach((button) => button.addEventListener('click', () => { elements.modal.hidden = true; }));
 document.querySelectorAll('[data-close-remove-modal]').forEach((button) => button.addEventListener('click', closeRemoveAccountModal));
 elements.removeAccountModal.addEventListener('click', (event) => { if (event.target === elements.removeAccountModal) closeRemoveAccountModal(); });
@@ -532,12 +1146,46 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
     showNotice(error.message, true);
   }
 });
+document.querySelector('#wallet-refresh').addEventListener('click', () => void loadWalletData());
+document.querySelector('#team-refresh').addEventListener('click', () => void loadTeamData());
+document.querySelectorAll('[data-team-history]').forEach((button) => button.addEventListener('click', async () => {
+  state.teamHistoryKind = button.dataset.teamHistory;
+  document.querySelectorAll('[data-team-history]').forEach((item) => item.classList.toggle('is-active', item === button));
+  const teamId = state.platform.team?.teams?.team?.id;
+  if (!teamId) return;
+  try {
+    const page = await window.pddMonitor.platform.teamHistory({ teamId, kind: state.teamHistoryKind });
+    renderTransactions(elements.teamHistory, page, '暂无团队流水');
+  } catch (error) {
+    showNotice(error.message || '团队流水暂时无法加载', true);
+  }
+}));
+elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true));
+elements.paymentCloseOrder.addEventListener('click', async () => {
+  if (!state.paymentOrder) return;
+  try {
+    state.paymentOrder = await window.pddMonitor.platform.closeCheckout(state.paymentOrder.checkoutId);
+    if (state.paymentTimer) window.clearInterval(state.paymentTimer);
+    renderPaymentOrder();
+    showNotice('支付订单已关闭');
+  } catch (error) {
+    showNotice(error.message || '订单暂时无法关闭', true);
+  }
+});
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !elements.removeAccountModal.hidden) closeRemoveAccountModal();
 });
 
 window.pddMonitor.onAccountsChanged(() => loadAccounts());
+window.pddMonitor.onPlatformChanged((payload) => {
+  if (payload?.status === 'signed_out') {
+    state.platform = { status: 'signed_out', profile: null, team: null, billing: null };
+    setPlatformShell('signed_out');
+    showPlatformLogin();
+  }
+});
 
 refreshIcons();
-loadAccounts().catch((error) => showNotice(error.message, true));
+setPlatformShell('loading');
+loadPlatformState();

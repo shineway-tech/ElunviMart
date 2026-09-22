@@ -13,6 +13,8 @@
       <div class="brand"><span class="brand-mark"><img src="assets/elunvi-mart.png" alt="Elunvi Mart"></span><span>Elunvi Mart</span></div>
       <nav class="nav" aria-label="主导航">
         <button class="nav-button is-active" type="button" data-view="accounts"><i data-lucide="store"></i><span>商家账号</span></button>
+        <button class="nav-button platform-nav" type="button" data-view="team" hidden><i data-lucide="users"></i><span>我的团队</span></button>
+        <button class="nav-button platform-nav" type="button" data-view="wallet" hidden><i data-lucide="wallet-cards"></i><span>钱包与支付</span></button>
         <button class="nav-button" type="button" data-view="settings"><i data-lucide="settings"></i><span>监控设置</span></button>
       </nav>
       <div class="account-limit" id="account-limit">已添加 0 / 10 个账号</div>
@@ -22,7 +24,15 @@
       <header class="topbar">
         <div class="topbar-heading"><div><h1 id="page-title">商家账号</h1><p id="page-meta" hidden></p></div></div>
         <button class="page-back" type="button" id="page-back" aria-label="返回账号列表" title="返回账号列表" hidden><i data-lucide="arrow-left"></i></button>
-        <button class="button button-primary" type="button" id="add-account"><i data-lucide="plus"></i>添加账号</button>
+        <div class="topbar-actions">
+          <button class="button platform-signin-button" type="button" id="platform-signin"><i data-lucide="log-in"></i><span>登录 Elunvi</span></button>
+          <button class="platform-account" type="button" id="platform-account" hidden>
+            <span class="platform-avatar"><i data-lucide="user-round"></i></span>
+            <span><strong id="platform-account-name">未登录</strong><small id="platform-account-meta">登录后使用软件</small></span>
+            <i data-lucide="chevron-down"></i>
+          </button>
+          <button class="button button-primary" type="button" id="add-account"><i data-lucide="plus"></i>添加账号</button>
+        </div>
       </header>
 
       <div class="content">
@@ -89,6 +99,28 @@
             <button class="button button-primary" type="submit"><i data-lucide="save"></i>保存设置</button>
           </form>
         </section>
+
+        <section class="view platform-view" id="wallet-view" hidden>
+          <div class="section-header"><div><h2>钱包与支付</h2><p>充值和流水均以 Platform 服务端状态为准。</p></div><button class="button" type="button" id="wallet-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
+          <div class="finance-grid" id="wallet-context-list"></div>
+          <section class="finance-card" id="wallet-transactions-card">
+            <div class="finance-card-header"><div><h3>个人钱包流水</h3><p>只展示当前 Elunvi 用户的 Mart 记录。</p></div></div>
+            <div class="finance-list" id="wallet-transactions-list"></div>
+          </section>
+        </section>
+
+        <section class="view platform-view" id="team-view" hidden>
+          <div class="section-header"><div><h2>我的团队</h2><p id="team-description">团队成员和团队钱包由 Platform 管理。</p></div><button class="button" type="button" id="team-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
+          <div class="team-summary finance-card" id="team-summary-card"></div>
+          <section class="finance-card"><div class="finance-card-header"><div><h3>团队成员</h3><p>成员关系只影响团队权限，本机店铺和监控数据不会共享。</p></div></div><div class="team-members" id="team-members-list"></div></section>
+          <section class="finance-card"><div class="finance-card-header"><div><h3>团队流水</h3><p>负责人可查看充值和团队消费，成员只查看自己的可见记录。</p></div><div class="finance-tabs"><button type="button" class="is-active" data-team-history="usage">消费</button><button type="button" data-team-history="topup">充值</button></div></div><div class="finance-list" id="team-history-list"></div></section>
+        </section>
+
+        <section class="view platform-view" id="payment-view" hidden>
+          <div class="section-header"><div><h2>充值</h2><p>先选择付款身份，再创建支付订单。</p></div></div>
+          <div class="payment-layout"><section class="finance-card"><div class="finance-card-header"><div><h3>付款身份</h3><p>订单创建后会冻结付款钱包。</p></div></div><div id="payment-context-options" class="payment-context-options"></div></section><section class="finance-card"><div class="finance-card-header"><div><h3>充值套餐</h3><p>选择套餐后继续支付。</p></div></div><div id="payment-package-list" class="payment-package-list"></div></section></div>
+          <section class="finance-card payment-status-card" id="payment-status-card" hidden><div class="finance-card-header"><div><h3>支付订单</h3><p id="payment-status-copy"></p></div></div><div id="payment-order-detail"></div><div class="modal-actions"><button class="button" type="button" id="payment-close-order">关闭订单</button><button class="button button-primary" type="button" id="payment-refresh-order">查询支付状态</button></div></section>
+        </section>
       </div>
     </main>
   </div>
@@ -115,6 +147,40 @@
         <p id="remove-account-description">移除后，该账号的本地商品缓存和登录会话也会一并清除。</p>
       </div>
       <div class="modal-actions"><button class="button" type="button" data-close-remove-modal>取消</button><button class="button button-danger" type="button" id="confirm-remove-account"><i data-lucide="trash-2"></i><span>移除账号</span></button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="platform-login-modal" hidden>
+    <section class="modal platform-login-modal" role="dialog" aria-modal="true" aria-labelledby="platform-login-title">
+      <div class="modal-header"><h2 id="platform-login-title">登录 Elunvi</h2><button class="icon-button" type="button" id="platform-login-close" aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <form id="platform-login-form">
+        <div class="platform-auth-tabs" role="tablist" aria-label="账号操作">
+          <button class="platform-auth-tab is-active" type="button" data-platform-auth-mode="login">登录</button>
+          <button class="platform-auth-tab" type="button" data-platform-auth-mode="register">注册</button>
+          <button class="platform-auth-tab" type="button" data-platform-auth-mode="reset">找回密码</button>
+        </div>
+        <p class="modal-copy" id="platform-auth-copy">登录后才能使用店铺、商品、监控和团队功能。</p>
+        <label class="field-label">邮箱<input class="input" id="platform-email" type="email" autocomplete="email" required placeholder="name@example.com"></label>
+        <label class="field-label" id="platform-code-field" hidden>验证码<div class="inline-field"><input class="input" id="platform-code" inputmode="numeric" autocomplete="one-time-code" placeholder="请输入邮箱验证码"><button class="button" type="button" id="platform-request-code">获取验证码</button></div></label>
+        <label class="field-label" id="platform-password-field">密码<input class="input" id="platform-password" type="password" autocomplete="current-password" required placeholder="请输入密码"></label>
+        <label class="field-label" id="platform-confirm-password-field" hidden>确认密码<input class="input" id="platform-confirm-password" type="password" autocomplete="new-password" placeholder="请再次输入密码"></label>
+        <div class="login-error" id="platform-login-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong>登录失败</strong><p id="platform-login-error-text"></p></div></div>
+        <div class="modal-actions"><button class="button" type="button" id="platform-login-cancel">取消</button><button class="button button-primary" type="submit" id="platform-login-submit"><i data-lucide="log-in"></i><span>登录</span></button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="team-action-modal" hidden>
+    <section class="modal platform-login-modal" role="dialog" aria-modal="true" aria-labelledby="team-action-title">
+      <div class="modal-header"><h2 id="team-action-title">团队操作</h2><button class="icon-button" type="button" id="team-action-close" aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <form id="team-action-form">
+        <p class="modal-copy" id="team-action-description"></p>
+        <label class="field-label" id="team-name-field">团队名称<input class="input" id="team-action-name" type="text" maxlength="80" placeholder="例如：运营团队"></label>
+        <label class="field-label" id="team-email-field" hidden>成员邮箱<input class="input" id="team-action-email" type="email" autocomplete="email" placeholder="member@example.com"></label>
+        <label class="field-label" id="team-display-field" hidden>成员名称<input class="input" id="team-action-display" type="text" maxlength="80" placeholder="成员姓名"></label>
+        <div class="login-error" id="team-action-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong>操作失败</strong><p id="team-action-error-text"></p></div></div>
+        <div class="modal-actions"><button class="button" type="button" id="team-action-cancel">取消</button><button class="button button-primary" type="submit" id="team-action-submit">继续</button></div>
+      </form>
     </section>
   </div>
 
