@@ -12,4 +12,6 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.match(html, /id="payment-view"/);
   assert.match(html, /data-platform-auth-mode="register"/);
   assert.match(html, /id="platform-request-code"/);
+  assert.match(html, /id="platform-wechat-start"/);
+  assert.match(html, /id="platform-wechat-frame"/);
 });

@@ -17,7 +17,9 @@ const state = {
   teamHistoryKind: 'usage',
   teamActionMode: null,
   platformAuthMode: 'login',
-  platformAuthChallengeId: null
+  platformAuthChallengeId: null,
+  wechatExpiresAt: null,
+  wechatPollTimer: null
 };
 
 const elements = {
@@ -61,7 +63,9 @@ const elements = {
   platformLoginSubmit: document.querySelector('#platform-login-submit'),
   platformLoginError: document.querySelector('#platform-login-error'),
   platformLoginErrorText: document.querySelector('#platform-login-error-text'),
+  platformAuthTabs: document.querySelector('#platform-auth-tabs'),
   platformAuthCopy: document.querySelector('#platform-auth-copy'),
+  platformEmailField: document.querySelector('#platform-email-field'),
   platformCodeField: document.querySelector('#platform-code-field'),
   platformCode: document.querySelector('#platform-code'),
   platformRequestCode: document.querySelector('#platform-request-code'),
@@ -69,6 +73,13 @@ const elements = {
   platformPasswordField: document.querySelector('#platform-password-field'),
   platformConfirmPasswordField: document.querySelector('#platform-confirm-password-field'),
   platformConfirmPassword: document.querySelector('#platform-confirm-password'),
+  platformLoginActions: document.querySelector('#platform-login-actions'),
+  platformWechatStart: document.querySelector('#platform-wechat-start'),
+  platformWechatPanel: document.querySelector('#platform-wechat-panel'),
+  platformWechatFrame: document.querySelector('#platform-wechat-frame'),
+  platformWechatStatus: document.querySelector('#platform-wechat-status'),
+  platformWechatCountdown: document.querySelector('#platform-wechat-countdown'),
+  platformWechatBack: document.querySelector('#platform-wechat-back'),
   walletContexts: document.querySelector('#wallet-context-list'),
   walletTransactions: document.querySelector('#wallet-transactions-list'),
   teamSummary: document.querySelector('#team-summary-card'),
@@ -248,6 +259,7 @@ function setPlatformShell(status) {
 }
 
 function showPlatformLogin(message = '') {
+  clearWechatPollTimer();
   setPlatformAuthMode('login');
   elements.platformLoginError.hidden = !message;
   elements.platformLoginErrorText.textContent = message;
@@ -255,26 +267,46 @@ function showPlatformLogin(message = '') {
   document.querySelector('#platform-email').focus();
 }
 
+function clearWechatPollTimer() {
+  if (state.wechatPollTimer) window.clearTimeout(state.wechatPollTimer);
+  state.wechatPollTimer = null;
+  state.wechatExpiresAt = null;
+}
+
 function setPlatformAuthMode(mode) {
   state.platformAuthMode = mode;
   state.platformAuthChallengeId = null;
-  document.querySelector('#platform-login-title').textContent = mode === 'login' ? '登录 Elunvi' : mode === 'register' ? '注册 Elunvi' : '找回密码';
+  const isWechat = mode === 'wechat';
+  const isBinding = mode === 'email-binding';
+  const isLogin = mode === 'login';
+  const isRegister = mode === 'register';
+  document.querySelector('#platform-login-title').textContent = isWechat ? '微信扫码登录' : isBinding ? '绑定邮箱' : isLogin ? '登录 Elunvi' : isRegister ? '注册 Elunvi' : '找回密码';
   const login = mode === 'login';
-  const register = mode === 'register';
+  const register = isRegister;
+  elements.platformAuthTabs.hidden = isWechat || isBinding;
+  elements.platformAuthCopy.hidden = isWechat;
+  elements.platformEmailField.hidden = isWechat;
+  elements.platformCodeField.hidden = isLogin || isWechat;
+  elements.platformPasswordField.hidden = isWechat;
+  elements.platformConfirmPasswordField.hidden = login || isWechat || isBinding;
+  elements.platformLoginActions.hidden = isWechat;
+  elements.platformWechatStart.hidden = !isLogin;
+  elements.platformWechatPanel.hidden = !isWechat;
+  elements.platformLoginError.hidden = isWechat;
+  if (!isWechat) elements.platformWechatFrame.src = 'about:blank';
   document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.platformAuthMode === mode);
     button.setAttribute('aria-selected', button.dataset.platformAuthMode === mode ? 'true' : 'false');
   });
-  elements.platformAuthCopy.textContent = login ? '登录后才能使用店铺、商品、监控和团队功能。' : register ? '注册 Elunvi 账号后即可在 Mart 中使用完整功能。' : '输入邮箱验证码后设置新密码。';
-  elements.platformCodeField.hidden = login;
-  elements.platformPasswordField.hidden = false;
-  elements.platformPassword.required = mode !== 'login';
+  elements.platformAuthCopy.textContent = isBinding ? '微信账号已授权，请绑定邮箱以完成登录。' : login ? '登录后才能使用店铺、商品、监控和团队功能。' : register ? '注册 Elunvi 账号后即可在 Mart 中使用完整功能。' : '输入邮箱验证码后设置新密码。';
+  elements.platformPasswordField.hidden = isWechat;
+  elements.platformPassword.required = mode !== 'login' && !isBinding;
   elements.platformPassword.autocomplete = register || mode === 'reset' ? 'new-password' : 'current-password';
-  elements.platformConfirmPasswordField.hidden = login;
-  elements.platformConfirmPassword.required = !login;
-  elements.platformLoginSubmit.querySelector('span').textContent = login ? '登录' : register ? (state.platformAuthChallengeId ? '完成注册' : '先获取验证码') : (state.platformAuthChallengeId ? '重置密码' : '先获取验证码');
+  elements.platformConfirmPasswordField.hidden = login || isWechat || isBinding;
+  elements.platformConfirmPassword.required = !login && !isBinding;
+  elements.platformLoginSubmit.querySelector('span').textContent = isBinding ? (state.platformAuthChallengeId ? '完成绑定' : '先获取验证码') : login ? '登录' : register ? (state.platformAuthChallengeId ? '完成注册' : '先获取验证码') : (state.platformAuthChallengeId ? '重置密码' : '先获取验证码');
   elements.platformRequestCode.textContent = state.platformAuthChallengeId ? '重新获取' : '获取验证码';
-  elements.platformLoginError.hidden = true;
+  elements.platformLoginError.hidden = isWechat;
 }
 
 async function requestPlatformCode() {
@@ -289,7 +321,9 @@ async function requestPlatformCode() {
   try {
     const result = state.platformAuthMode === 'register'
       ? await window.pddMonitor.platform.requestRegistrationCode(email)
-      : await window.pddMonitor.platform.requestPasswordResetCode(email);
+      : state.platformAuthMode === 'email-binding'
+        ? await window.pddMonitor.platform.emailBindingCode(email)
+        : await window.pddMonitor.platform.requestPasswordResetCode(email);
     setPlatformAuthMode(state.platformAuthMode);
     state.platformAuthChallengeId = result.challengeId;
     elements.platformLoginSubmit.querySelector('span').textContent = state.platformAuthMode === 'register' ? '完成注册' : '重置密码';
@@ -298,7 +332,7 @@ async function requestPlatformCode() {
     elements.platformLoginErrorText.textContent = '验证码已发送，请检查邮箱。';
     elements.platformLoginError.hidden = false;
   } catch (error) {
-    elements.platformLoginErrorText.textContent = error.message || '验证码发送失败，请稍后重试';
+    elements.platformLoginErrorText.textContent = friendlyError(error) || '验证码发送失败，请稍后重试';
     elements.platformLoginError.hidden = false;
   } finally {
     elements.platformRequestCode.disabled = false;
@@ -307,6 +341,8 @@ async function requestPlatformCode() {
 
 function closePlatformLogin() {
   if (state.platform.status !== 'signed_in') return;
+  clearWechatPollTimer();
+  if (state.platformAuthMode === 'wechat' || state.platformAuthMode === 'email-binding') void window.pddMonitor.platform.wechatCancel();
   elements.platformLoginModal.hidden = true;
 }
 
@@ -708,7 +744,8 @@ function friendlyError(error) {
   if (original.includes('店铺已经添加过了')) {
     return '店铺已经添加过了，请直接使用已有店铺账号。';
   }
-  const ipcMessage = original.match(/Error invoking remote method '[^']+': Error: (.+)$/);
+  if (/this product is inactive/i.test(original)) return '当前产品尚未在 Elunvi Platform 激活，请先激活产品码 elunvi-mart。';
+  const ipcMessage = original.match(/Error invoking remote method '[^']+': (?:Error|PlatformApiError): (.+)$/);
   return ipcMessage?.[1] || original || '操作没有完成，请稍后重试。';
 }
 
@@ -1059,7 +1096,12 @@ async function submitPlatformLogin(event) {
     await requestPlatformCode();
     return;
   }
-  if (state.platformAuthMode !== 'login' && (!code || !confirmPassword || password !== confirmPassword)) {
+  if (state.platformAuthMode === 'email-binding' && !code) {
+    elements.platformLoginErrorText.textContent = '请输入邮箱验证码';
+    elements.platformLoginError.hidden = false;
+    return;
+  }
+  if (state.platformAuthMode !== 'login' && state.platformAuthMode !== 'email-binding' && (!code || !confirmPassword || password !== confirmPassword)) {
     elements.platformLoginErrorText.textContent = password !== confirmPassword ? '两次输入的密码不一致' : '请输入验证码和确认密码';
     elements.platformLoginError.hidden = false;
     return;
@@ -1072,6 +1114,8 @@ async function submitPlatformLogin(event) {
       result = await window.pddMonitor.platform.login({ email, password });
     } else if (state.platformAuthMode === 'register') {
       result = await window.pddMonitor.platform.completeRegistration({ challengeId: state.platformAuthChallengeId, code, password });
+    } else if (state.platformAuthMode === 'email-binding') {
+      result = await window.pddMonitor.platform.emailBindingComplete({ challengeId: state.platformAuthChallengeId, code, newPassword: password || '' });
     } else {
       await window.pddMonitor.platform.resetPassword({ challengeId: state.platformAuthChallengeId, code, newPassword: password });
       setPlatformAuthMode('login');
@@ -1082,18 +1126,79 @@ async function submitPlatformLogin(event) {
       elements.platformLoginError.hidden = false;
       return;
     }
-    state.platform.status = 'signed_in';
-    state.platform.profile = result.profile;
-    elements.platformLoginModal.hidden = true;
-    setPlatformShell('signed_in');
-    await loadAccounts();
-    showView('accounts');
-    showNotice('已登录 Elunvi，当前电脑上的店铺数据已准备就绪');
+    await finishPlatformSignIn(result.profile);
   } catch (error) {
-    elements.platformLoginErrorText.textContent = error.message || '登录失败，请稍后重试';
+    elements.platformLoginErrorText.textContent = friendlyError(error) || '登录失败，请稍后重试';
     elements.platformLoginError.hidden = false;
   } finally {
     submit.disabled = false;
+  }
+}
+
+async function finishPlatformSignIn(profile) {
+  clearWechatPollTimer();
+  state.platform.status = 'signed_in';
+  state.platform.profile = profile;
+  elements.platformLoginModal.hidden = true;
+  setPlatformShell('signed_in');
+  await loadAccounts();
+  showView('accounts');
+  showNotice('已登录 Elunvi，当前电脑上的店铺数据已准备就绪');
+}
+
+async function beginWechatLogin() {
+  elements.platformWechatStart.disabled = true;
+  elements.platformLoginError.hidden = true;
+  try {
+    const result = await window.pddMonitor.platform.wechatStart();
+    state.wechatExpiresAt = result.expiresAt;
+    setPlatformAuthMode('wechat');
+    elements.platformWechatFrame.src = result.wechatStartUri;
+    elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
+    elements.platformLoginModal.hidden = false;
+    void pollWechatLogin(result.pollIntervalSeconds);
+  } catch (error) {
+    elements.platformLoginErrorText.textContent = friendlyError(error) || '微信登录暂时无法开始';
+    elements.platformLoginError.hidden = false;
+  } finally {
+    elements.platformWechatStart.disabled = false;
+  }
+}
+
+async function pollWechatLogin(retryAfterSeconds = 1) {
+  if (state.platformAuthMode !== 'wechat') return;
+  const remaining = Date.parse(state.wechatExpiresAt) - Date.now();
+  if (!Number.isFinite(remaining) || remaining <= 0) {
+    clearWechatPollTimer();
+    elements.platformWechatStatus.textContent = '二维码已过期，请返回后重新扫码';
+    return;
+  }
+  const minutes = Math.floor(remaining / 60_000);
+  const seconds = Math.floor((remaining % 60_000) / 1_000);
+  elements.platformWechatCountdown.textContent = `二维码将在 ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} 后过期`;
+  try {
+    const result = await window.pddMonitor.platform.wechatPoll();
+    if (state.platformAuthMode !== 'wechat') return;
+    if (result.state === 'signed_in') {
+      await finishPlatformSignIn(result.profile);
+      return;
+    }
+    if (result.state === 'binding_required') {
+      clearWechatPollTimer();
+      setPlatformAuthMode('email-binding');
+      elements.platformEmail.focus();
+      return;
+    }
+    if (result.state === 'expired') {
+      clearWechatPollTimer();
+      elements.platformWechatStatus.textContent = '二维码已过期，请返回后重新扫码';
+      return;
+    }
+    const next = Math.max(1, Number(result.retryAfterSeconds || retryAfterSeconds || 1));
+    state.wechatPollTimer = window.setTimeout(() => void pollWechatLogin(next), Math.min(next * 1000, remaining));
+  } catch (error) {
+    clearWechatPollTimer();
+    elements.platformWechatStatus.textContent = friendlyError(error) || '微信登录暂时无法确认，请重试';
   }
 }
 
@@ -1105,6 +1210,12 @@ elements.addAccount.addEventListener('click', () => openLoginModal());
 elements.platformSignin.addEventListener('click', () => showPlatformLogin());
 elements.platformAccount.addEventListener('click', logoutPlatform);
 elements.platformLoginForm.addEventListener('submit', submitPlatformLogin);
+elements.platformWechatStart.addEventListener('click', () => void beginWechatLogin());
+elements.platformWechatBack.addEventListener('click', async () => {
+  clearWechatPollTimer();
+  await window.pddMonitor.platform.wechatCancel();
+  setPlatformAuthMode('login');
+});
 elements.platformLoginClose.addEventListener('click', closePlatformLogin);
 elements.platformLoginCancel.addEventListener('click', closePlatformLogin);
 elements.platformLoginModal.addEventListener('click', (event) => { if (event.target === elements.platformLoginModal) closePlatformLogin(); });

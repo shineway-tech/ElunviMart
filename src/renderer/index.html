@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; frame-src https://elunvi-api.honeykid.cn; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>Elunvi Mart</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -154,18 +154,24 @@
     <section class="modal platform-login-modal" role="dialog" aria-modal="true" aria-labelledby="platform-login-title">
       <div class="modal-header"><h2 id="platform-login-title">登录 Elunvi</h2><button class="icon-button" type="button" id="platform-login-close" aria-label="关闭"><i data-lucide="x"></i></button></div>
       <form id="platform-login-form">
-        <div class="platform-auth-tabs" role="tablist" aria-label="账号操作">
+        <div class="platform-auth-tabs" id="platform-auth-tabs" role="tablist" aria-label="账号操作">
           <button class="platform-auth-tab is-active" type="button" data-platform-auth-mode="login">登录</button>
           <button class="platform-auth-tab" type="button" data-platform-auth-mode="register">注册</button>
           <button class="platform-auth-tab" type="button" data-platform-auth-mode="reset">找回密码</button>
         </div>
         <p class="modal-copy" id="platform-auth-copy">登录后才能使用店铺、商品、监控和团队功能。</p>
-        <label class="field-label">邮箱<input class="input" id="platform-email" type="email" autocomplete="email" required placeholder="name@example.com"></label>
+        <label class="field-label" id="platform-email-field">邮箱<input class="input" id="platform-email" type="email" autocomplete="email" required placeholder="name@example.com"></label>
         <label class="field-label" id="platform-code-field" hidden>验证码<div class="inline-field"><input class="input" id="platform-code" inputmode="numeric" autocomplete="one-time-code" placeholder="请输入邮箱验证码"><button class="button" type="button" id="platform-request-code">获取验证码</button></div></label>
         <label class="field-label" id="platform-password-field">密码<input class="input" id="platform-password" type="password" autocomplete="current-password" required placeholder="请输入密码"></label>
         <label class="field-label" id="platform-confirm-password-field" hidden>确认密码<input class="input" id="platform-confirm-password" type="password" autocomplete="new-password" placeholder="请再次输入密码"></label>
         <div class="login-error" id="platform-login-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong>登录失败</strong><p id="platform-login-error-text"></p></div></div>
-        <div class="modal-actions"><button class="button" type="button" id="platform-login-cancel">取消</button><button class="button button-primary" type="submit" id="platform-login-submit"><i data-lucide="log-in"></i><span>登录</span></button></div>
+        <div class="modal-actions" id="platform-login-actions"><button class="button" type="button" id="platform-login-cancel">取消</button><button class="button button-primary" type="submit" id="platform-login-submit"><i data-lucide="log-in"></i><span>登录</span></button><button class="button button-accent-outline" type="button" id="platform-wechat-start"><i data-lucide="scan-line"></i><span>微信扫码登录</span></button></div>
+        <div class="platform-wechat-panel" id="platform-wechat-panel" hidden>
+          <div class="platform-wechat-frame"><iframe id="platform-wechat-frame" title="微信官方登录二维码" referrerpolicy="no-referrer"></iframe></div>
+          <p id="platform-wechat-status">请使用微信扫描二维码</p>
+          <small id="platform-wechat-countdown"></small>
+          <button class="button" type="button" id="platform-wechat-back">返回其他登录方式</button>
+        </div>
       </form>
     </section>
   </div>

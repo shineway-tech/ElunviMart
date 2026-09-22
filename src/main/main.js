@@ -411,6 +411,23 @@ function registerIpc(adapter) {
   });
   ipcMain.handle('platform:requestPasswordResetCode', (_event, email) => platformService.requestPasswordResetCode(String(email || '').trim()));
   ipcMain.handle('platform:resetPassword', (_event, input) => platformService.resetPassword(input || {}));
+  ipcMain.handle('platform:wechatStart', () => platformService.startWechatLogin());
+  ipcMain.handle('platform:wechatPoll', async () => {
+    const result = await platformService.pollWechatLogin();
+    if (result.state === 'signed_in') {
+      activateUserStore(result.profile.userId);
+      sendToRenderer('platform:changed', { status: 'signed_in', profile: result.profile });
+    }
+    return result;
+  });
+  ipcMain.handle('platform:emailBindingCode', (_event, email) => platformService.requestEmailBindingCode(String(email || '').trim()));
+  ipcMain.handle('platform:emailBindingComplete', async (_event, input) => {
+    const profile = await platformService.completeEmailBinding(input || {});
+    activateUserStore(profile.userId);
+    sendToRenderer('platform:changed', { status: 'signed_in', profile });
+    return { status: 'signed_in', profile };
+  });
+  ipcMain.handle('platform:wechatCancel', () => platformService.cancelWechatLogin());
   ipcMain.handle('platform:logout', async () => {
     await platformService.logout();
     closeActiveStore();

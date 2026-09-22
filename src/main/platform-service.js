@@ -314,7 +314,7 @@ class PlatformService {
       deviceSessionId: device.device_session_id,
       deviceSecret: device.device_secret,
       verifier: pkce.verifier,
-      authorizationUrl: device.wechat_start_uri ? `${this.config.apiBaseUrl}${device.wechat_start_uri}` : null,
+      authorizationUrl: device.wechat_start_uri ? new URL(device.wechat_start_uri, this.config.apiBaseUrl).toString() : null,
       expiresAt: device.expires_at,
       pollIntervalSeconds: device.poll_interval_seconds
     };
@@ -337,22 +337,80 @@ class PlatformService {
 
   async startWechatLogin() {
     this.wechatFlow = await this.createDeviceFlow();
+    const wechatStartUri = resolveWechatStartUri(this.wechatFlow.authorizationUrl, this.config, this.wechatFlow.deviceSessionId);
     return {
-      authorizationUrl: this.wechatFlow.authorizationUrl,
+      wechatStartUri,
+      authorizationUrl: wechatStartUri,
       expiresAt: this.wechatFlow.expiresAt,
       pollIntervalSeconds: this.wechatFlow.pollIntervalSeconds
     };
   }
 
-  async completeWechatLogin() {
+  async pollWechatLogin() {
     if (!this.wechatFlow) throw new Error('微信登录已过期，请重新开始');
+    const flow = this.wechatFlow;
+    if (flow.expiresAt && Date.now() >= Date.parse(flow.expiresAt)) {
+      this.wechatFlow = null;
+      return { state: 'expired' };
+    }
+    try {
+      const tokenResponse = await this.client.request(`/v1/auth/device-sessions/${encodeURIComponent(flow.deviceSessionId)}/token`, {
+        method: 'POST',
+        auth: false,
+        retryAuth: false,
+        body: { device_secret: flow.deviceSecret, pkce_verifier: flow.verifier }
+      });
+      await this.session.save({
+        accessToken: tokenResponse.data.access_token,
+        refreshToken: tokenResponse.data.refresh_token,
+        accessExpiresAt: tokenResponse.data.access_expires_at,
+        refreshExpiresAt: tokenResponse.data.refresh_expires_at
+      });
+      this.wechatFlow = null;
+      return { state: 'signed_in', profile: await this.getProfile() };
+    } catch (error) {
+      if (error.status === 401) return { state: 'pending', retryAfterSeconds: flow.pollIntervalSeconds };
+      if (error.status === 409 && error.code === 'AUTH_EMAIL_BINDING_REQUIRED') {
+        return { state: 'binding_required' };
+      }
+      throw error;
+    }
+  }
+
+  async requestEmailBindingCode(email) {
+    if (!this.wechatFlow) throw new Error('微信登录已过期，请重新开始');
+    if (!String(email || '').trim()) throw new Error('请输入邮箱');
+    const response = await this.client.request(`/v1/auth/device-sessions/${encodeURIComponent(this.wechatFlow.deviceSessionId)}/email-binding-challenges`, {
+      method: 'POST',
+      auth: false,
+      body: { email: String(email).trim() }
+    });
+    this.wechatFlow.emailBindingChallengeId = response.data.challenge_id;
+    return { challengeId: this.wechatFlow.emailBindingChallengeId, expiresAt: response.data.expires_at };
+  }
+
+  async completeEmailBinding({ challengeId, code, newPassword = '' }) {
+    if (!this.wechatFlow || this.wechatFlow.emailBindingChallengeId !== challengeId) throw new Error('邮箱绑定验证码已过期，请重新获取');
+    if (!String(code || '').trim()) throw new Error('请输入邮箱验证码');
+    const body = { challenge_id: challengeId, code: String(code).trim() };
+    if (String(newPassword || '').trim()) body.new_password = String(newPassword);
+    await this.client.request(`/v1/auth/device-sessions/${encodeURIComponent(this.wechatFlow.deviceSessionId)}/email-binding`, {
+      method: 'POST',
+      auth: false,
+      body
+    });
     const flow = this.wechatFlow;
     this.wechatFlow = null;
     await this.exchangeDeviceFlow(flow);
     return this.getProfile();
   }
 
+  cancelWechatLogin() {
+    this.wechatFlow = null;
+  }
+
   async logout() {
+    this.wechatFlow = null;
     const token = await this.session.accessToken();
     if (token) {
       try { await this.client.request('/v1/auth/logout', { method: 'POST', retryAuth: false }); } catch {}
@@ -372,6 +430,22 @@ function createPkce() {
   const verifier = crypto.randomBytes(32).toString('base64url');
   const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
   return { verifier, challenge };
+}
+
+function resolveWechatStartUri(value, config, deviceSessionId) {
+  if (!value) throw new Error('Platform 未返回微信登录地址');
+  let parsed;
+  let base;
+  try {
+    base = new URL(config.apiBaseUrl);
+    parsed = new URL(value, base);
+  } catch {
+    throw new Error('微信登录地址无效');
+  }
+  if (parsed.origin !== base.origin || parsed.pathname !== '/v1/auth/wechat/start' || parsed.searchParams.get('device_session_id') !== deviceSessionId) {
+    throw new Error('微信登录地址不受支持');
+  }
+  return parsed.toString();
 }
 
 module.exports = {
