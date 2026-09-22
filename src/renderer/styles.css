@@ -151,8 +151,9 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-divider{display:flex;align-items:center;gap:12px;color:#9aa2ab;font-size:12px}
 .platform-auth-divider:before,.platform-auth-divider:after{content:"";height:1px;flex:1;background:var(--line)}
 .platform-auth-links{display:flex;align-items:center;justify-content:center;gap:12px;min-height:18px;margin-top:3px;color:var(--muted);font-size:12px;line-height:1.4}
-.platform-auth-links.has-inline-error{justify-content:space-between}
-.platform-auth-inline-error{min-width:0;max-width:46%;overflow:hidden;color:var(--accent);font-size:11px;line-height:1.4;text-overflow:ellipsis;white-space:nowrap}
+.platform-auth-feedback{display:flex;align-items:flex-start;gap:12px;min-width:0;min-height:18px;margin-top:-8px;font-size:12px;line-height:1.5}
+.platform-auth-feedback>.link-button{flex:0 0 auto;margin-left:auto;white-space:nowrap}
+.platform-auth-inline-error{flex:1;min-width:0;color:var(--accent);font-size:12px;line-height:1.5;overflow-wrap:anywhere}
 .platform-auth-link-group{display:flex;align-items:baseline;justify-content:center;gap:6px;white-space:nowrap}
 .link-button{padding:0;border:0;color:var(--accent);background:transparent;cursor:pointer;font:inherit}
 .link-button:hover{text-decoration:underline}

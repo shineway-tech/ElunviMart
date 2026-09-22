@@ -21,7 +21,7 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.match(html, /platform-auth-illustration\.png/);
   assert.match(html, /本地商家的店铺监控助手/);
   assert.match(html, /更专注，更高效/);
-  assert.match(html, /让生意更清楚/);
+  assert.match(html, /让生意看得更清楚/);
   assert.match(html, /data-password-toggle="platform-password"/);
   assert.match(html, /assets\/wechat-mark\.svg/);
   assert.doesNotMatch(html, /id="platform-auth-tabs"/);

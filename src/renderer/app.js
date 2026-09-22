@@ -65,6 +65,7 @@ const elements = {
   platformAuthCopy: document.querySelector('#platform-auth-copy'),
   platformAuthLinks: document.querySelector('#platform-auth-links'),
   platformAuthInlineError: document.querySelector('#platform-auth-inline-error'),
+  platformAuthFeedback: document.querySelector('#platform-auth-feedback'),
   platformAuthLinksCopy: document.querySelector('#platform-auth-links-copy'),
   platformAuthRegisterLink: document.querySelector('#platform-auth-register-link'),
   platformAuthResetLink: document.querySelector('#platform-auth-reset-link'),
@@ -279,8 +280,7 @@ function showPlatformLogin(message = '') {
   clearWechatPollTimer();
   setPlatformAuthMode('login');
   setPlatformAuthInlineError(message);
-  elements.platformLoginError.hidden = !message;
-  elements.platformLoginErrorText.textContent = message;
+  elements.platformLoginError.hidden = true;
   elements.platformLoginModal.hidden = false;
   document.querySelector('#platform-email').focus();
 }
@@ -290,7 +290,7 @@ function setPlatformAuthInlineError(message = '') {
   elements.platformAuthInlineError.textContent = message;
   elements.platformAuthInlineError.title = message;
   elements.platformAuthInlineError.hidden = !hasMessage;
-  elements.platformAuthLinks.classList.toggle('has-inline-error', hasMessage);
+  elements.platformAuthFeedback.hidden = state.platformAuthMode === 'wechat' || (state.platformAuthMode !== 'login' && !hasMessage);
 }
 
 function clearWechatPollTimer() {

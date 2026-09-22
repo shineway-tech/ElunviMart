@@ -161,7 +161,7 @@
           <p>本地商家的店铺监控助手</p>
           <span class="platform-auth-brand-subtitle">更专注，更高效</span>
           <img class="platform-auth-illustration" src="assets/platform-auth-illustration.png" alt="店铺监控示意图">
-          <div class="platform-auth-brand-footer"><strong>Elunvi Mart</strong><span>让生意更清楚</span></div>
+          <div class="platform-auth-brand-footer"><strong>Elunvi Mart</strong><span>让生意看得更清楚</span></div>
         </aside>
         <div class="platform-auth-pane">
           <div class="platform-auth-header">
@@ -173,6 +173,10 @@
             <label class="field-label" id="platform-code-field" hidden><span>验证码</span><div class="inline-field"><input class="input" id="platform-code" inputmode="numeric" autocomplete="one-time-code" placeholder="请输入邮箱验证码"><button class="button" type="button" id="platform-request-code">获取验证码</button></div></label>
             <label class="field-label" id="platform-password-field"><span>密码</span><div class="platform-auth-input"><i data-lucide="lock-keyhole"></i><input class="input" id="platform-password" type="password" autocomplete="current-password" required placeholder="请输入密码"><button class="platform-password-toggle" type="button" data-password-toggle="platform-password" aria-label="显示密码" title="显示密码"><i data-lucide="eye"></i></button></div></label>
             <label class="field-label" id="platform-confirm-password-field" hidden><span>确认密码</span><div class="platform-auth-input"><i data-lucide="lock-keyhole"></i><input class="input" id="platform-confirm-password" type="password" autocomplete="new-password" placeholder="请再次输入密码"><button class="platform-password-toggle" type="button" data-password-toggle="platform-confirm-password" aria-label="显示密码" title="显示密码"><i data-lucide="eye"></i></button></div></label>
+            <div class="platform-auth-feedback" id="platform-auth-feedback">
+              <span class="platform-auth-inline-error" id="platform-auth-inline-error" role="alert" hidden></span>
+              <button class="link-button" type="button" data-platform-auth-mode="reset" id="platform-auth-reset-link">忘记密码</button>
+            </div>
             <div class="login-error" id="platform-login-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong>登录失败</strong><p id="platform-login-error-text"></p></div></div>
             <div class="platform-auth-actions" id="platform-login-actions"><button class="button button-primary platform-auth-submit" type="submit" id="platform-login-submit"><i data-lucide="log-in"></i><span>登录</span></button><div class="platform-auth-divider" id="platform-auth-divider"><span>其他登录方式</span></div><button class="button platform-auth-wechat" type="button" id="platform-wechat-start"><img class="platform-wechat-icon" src="assets/wechat-mark.svg" alt=""><span>微信扫码登录</span></button></div>
             <div class="platform-wechat-panel" id="platform-wechat-panel" hidden>
@@ -182,11 +186,9 @@
               <button class="button" type="button" id="platform-wechat-back">返回其他登录方式</button>
             </div>
             <div class="platform-auth-links" id="platform-auth-links">
-              <span class="platform-auth-inline-error" id="platform-auth-inline-error" role="alert" hidden></span>
               <div class="platform-auth-link-group">
                 <span id="platform-auth-links-copy">还没有 Elunvi 账号？</span>
                 <button class="link-button" type="button" data-platform-auth-mode="register" id="platform-auth-register-link">立即注册</button>
-                <button class="link-button" type="button" data-platform-auth-mode="reset" id="platform-auth-reset-link">忘记密码</button>
                 <button class="link-button" type="button" data-platform-auth-mode="login" id="platform-auth-login-link" hidden>返回登录</button>
               </div>
             </div>
