@@ -35,6 +35,8 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.match(html, /data-password-toggle="platform-login-password"/);
   assert.match(html, /data-password-toggle="platform-register-password"/);
   assert.match(html, /data-password-toggle="platform-reset-password"/);
+  assert.match(html, /id="platform-register-password"[^>]*maxlength="20"/);
+  assert.match(html, /id="platform-reset-password"[^>]*maxlength="20"/);
   assert.match(html, /assets\/wechat-mark\.svg/);
   assert.doesNotMatch(html, /id="platform-login-close"/);
   assert.doesNotMatch(html, /id="platform-auth-tabs"/);

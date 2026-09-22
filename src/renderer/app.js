@@ -386,8 +386,8 @@ function validateAuthFields(mode, { requireCode = true, onlyEmail = false } = {}
   if (mode !== 'email-binding' && !fields.password?.value) {
     setFieldValidation(fields, 'password', '请输入密码');
     valid = false;
-  } else if (mode !== 'email-binding' && (passwordByteLength(fields.password.value) < 8 || passwordByteLength(fields.password.value) > 128)) {
-    setFieldValidation(fields, 'password', '密码长度需为 8-128 个字符');
+  } else if (mode !== 'email-binding' && (passwordByteLength(fields.password.value) < 8 || passwordByteLength(fields.password.value) > 20)) {
+    setFieldValidation(fields, 'password', '密码长度需为 8-20 个字符');
     valid = false;
   }
   if (key !== 'reset' || mode !== 'email-binding') {
