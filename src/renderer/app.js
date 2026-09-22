@@ -529,7 +529,9 @@ async function requestPlatformCode(mode = state.platformAuthMode) {
     updateAuthFormLabels(mode);
     startAuthCodeCooldown(mode);
     fields.code.focus();
-    setServerError(mode, '验证码已发送，请检查邮箱。');
+    setServerError(mode, mode === 'reset'
+      ? '如果该邮箱已注册，验证码会发送到邮箱，请注意查收。'
+      : '验证码已发送，请检查邮箱。');
     return true;
   } catch (error) {
     setServerError(mode, friendlyError(error) || '验证码发送失败，请稍后重试');
