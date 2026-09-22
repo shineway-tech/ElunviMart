@@ -359,9 +359,9 @@ class PlatformService {
     try {
       const tokenResponse = await this.client.request(`/v1/auth/device-sessions/${encodeURIComponent(flow.deviceSessionId)}/token`, {
         method: 'POST',
-        auth: false,
-        retryAuth: false,
-        body: { device_secret: flow.deviceSecret, pkce_verifier: flow.verifier }
+      auth: false,
+      retryAuth: false,
+        body: { device_secret: flow.deviceSecret, pkce_verifier: flow.verifier, response_mode: 'token' }
       });
       await this.session.save({
         accessToken: tokenResponse.data.access_token,

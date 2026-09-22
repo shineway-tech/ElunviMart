@@ -1451,10 +1451,18 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
       elements.platformWechatStatus.textContent = '二维码已过期，请刷新二维码';
       return;
     }
+    elements.platformWechatStatus.textContent = '正在确认微信登录…';
     const next = Math.max(1, Number(result.retryAfterSeconds || retryAfterSeconds || 1));
     const remaining = Date.parse(state.wechatExpiresAt) - Date.now();
     state.wechatPollTimer = window.setTimeout(() => void pollWechatLogin(next), Math.min(next * 1000, Math.max(1, remaining)));
   } catch (error) {
+    const retryable = Boolean(error?.retryable) || error?.status === 408 || error?.status === 429 || Number(error?.status) >= 500;
+    if (retryable && updateWechatCountdown()) {
+      elements.platformWechatStatus.textContent = '网络波动，正在重试微信登录…';
+      const remaining = Date.parse(state.wechatExpiresAt) - Date.now();
+      state.wechatPollTimer = window.setTimeout(() => void pollWechatLogin(retryAfterSeconds), Math.min(3000, Math.max(1, remaining)));
+      return;
+    }
     clearWechatPollTimer();
     elements.platformWechatStatus.textContent = friendlyError(error) || '微信登录暂时无法确认，请重试';
   }
