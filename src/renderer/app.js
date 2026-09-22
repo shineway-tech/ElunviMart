@@ -379,8 +379,8 @@ function validateAuthFields(mode, { requireCode = true, onlyEmail = false } = {}
   if (requireCode && !fields.code?.value.trim()) {
     setFieldValidation(fields, 'code', '请输入邮箱验证码');
     valid = false;
-  } else if (requireCode && !/^\d{4,8}$/u.test(fields.code.value.trim())) {
-    setFieldValidation(fields, 'code', '请输入正确的验证码');
+  } else if (requireCode && !/^\d{6}$/u.test(fields.code.value.trim())) {
+    setFieldValidation(fields, 'code', '请输入 6 位验证码');
     valid = false;
   }
   if (mode !== 'email-binding' && !fields.password?.value) {
