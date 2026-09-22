@@ -23,6 +23,10 @@ Elunvi Mart 是一个基于 Electron 的拼多多商家百亿补贴状态监控�
 - Webhook、加签密钥等敏感配置必须通过 Electron `safeStorage` 加密后再落盘。
 - 不绕过拼多多权限、验证码、风控或接口授权，不猜测和固化未经确认的私有接口。
 - 当前提醒渠道限定为桌面通知、企业微信机器人和钉钉机器人。
+- ElunviPlatform 只负责平台用户、会话、钱包和支付；拼多多商家账号仍使用本地独立会话。
+- 平台 API 只能从主进程访问。access token 只驻留主进程内存，refresh token 必须通过 Electron `safeStorage` 加密保存。
+- 平台产品代码、client ID、audience、回调和 scopes 必须使用 `src/main/platform-config.js` 中经平台登记的公开值，不得在页面中自行拼接或猜测。
+- 平台订单和账本状态以服务端返回为准；`manual_review`、过期和不确定状态不得在本地当作成功，也不得自动重复下单。
 
 ### 暂不包含的范围
 
@@ -104,6 +108,12 @@ Store 不得依赖渲染层，也不得包含 Electron 窗口逻辑。对外返�
 
 通知模块接收已经构造好的消息，不负责判断商品状态。
 
+#### `platform-client.js`、`platform-session.js` 与 `platform-ipc.js`
+
+- `platform-client.js` 负责 ElunviPlatform v1 接口、PKCE 设备登录、响应归属校验、超时和稳定错误码。
+- `platform-session.js` 只保存加密 refresh token 元数据，损坏或无法解密时清除并要求重新登录；不得保存 access token、密码、设备 secret 或支付信息。
+- `platform-ipc.js` 只注册命名的 `platform:*` 通道，过滤登录事务内部字段，并由主进程校验系统浏览器授权地址。
+
 ### 渲染进程：`src/renderer/`
 
 #### `preload.js`
@@ -114,6 +124,7 @@ Store 不得依赖渲染层，也不得包含 Electron 窗口逻辑。对外返�
 - 商品查询和同步。
 - 设置读取和保存。
 - 通知测试。
+- 平台用户登录、状态、退出、钱包套餐和支付订单操作。
 
 不得向渲染层暴露完整 `ipcRenderer`、Node.js 文件系统或任意命令执行能力。
 
@@ -126,6 +137,7 @@ Store 不得依赖渲染层，也不得包含 Electron 窗口逻辑。对外返�
 - 调用 `window.pddMonitor` 提供的 API。
 
 渲染层不得直接访问文件系统、网络接口或 Electron 主进程对象。商品状态判断和敏感配置处理必须留在主进程。
+平台登录密码只在提交期间传入 preload，提交后立即清空；渲染层不得读取 token、设备 secret 或会话文件。
 
 #### `index.html` 与 `styles.css`
 

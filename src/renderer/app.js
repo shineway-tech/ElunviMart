@@ -586,10 +586,16 @@ async function refreshPlatformCheckout() {
       state.platform = { ...state.platform, ...status };
     }
     renderPlatform();
+    schedulePlatformCheckoutPoll();
   } catch (error) {
     state.platform.lastError = { message: platformErrorMessage(error) };
     renderPlatform();
   }
+}
+
+function schedulePlatformCheckoutPoll() {
+  if (!state.platform.checkout || !['pending'].includes(state.platform.checkout.state)) return;
+  window.setTimeout(() => { void refreshPlatformCheckout(); }, 3000);
 }
 
 async function createPlatformPayment() {
@@ -606,6 +612,7 @@ async function createPlatformPayment() {
     state.platform.attempt = attempt;
     state.platform.lastError = null;
     renderPlatform();
+    schedulePlatformCheckoutPoll();
   } catch (error) {
     state.platform.lastError = { message: platformErrorMessage(error) };
     renderPlatform();

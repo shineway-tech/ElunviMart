@@ -68,6 +68,33 @@ test('platform IPC rejects unsafe payment channels and keeps pending WeChat flow
   await assert.rejects(() => handlers.get('platform:payment')(null, { checkoutId: 'c', channel: 'bank' }), /支付渠道/);
 });
 
+test('WeChat exchange treats the platform 409 AUTH_REQUIRED response as pending authorization', async () => {
+  let attempts = 0;
+  let authenticated = false;
+  const client = {
+    hasSession: () => authenticated,
+    startWechatLogin: async () => ({ authorizationUrl: 'https://elunvi-api.honeykid.cn/v1/auth/wechat/start', userCode: 'ABCD', expiresAt: 'e', pollIntervalSeconds: 1, deviceSessionId: 'x', deviceSecret: 's', verifier: 'v' }),
+    completeWechatLogin: async () => {
+      attempts += 1;
+      if (attempts === 1) {
+        const error = new Error('The user has not completed authorization');
+        error.code = 'AUTH_REQUIRED';
+        error.status = 409;
+        error.retryable = true;
+        throw error;
+      }
+      authenticated = true;
+      return { accessExpiresAt: 'a', refreshExpiresAt: 'b' };
+    },
+    getProfile: async () => ({ userId: 'u', displayName: 'User' }),
+    getWallet: async () => ({ productCode: 'elunvi-mart', availableMicroPoints: '1' })
+  };
+  const { handlers } = setup(client);
+  await handlers.get('platform:login:startWechat')();
+  assert.deepEqual(await handlers.get('platform:login:completeWechat')(), { state: 'pending' });
+  assert.equal((await handlers.get('platform:login:completeWechat')()).authenticated, true);
+});
+
 test('preload contains only named platform methods and no raw ipcRenderer exposure', () => {
   const source = fs.readFileSync('src/renderer/preload.js', 'utf8');
   const calls = [];

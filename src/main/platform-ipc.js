@@ -45,10 +45,11 @@ function registerPlatformIpc(ipcMain, { client, shell }) {
       pendingWechatFlow = null;
       return afterLogin();
     } catch (error) {
-      if (['AUTH_PENDING', 'DEVICE_SESSION_PENDING', 'LOGIN_PENDING'].includes(error?.code)) {
+      if (['AUTH_PENDING', 'DEVICE_SESSION_PENDING', 'LOGIN_PENDING'].includes(error?.code)
+        || (error?.code === 'AUTH_REQUIRED' && (error?.status === 409 || error?.retryable === true))) {
         return { state: 'pending' };
       }
-      if (error?.code === 'AUTH_REQUIRED' || error?.code === 'DEVICE_SESSION_EXPIRED') pendingWechatFlow = null;
+      if (error?.code === 'DEVICE_SESSION_EXPIRED' || (error?.code === 'AUTH_REQUIRED' && error?.status !== 409)) pendingWechatFlow = null;
       throw error;
     }
   });

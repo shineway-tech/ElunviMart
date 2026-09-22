@@ -6,7 +6,7 @@ const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./m
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
 const { assertWebhook, sendChannelTest, sendConfiguredNotifications } = require('./notifier');
 const { MonitorScheduler } = require('./scheduler');
-const { ELUNVI_PLATFORM_CONFIG } = require('./platform-config');
+const { ELUNVI_PLATFORM_CONFIG, validatePlatformConfig } = require('./platform-config');
 const { PlatformClient } = require('./platform-client');
 const { SafeTokenStore } = require('./platform-session');
 const { registerPlatformIpc } = require('./platform-ipc');
@@ -404,11 +404,12 @@ app.whenReady().then(() => {
     getAntiContent: (id) => antiContentByAccount.get(id) || '',
     ensureBidPage
   });
-  const platformClient = new PlatformClient({
-    config: {
+  const platformConfig = validatePlatformConfig({
       ...ELUNVI_PLATFORM_CONFIG,
       clientId: ELUNVI_PLATFORM_CONFIG.clients[process.platform] || ELUNVI_PLATFORM_CONFIG.clients.darwin
-    },
+  });
+  const platformClient = new PlatformClient({
+    config: platformConfig,
     tokenStore: new SafeTokenStore({ userDataPath, safeStorage })
   });
   const storedPlatformSession = platformClient.tokenStore?.load?.();
