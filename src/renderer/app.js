@@ -17,6 +17,7 @@ const state = {
   teamHistoryKind: 'usage',
   teamActionMode: null,
   platformAuthMode: 'login',
+  platformAuthBindingKind: null,
   platformAuthChallengeId: null,
   platformAuthChallenges: { register: null, reset: null },
   platformAuthCodeCooldownUntil: { register: 0, reset: 0 },
@@ -268,6 +269,8 @@ function setPlatformShell(status) {
 
 function showPlatformLogin(message = '') {
   clearWechatPollTimer();
+  state.platformAuthBindingKind = null;
+  state.platformAuthChallengeId = null;
   setPlatformAuthMode('login');
   setServerError('login', message);
   elements.platformLoginModal.hidden = false;
@@ -493,7 +496,9 @@ function setPlatformAuthMode(mode) {
   const isBinding = mode === 'email-binding';
   document.querySelector('#platform-login-title').textContent = isWechat ? '微信扫码登录' : isBinding ? '绑定邮箱' : isLogin ? '登录' : isRegister ? '注册' : '忘记密码';
   elements.platformAuthCopy.hidden = isWechat;
-  elements.platformAuthCopy.textContent = isBinding ? '为微信账号绑定邮箱' : isLogin ? '使用 Elunvi 账号继续' : isRegister ? '创建账号后即可使用 Mart' : '输入验证码并设置新密码';
+  elements.platformAuthCopy.textContent = isBinding
+    ? state.platformAuthBindingKind === 'account' ? '为当前账号绑定邮箱' : '为微信账号绑定邮箱'
+    : isLogin ? '使用 Elunvi 账号继续' : isRegister ? '创建账号后即可使用 Mart' : '输入验证码并设置新密码';
   document.querySelectorAll('.platform-auth-form').forEach((form) => {
     form.hidden = isWechat || form.id !== `platform-${key}-form`;
   });
@@ -502,11 +507,38 @@ function setPlatformAuthMode(mode) {
   elements.platformWechatPanel.hidden = !isWechat;
   clearAuthErrors(mode);
   updateAuthFormLabels(mode);
+  updateEmailBindingFields(mode);
   if (!isWechat) elements.platformWechatFrame.src = 'about:blank';
   document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.platformAuthMode === mode);
     button.setAttribute('aria-selected', button.dataset.platformAuthMode === mode ? 'true' : 'false');
   });
+}
+
+function updateEmailBindingFields(mode = state.platformAuthMode) {
+  const accountBinding = mode === 'email-binding' && state.platformAuthBindingKind === 'account';
+  ['platform-reset-password', 'platform-reset-confirm'].forEach((id) => {
+    const input = document.querySelector(`#${id}`);
+    const field = input?.closest('.platform-auth-field');
+    if (field) field.hidden = accountBinding;
+  });
+  document.querySelectorAll('#platform-reset-form .platform-auth-links').forEach((links) => {
+    links.hidden = accountBinding;
+  });
+}
+
+function showEmailBinding(profile, kind = 'account') {
+  clearWechatPollTimer();
+  state.platform.status = 'binding_required';
+  state.platform.profile = profile;
+  state.platformAuthBindingKind = kind;
+  state.platformAuthChallengeId = null;
+  state.platformAuthCodeCooldownUntil.reset = 0;
+  setPlatformShell('signed_out');
+  setPlatformAuthMode('email-binding');
+  elements.platformLoginModal.hidden = false;
+  setServerError('email-binding', '登录后需要先绑定邮箱，完成后才能使用 Mart。');
+  authFields('email-binding').email.focus();
 }
 
 async function requestPlatformCode(mode = state.platformAuthMode) {
@@ -524,7 +556,9 @@ async function requestPlatformCode(mode = state.platformAuthMode) {
     const result = key === 'register'
       ? await window.pddMonitor.platform.requestRegistrationCode(fields.email.value.trim())
       : mode === 'email-binding'
-        ? await window.pddMonitor.platform.emailBindingCode(fields.email.value.trim())
+        ? state.platformAuthBindingKind === 'account'
+          ? await window.pddMonitor.platform.accountEmailBindingCode(fields.email.value.trim())
+          : await window.pddMonitor.platform.emailBindingCode(fields.email.value.trim())
         : await window.pddMonitor.platform.requestPasswordResetCode(fields.email.value.trim());
     if (mode === 'email-binding') state.platformAuthChallengeId = result.challengeId;
     else state.platformAuthChallenges[key] = result.challengeId;
@@ -904,6 +938,8 @@ async function logoutPlatform() {
   if (!window.confirm('退出 Elunvi 账号后，监控任务会暂停。确定退出吗？')) return;
   await window.pddMonitor.platform.logout();
   state.accounts = [];
+  state.platformAuthBindingKind = null;
+  state.platformAuthChallengeId = null;
   state.platform = { status: 'signed_out', profile: null, team: null, billing: null };
   setPlatformShell('signed_out');
   document.querySelectorAll('.view').forEach((view) => { view.hidden = true; });
@@ -918,6 +954,10 @@ async function loadPlatformState() {
       state.platform.profile = result.profile;
       setPlatformShell('signed_in');
       await loadAccounts();
+      return;
+    }
+    if (result.status === 'binding_required') {
+      showEmailBinding(result.profile, 'account');
       return;
     }
     setPlatformShell(result.status === 'error' ? 'error' : 'signed_out');
@@ -1293,6 +1333,10 @@ async function submitLoginForm(event) {
       email: fields.email.value.trim(),
       password: fields.password.value
     });
+    if (result.status === 'binding_required') {
+      showEmailBinding(result.profile, 'account');
+      return;
+    }
     await finishPlatformSignIn(result.profile);
   } catch (error) {
     setServerError('login', friendlyError(error) || '登录失败，请稍后重试');
@@ -1340,11 +1384,16 @@ async function submitResetForm(event) {
   fields.submit.disabled = true;
   try {
     if (mode === 'email-binding') {
-      const result = await window.pddMonitor.platform.emailBindingComplete({
-        challengeId,
-        code: fields.code.value.trim(),
-        newPassword: fields.password.value || ''
-      });
+      const result = state.platformAuthBindingKind === 'account'
+        ? await window.pddMonitor.platform.accountEmailBindingComplete({
+          challengeId,
+          code: fields.code.value.trim()
+        })
+        : await window.pddMonitor.platform.emailBindingComplete({
+          challengeId,
+          code: fields.code.value.trim(),
+          newPassword: fields.password.value || ''
+        });
       await finishPlatformSignIn(result.profile);
       return;
     }
@@ -1368,6 +1417,8 @@ async function submitResetForm(event) {
 
 async function finishPlatformSignIn(profile) {
   clearWechatPollTimer();
+  state.platformAuthBindingKind = null;
+  state.platformAuthChallengeId = null;
   state.platform.status = 'signed_in';
   state.platform.profile = profile;
   elements.platformLoginModal.hidden = true;
@@ -1443,6 +1494,7 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
     }
     if (result.state === 'binding_required') {
       clearWechatPollTimer();
+      state.platformAuthBindingKind = 'device';
       setPlatformAuthMode('email-binding');
       authFields('email-binding').email.focus();
       return;

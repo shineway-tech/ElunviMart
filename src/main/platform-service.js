@@ -14,6 +14,18 @@ function toPaymentContext(value) {
   };
 }
 
+function toSecurity(value) {
+  const source = value || {};
+  return {
+    wechatBound: Boolean(source.wechat_bound ?? source.wechatBound),
+    maskedEmail: source.masked_email ?? source.maskedEmail ?? null,
+    passwordConfigured: Boolean(source.password_configured ?? source.passwordConfigured),
+    availableActions: Array.isArray(source.available_actions)
+      ? source.available_actions
+      : Array.isArray(source.availableActions) ? source.availableActions : []
+  };
+}
+
 function toWallet(value) {
   if (!value) return null;
   return {
@@ -90,7 +102,29 @@ class PlatformService {
   async getSecurity() {
     await this.requireSignedIn();
     const response = await this.client.request('/v1/me/security');
-    return response.data;
+    return toSecurity(response.data);
+  }
+
+  async requestAuthenticatedEmailBindingCode(email) {
+    await this.requireSignedIn();
+    if (!String(email || '').trim()) throw new Error('请输入邮箱');
+    const response = await this.client.request('/v1/me/email-binding-challenges', {
+      method: 'POST',
+      body: { email: String(email).trim() }
+    });
+    return { challengeId: response.data.challenge_id, expiresAt: response.data.expires_at };
+  }
+
+  async completeAuthenticatedEmailBinding({ challengeId, code }) {
+    await this.requireSignedIn();
+    if (!String(challengeId || '').trim() || !String(code || '').trim()) {
+      throw new Error('验证码不能为空');
+    }
+    const response = await this.client.request('/v1/me/email-binding', {
+      method: 'POST',
+      body: { challenge_id: challengeId, code }
+    });
+    return toSecurity(response.data);
   }
 
   async getTeamAccountState() {

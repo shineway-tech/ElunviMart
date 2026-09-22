@@ -93,6 +93,10 @@ function requireSignedInStore() {
   return store;
 }
 
+function requiresEmailBinding(security) {
+  return Array.isArray(security?.availableActions) && security.availableActions.includes('bind_email');
+}
+
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
@@ -385,8 +389,13 @@ function registerIpc(adapter) {
     if (!platformService || !(await platformSession.accessToken())) return { status: 'signed_out' };
     try {
       const profile = await platformService.getProfile();
+      const security = await platformService.getSecurity();
+      if (requiresEmailBinding(security)) {
+        closeActiveStore();
+        return { status: 'binding_required', profile, security };
+      }
       activateUserStore(profile.userId);
-      return { status: 'signed_in', profile };
+      return { status: 'signed_in', profile, security };
     } catch (error) {
       if (['AUTH_REQUIRED', 'authentication_required'].includes(error.code) || error.status === 401) {
         await platformService.logout();
@@ -398,9 +407,14 @@ function registerIpc(adapter) {
   });
   ipcMain.handle('platform:login', async (_event, { email, password }) => {
     const profile = await platformService.loginWithPassword(String(email || '').trim(), String(password || ''));
+    const security = await platformService.getSecurity();
+    if (requiresEmailBinding(security)) {
+      closeActiveStore();
+      return { status: 'binding_required', profile, security };
+    }
     activateUserStore(profile.userId);
     sendToRenderer('platform:changed', { status: 'signed_in', profile });
-    return { status: 'signed_in', profile };
+    return { status: 'signed_in', profile, security };
   });
   ipcMain.handle('platform:requestRegistrationCode', (_event, email) => platformService.requestRegistrationCode(String(email || '').trim()));
   ipcMain.handle('platform:completeRegistration', async (_event, input) => {
@@ -421,11 +435,19 @@ function registerIpc(adapter) {
     return result;
   });
   ipcMain.handle('platform:emailBindingCode', (_event, email) => platformService.requestEmailBindingCode(String(email || '').trim()));
+  ipcMain.handle('platform:accountEmailBindingCode', (_event, email) => platformService.requestAuthenticatedEmailBindingCode(String(email || '').trim()));
   ipcMain.handle('platform:emailBindingComplete', async (_event, input) => {
     const profile = await platformService.completeEmailBinding(input || {});
     activateUserStore(profile.userId);
     sendToRenderer('platform:changed', { status: 'signed_in', profile });
     return { status: 'signed_in', profile };
+  });
+  ipcMain.handle('platform:accountEmailBindingComplete', async (_event, input) => {
+    const security = await platformService.completeAuthenticatedEmailBinding(input || {});
+    const profile = await platformService.getProfile();
+    activateUserStore(profile.userId);
+    sendToRenderer('platform:changed', { status: 'signed_in', profile });
+    return { status: 'signed_in', profile, security };
   });
   ipcMain.handle('platform:wechatCancel', () => platformService.cancelWechatLogin());
   ipcMain.handle('platform:logout', async () => {
