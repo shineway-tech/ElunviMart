@@ -166,7 +166,6 @@
         <div class="platform-auth-pane">
           <div class="platform-auth-header">
             <div><h2 id="platform-login-title">登录</h2><p id="platform-auth-copy">使用 Elunvi 账号继续</p></div>
-            <button class="icon-button" type="button" id="platform-login-close" aria-label="关闭"><i data-lucide="x"></i></button>
           </div>
           <form id="platform-login-form">
             <label class="field-label" id="platform-email-field"><span>邮箱</span><div class="platform-auth-input"><i data-lucide="mail"></i><input class="input" id="platform-email" type="email" autocomplete="email" required placeholder="name@example.com"></div></label>
@@ -183,7 +182,7 @@
               <div class="platform-wechat-frame"><img id="platform-wechat-frame" alt="微信官方登录二维码" referrerpolicy="no-referrer"></div>
               <p id="platform-wechat-status">请使用微信扫描二维码</p>
               <small id="platform-wechat-countdown"></small>
-              <button class="button" type="button" id="platform-wechat-back">返回其他登录方式</button>
+              <div class="platform-wechat-actions"><button class="button" type="button" id="platform-wechat-refresh"><i data-lucide="refresh-cw"></i><span>刷新二维码</span></button><button class="button" type="button" id="platform-wechat-back">返回登录</button></div>
             </div>
             <div class="platform-auth-links" id="platform-auth-links">
               <div class="platform-auth-link-group">

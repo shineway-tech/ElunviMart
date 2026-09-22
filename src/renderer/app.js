@@ -19,7 +19,8 @@ const state = {
   platformAuthMode: 'login',
   platformAuthChallengeId: null,
   wechatExpiresAt: null,
-  wechatPollTimer: null
+  wechatPollTimer: null,
+  wechatCountdownTimer: null
 };
 
 const elements = {
@@ -58,7 +59,6 @@ const elements = {
   platformAccountMeta: document.querySelector('#platform-account-meta'),
   platformLoginModal: document.querySelector('#platform-login-modal'),
   platformLoginForm: document.querySelector('#platform-login-form'),
-  platformLoginClose: document.querySelector('#platform-login-close'),
   platformLoginSubmit: document.querySelector('#platform-login-submit'),
   platformLoginError: document.querySelector('#platform-login-error'),
   platformLoginErrorText: document.querySelector('#platform-login-error-text'),
@@ -86,6 +86,7 @@ const elements = {
   platformWechatStatus: document.querySelector('#platform-wechat-status'),
   platformWechatCountdown: document.querySelector('#platform-wechat-countdown'),
   platformWechatBack: document.querySelector('#platform-wechat-back'),
+  platformWechatRefresh: document.querySelector('#platform-wechat-refresh'),
   walletContexts: document.querySelector('#wallet-context-list'),
   walletTransactions: document.querySelector('#wallet-transactions-list'),
   teamSummary: document.querySelector('#team-summary-card'),
@@ -295,7 +296,9 @@ function setPlatformAuthInlineError(message = '') {
 
 function clearWechatPollTimer() {
   if (state.wechatPollTimer) window.clearTimeout(state.wechatPollTimer);
+  if (state.wechatCountdownTimer) window.clearInterval(state.wechatCountdownTimer);
   state.wechatPollTimer = null;
+  state.wechatCountdownTimer = null;
   state.wechatExpiresAt = null;
 }
 
@@ -370,13 +373,6 @@ async function requestPlatformCode() {
   } finally {
     elements.platformRequestCode.disabled = false;
   }
-}
-
-function closePlatformLogin() {
-  if (state.platform.status !== 'signed_in') return;
-  clearWechatPollTimer();
-  if (state.platformAuthMode === 'wechat' || state.platformAuthMode === 'email-binding') void window.pddMonitor.platform.wechatCancel();
-  elements.platformLoginModal.hidden = true;
 }
 
 function renderWalletContexts() {
@@ -1190,6 +1186,7 @@ async function beginWechatLogin() {
     setPlatformAuthMode('wechat');
     elements.platformWechatFrame.src = result.qrImageUrl;
     elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
+    startWechatCountdown();
     elements.platformLoginModal.hidden = false;
     void pollWechatLogin(result.pollIntervalSeconds);
   } catch (error) {
@@ -1200,17 +1197,44 @@ async function beginWechatLogin() {
   }
 }
 
-async function pollWechatLogin(retryAfterSeconds = 1) {
-  if (state.platformAuthMode !== 'wechat') return;
+function updateWechatCountdown() {
   const remaining = Date.parse(state.wechatExpiresAt) - Date.now();
   if (!Number.isFinite(remaining) || remaining <= 0) {
     clearWechatPollTimer();
-    elements.platformWechatStatus.textContent = '二维码已过期，请返回后重新扫码';
-    return;
+    elements.platformWechatCountdown.textContent = '二维码已过期';
+    elements.platformWechatStatus.textContent = '二维码已过期，请刷新二维码';
+    return false;
   }
   const minutes = Math.floor(remaining / 60_000);
   const seconds = Math.floor((remaining % 60_000) / 1_000);
   elements.platformWechatCountdown.textContent = `二维码将在 ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} 后过期`;
+  return true;
+}
+
+function startWechatCountdown() {
+  if (state.wechatCountdownTimer) window.clearInterval(state.wechatCountdownTimer);
+  updateWechatCountdown();
+  state.wechatCountdownTimer = window.setInterval(updateWechatCountdown, 1000);
+}
+
+async function refreshWechatLogin() {
+  elements.platformWechatRefresh.disabled = true;
+  clearWechatPollTimer();
+  try {
+    await window.pddMonitor.platform.wechatCancel();
+    await beginWechatLogin();
+  } finally {
+    elements.platformWechatRefresh.disabled = false;
+    refreshIcons();
+  }
+}
+
+async function pollWechatLogin(retryAfterSeconds = 1) {
+  if (state.platformAuthMode !== 'wechat') return;
+  if (!updateWechatCountdown()) {
+    clearWechatPollTimer();
+    return;
+  }
   try {
     const result = await window.pddMonitor.platform.wechatPoll();
     if (state.platformAuthMode !== 'wechat') return;
@@ -1226,11 +1250,13 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
     }
     if (result.state === 'expired') {
       clearWechatPollTimer();
-      elements.platformWechatStatus.textContent = '二维码已过期，请返回后重新扫码';
+      elements.platformWechatCountdown.textContent = '二维码已过期';
+      elements.platformWechatStatus.textContent = '二维码已过期，请刷新二维码';
       return;
     }
     const next = Math.max(1, Number(result.retryAfterSeconds || retryAfterSeconds || 1));
-    state.wechatPollTimer = window.setTimeout(() => void pollWechatLogin(next), Math.min(next * 1000, remaining));
+    const remaining = Date.parse(state.wechatExpiresAt) - Date.now();
+    state.wechatPollTimer = window.setTimeout(() => void pollWechatLogin(next), Math.min(next * 1000, Math.max(1, remaining)));
   } catch (error) {
     clearWechatPollTimer();
     elements.platformWechatStatus.textContent = friendlyError(error) || '微信登录暂时无法确认，请重试';
@@ -1246,15 +1272,13 @@ elements.platformSignin.addEventListener('click', () => showPlatformLogin());
 elements.platformAccount.addEventListener('click', logoutPlatform);
 elements.platformLoginForm.addEventListener('submit', submitPlatformLogin);
 elements.platformWechatStart.addEventListener('click', () => void beginWechatLogin());
+elements.platformWechatRefresh.addEventListener('click', () => void refreshWechatLogin());
 document.querySelectorAll('[data-password-toggle]').forEach((button) => button.addEventListener('click', () => togglePasswordVisibility(button)));
 elements.platformWechatBack.addEventListener('click', async () => {
   clearWechatPollTimer();
   await window.pddMonitor.platform.wechatCancel();
   setPlatformAuthMode('login');
 });
-elements.platformLoginClose.addEventListener('click', closePlatformLogin);
-// The redesigned auth surface uses the close icon as its only dismiss action.
-elements.platformLoginModal.addEventListener('click', (event) => { if (event.target === elements.platformLoginModal) closePlatformLogin(); });
 elements.teamActionForm.addEventListener('submit', submitTeamAction);
 elements.teamActionCancel.addEventListener('click', closeTeamAction);
 elements.teamActionClose.addEventListener('click', closeTeamAction);
