@@ -71,6 +71,7 @@ const elements = {
   platformWechatStart: document.querySelector('#platform-wechat-start'),
   platformWechatPanel: document.querySelector('#platform-wechat-panel'),
   platformWechatFrame: document.querySelector('#platform-wechat-frame'),
+  platformWechatBridge: document.querySelector('#platform-wechat-bridge'),
   platformWechatStatus: document.querySelector('#platform-wechat-status'),
   platformWechatCountdown: document.querySelector('#platform-wechat-countdown'),
   platformWechatBack: document.querySelector('#platform-wechat-back'),
@@ -480,6 +481,7 @@ function clearWechatPollTimer() {
   state.wechatPollTimer = null;
   state.wechatCountdownTimer = null;
   state.wechatExpiresAt = null;
+  if (elements.platformWechatBridge) elements.platformWechatBridge.src = 'about:blank';
 }
 
 function setPlatformAuthMode(mode) {
@@ -1383,6 +1385,7 @@ async function beginWechatLogin() {
     state.wechatExpiresAt = result.expiresAt;
     setPlatformAuthMode('wechat');
     elements.platformWechatFrame.src = result.qrImageUrl;
+    if (elements.platformWechatBridge) elements.platformWechatBridge.src = result.authorizationUrl || result.wechatStartUri;
     elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
     startWechatCountdown();
     elements.platformLoginModal.hidden = false;
@@ -1451,7 +1454,7 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
       elements.platformWechatStatus.textContent = '二维码已过期，请刷新二维码';
       return;
     }
-    elements.platformWechatStatus.textContent = '正在确认微信登录…';
+    elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
     const next = Math.max(1, Number(result.retryAfterSeconds || retryAfterSeconds || 1));
     const remaining = Date.parse(state.wechatExpiresAt) - Date.now();
     state.wechatPollTimer = window.setTimeout(() => void pollWechatLogin(next), Math.min(next * 1000, Math.max(1, remaining)));

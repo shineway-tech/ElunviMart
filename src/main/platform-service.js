@@ -339,10 +339,10 @@ class PlatformService {
   async startWechatLogin() {
     this.wechatFlow = await this.createDeviceFlow();
     const wechatStartUri = resolveWechatStartUri(this.wechatFlow.authorizationUrl, this.config, this.wechatFlow.deviceSessionId);
-    const qrImageUrl = await fetchWechatQrImageUrl(wechatStartUri, this.fetchImpl);
+    const { imageUrl: qrImageUrl, pageUrl: authorizationUrl } = await fetchWechatQrPage(wechatStartUri, this.fetchImpl);
     return {
       wechatStartUri,
-      authorizationUrl: wechatStartUri,
+      authorizationUrl,
       qrImageUrl,
       expiresAt: this.wechatFlow.expiresAt,
       pollIntervalSeconds: this.wechatFlow.pollIntervalSeconds
@@ -453,7 +453,7 @@ function resolveWechatStartUri(value, config, deviceSessionId) {
   return parsed.toString();
 }
 
-async function fetchWechatQrImageUrl(startUri, fetchImpl) {
+async function fetchWechatQrPage(startUri, fetchImpl) {
   if (typeof fetchImpl !== 'function') throw new Error('当前运行环境不支持微信二维码加载');
   let response;
   try {
@@ -476,7 +476,7 @@ async function fetchWechatQrImageUrl(startUri, fetchImpl) {
   if (imageUrl.origin !== pageUrl.origin || !imageUrl.pathname.startsWith('/connect/qrcode/')) {
     throw new Error('微信二维码地址不受支持');
   }
-  return imageUrl.toString();
+  return { imageUrl: imageUrl.toString(), pageUrl: pageUrl.toString() };
 }
 
 module.exports = {

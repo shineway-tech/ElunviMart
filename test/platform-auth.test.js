@@ -74,6 +74,7 @@ test('PlatformService polls WeChat device login and supports required email bind
   });
   const started = await service.startWechatLogin();
   assert.match(started.wechatStartUri, /\/v1\/auth\/wechat\/start/);
+  assert.equal(started.authorizationUrl, 'https://open.weixin.qq.com/connect/qrconnect');
   assert.equal(started.qrImageUrl, 'https://open.weixin.qq.com/connect/qrcode/test-code');
   assert.deepEqual(await service.pollWechatLogin(), { state: 'pending', retryAfterSeconds: 1 });
   assert.deepEqual(await service.pollWechatLogin(), { state: 'binding_required' });
