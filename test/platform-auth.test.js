@@ -119,3 +119,35 @@ test('PlatformService completes the WeChat callback through the long-poll result
   assert.equal(fetchCalls.some((url) => url.includes('code=approved-code') && url.includes('state=state-callback')), true);
   assert.equal(calls.some((call) => call.path.endsWith('/token')), true);
 });
+
+test('PlatformService exposes a scanned state before WeChat confirmation', async () => {
+  let tokenPolls = 0;
+  let qrPolls = 0;
+  const service = new PlatformService({
+    client: { request: async (path) => {
+      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat-scanned', device_secret: 'secret-wechat-scanned', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 1, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat-scanned' } };
+      if (path.endsWith('/token')) {
+        tokenPolls += 1;
+        throw Object.assign(new Error('pending'), { status: 429, code: 'AUTH_REQUIRED' });
+      }
+      throw new Error(`unexpected path ${path}`);
+    } },
+    session: new PlatformSession({ tokenStore: new MemoryTokenStore() }),
+    config: { apiBaseUrl: 'https://elunvi-api.honeykid.cn', clientId: 'elunvi-mart-macos', redirectUri: 'elunvi-mart://auth/callback', scopes: [] },
+    fetchImpl: async (url) => {
+      if (String(url).startsWith('https://long.open.weixin.qq.com/')) {
+        qrPolls += 1;
+        if (qrPolls === 1) return { ok: true, status: 200, text: async () => 'window.wx_errcode=404;window.wx_code=\'\';' };
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { ok: true, status: 200, text: async () => 'window.wx_errcode=408;window.wx_code=\'\';' };
+      }
+      return { ok: true, status: 200, url: 'https://open.weixin.qq.com/connect/qrconnect?redirect_uri=https%3A%2F%2Felunvi-api.honeykid.cn%2Fv1%2Fauth%2Fwechat%2Fcallback&state=state-scanned', text: async () => '<img class="js_qrcode_img" src="/connect/qrcode/qr-scanned">' };
+    }
+  });
+  await service.startWechatLogin();
+  assert.deepEqual(await service.pollWechatLogin(), { state: 'pending', retryAfterSeconds: 1 });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(await service.pollWechatLogin(), { state: 'scanned', retryAfterSeconds: 1 });
+  assert.equal(tokenPolls, 1);
+  service.cancelWechatLogin();
+});

@@ -24,7 +24,8 @@ const state = {
   platformAuthCodeRequesting: { register: false, reset: false },
   wechatExpiresAt: null,
   wechatPollTimer: null,
-  wechatCountdownTimer: null
+  wechatCountdownTimer: null,
+  wechatScanned: false
 };
 
 const elements = {
@@ -480,6 +481,7 @@ function clearWechatPollTimer() {
   state.wechatPollTimer = null;
   state.wechatCountdownTimer = null;
   state.wechatExpiresAt = null;
+  state.wechatScanned = false;
 }
 
 function setPlatformAuthMode(mode) {
@@ -1451,7 +1453,12 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
       elements.platformWechatStatus.textContent = '二维码已过期，请刷新二维码';
       return;
     }
-    elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
+    if (result.state === 'scanned') {
+      state.wechatScanned = true;
+      elements.platformWechatStatus.textContent = '已扫描，请在微信中点击确认登录';
+    } else if (!state.wechatScanned) {
+      elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
+    }
     const next = Math.max(1, Number(result.retryAfterSeconds || retryAfterSeconds || 1));
     const remaining = Date.parse(state.wechatExpiresAt) - Date.now();
     state.wechatPollTimer = window.setTimeout(() => void pollWechatLogin(next), Math.min(next * 1000, Math.max(1, remaining)));

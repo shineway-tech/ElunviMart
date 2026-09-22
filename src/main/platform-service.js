@@ -344,6 +344,7 @@ class PlatformService {
     this.wechatFlow.qrUuid = qrUuid;
     this.wechatFlow.qrPollPromise = null;
     this.wechatFlow.qrAuthorized = false;
+    this.wechatFlow.qrScanned = false;
     return {
       wechatStartUri,
       authorizationUrl,
@@ -361,6 +362,9 @@ class PlatformService {
       return { state: 'expired' };
     }
     startWechatQrWatcher(this, flow);
+    if (flow.qrScanned && !flow.qrAuthorized) {
+      return { state: 'scanned', retryAfterSeconds: flow.pollIntervalSeconds };
+    }
     try {
       const tokenResponse = await this.client.request(`/v1/auth/device-sessions/${encodeURIComponent(flow.deviceSessionId)}/token`, {
         method: 'POST',
@@ -500,6 +504,11 @@ async function watchWechatQr(service, flow) {
       await completeWechatQrCallback(flow, service.config, result.code, service.fetchImpl);
       if (service.wechatFlow === flow) flow.qrAuthorized = true;
       return;
+    }
+    if (result.errorCode === 404) {
+      flow.qrScanned = true;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      continue;
     }
     if (result.errorCode === 402) {
       flow.qrExpired = true;
