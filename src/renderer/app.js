@@ -18,6 +18,7 @@ const state = {
   teamActionMode: null,
   platformAuthMode: 'login',
   platformAuthChallengeId: null,
+  platformAuthChallenges: { register: null, reset: null },
   wechatExpiresAt: null,
   wechatPollTimer: null,
   wechatCountdownTimer: null
@@ -59,27 +60,11 @@ const elements = {
   platformAccountMeta: document.querySelector('#platform-account-meta'),
   platformLoginModal: document.querySelector('#platform-login-modal'),
   platformLoginForm: document.querySelector('#platform-login-form'),
-  platformLoginSubmit: document.querySelector('#platform-login-submit'),
-  platformLoginError: document.querySelector('#platform-login-error'),
-  platformLoginErrorText: document.querySelector('#platform-login-error-text'),
   platformAuthCopy: document.querySelector('#platform-auth-copy'),
-  platformAuthLinks: document.querySelector('#platform-auth-links'),
-  platformAuthInlineError: document.querySelector('#platform-auth-inline-error'),
-  platformAuthFeedback: document.querySelector('#platform-auth-feedback'),
-  platformAuthLinksCopy: document.querySelector('#platform-auth-links-copy'),
-  platformAuthRegisterLink: document.querySelector('#platform-auth-register-link'),
-  platformAuthResetLink: document.querySelector('#platform-auth-reset-link'),
-  platformAuthLoginLink: document.querySelector('#platform-auth-login-link'),
-  platformEmailField: document.querySelector('#platform-email-field'),
-  platformCodeField: document.querySelector('#platform-code-field'),
-  platformCode: document.querySelector('#platform-code'),
-  platformRequestCode: document.querySelector('#platform-request-code'),
-  platformPassword: document.querySelector('#platform-password'),
-  platformPasswordField: document.querySelector('#platform-password-field'),
-  platformConfirmPasswordField: document.querySelector('#platform-confirm-password-field'),
-  platformConfirmPassword: document.querySelector('#platform-confirm-password'),
-  platformLoginActions: document.querySelector('#platform-login-actions'),
-  platformAuthDivider: document.querySelector('#platform-auth-divider'),
+  platformAuthForms: document.querySelector('.platform-auth-forms'),
+  platformLoginServerError: document.querySelector('#platform-login-server-error'),
+  platformRegisterServerError: document.querySelector('#platform-register-server-error'),
+  platformResetServerError: document.querySelector('#platform-reset-server-error'),
   platformWechatStart: document.querySelector('#platform-wechat-start'),
   platformWechatPanel: document.querySelector('#platform-wechat-panel'),
   platformWechatFrame: document.querySelector('#platform-wechat-frame'),
@@ -280,18 +265,154 @@ function setPlatformShell(status) {
 function showPlatformLogin(message = '') {
   clearWechatPollTimer();
   setPlatformAuthMode('login');
-  setPlatformAuthInlineError(message);
-  elements.platformLoginError.hidden = true;
+  setServerError('login', message);
   elements.platformLoginModal.hidden = false;
-  document.querySelector('#platform-email').focus();
+  authFields('login').email.focus();
 }
 
-function setPlatformAuthInlineError(message = '') {
-  const hasMessage = Boolean(message);
-  elements.platformAuthInlineError.textContent = message;
-  elements.platformAuthInlineError.title = message;
-  elements.platformAuthInlineError.hidden = !hasMessage;
-  elements.platformAuthFeedback.hidden = state.platformAuthMode === 'wechat' || (state.platformAuthMode !== 'login' && !hasMessage);
+function authModeKey(mode = state.platformAuthMode) {
+  return mode === 'email-binding' ? 'reset' : mode;
+}
+
+function authFields(mode = state.platformAuthMode) {
+  const key = authModeKey(mode);
+  const prefix = `platform-${key}`;
+  return {
+    form: document.querySelector(`#${prefix}-form`),
+    email: document.querySelector(`#${prefix}-email`),
+    code: key === 'login' ? null : document.querySelector(`#${prefix}-code`),
+    requestCode: key === 'login' ? null : document.querySelector(`#${prefix}-request-code`),
+    password: document.querySelector(`#${prefix}-password`),
+    confirm: key === 'login' ? null : document.querySelector(`#${prefix}-confirm`),
+    submit: document.querySelector(`#${prefix}-form button[type="submit"]`),
+    errors: {
+      email: document.querySelector(`#${prefix}-email-error`),
+      code: key === 'login' ? null : document.querySelector(`#${prefix}-code-error`),
+      password: document.querySelector(`#${prefix}-password-error`),
+      confirm: key === 'login' ? null : document.querySelector(`#${prefix}-confirm-error`)
+    },
+    serverError: document.querySelector(`#${prefix}-server-error`)
+  };
+}
+
+function setAuthError(node, message = '') {
+  if (!node) return;
+  const text = String(message || '');
+  node.textContent = text;
+  node.title = text;
+  node.classList.toggle('is-visible', Boolean(text));
+}
+
+function setFieldValidation(fields, name, message = '') {
+  const input = fields[name];
+  const errorNode = fields.errors[name];
+  if (input) {
+    input.setCustomValidity(message);
+    input.toggleAttribute('aria-invalid', Boolean(message));
+  }
+  // Keep field-specific messages out of document flow; the browser displays
+  // the custom validity message as a native input tooltip.
+  setAuthError(errorNode);
+}
+
+function reportFirstInvalid(fields) {
+  const input = [fields.email, fields.code, fields.password, fields.confirm]
+    .find((candidate) => candidate && !candidate.checkValidity());
+  if (!input) return true;
+  input.focus();
+  input.reportValidity();
+  return false;
+}
+
+function clearAuthErrors(mode = state.platformAuthMode) {
+  const fields = authFields(mode);
+  ['email', 'code', 'password', 'confirm'].forEach((name) => setFieldValidation(fields, name));
+  setAuthError(fields.serverError);
+}
+
+function setServerError(mode, message = '') {
+  setAuthError(authFields(mode).serverError, message);
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value);
+}
+
+function validateAuthFields(mode, { requireCode = true, onlyEmail = false } = {}) {
+  const key = authModeKey(mode);
+  const fields = authFields(mode);
+  ['email', 'code', 'password', 'confirm'].forEach((name) => setFieldValidation(fields, name));
+  let valid = true;
+  const email = fields.email?.value.trim() || '';
+  if (!email) {
+    setFieldValidation(fields, 'email', '请输入邮箱');
+    valid = false;
+  } else if (!isValidEmail(email)) {
+    setFieldValidation(fields, 'email', '请输入正确的邮箱地址');
+    valid = false;
+  }
+  if (onlyEmail) {
+    if (!valid) reportFirstInvalid(fields);
+    return valid;
+  }
+  if (key === 'login') {
+    if (!fields.password?.value) {
+      setFieldValidation(fields, 'password', '请输入密码');
+      valid = false;
+    }
+    if (!valid) reportFirstInvalid(fields);
+    return valid;
+  }
+  if (requireCode && !fields.code?.value.trim()) {
+    setFieldValidation(fields, 'code', '请输入邮箱验证码');
+    valid = false;
+  } else if (requireCode && !/^\d{4,8}$/u.test(fields.code.value.trim())) {
+    setFieldValidation(fields, 'code', '请输入正确的验证码');
+    valid = false;
+  }
+  if (mode !== 'email-binding' && !fields.password?.value) {
+    setFieldValidation(fields, 'password', '请输入密码');
+    valid = false;
+  }
+  if (key !== 'reset' || mode !== 'email-binding') {
+    if (!fields.confirm?.value) {
+      setFieldValidation(fields, 'confirm', '请再次输入密码');
+      valid = false;
+    } else if (fields.password?.value !== fields.confirm.value) {
+      setFieldValidation(fields, 'confirm', '两次输入的密码不一致');
+      valid = false;
+    }
+  }
+  if (!valid) reportFirstInvalid(fields);
+  return valid;
+}
+
+function updateAuthFormLabels(mode) {
+  const key = authModeKey(mode);
+  const fields = authFields(mode);
+  if (!fields.form) return;
+  if (fields.submit) {
+    const hasChallenge = key === 'register'
+      ? Boolean(state.platformAuthChallenges.register)
+      : key === 'reset'
+        ? Boolean(state.platformAuthChallenges.reset || state.platformAuthChallengeId)
+        : false;
+    const label = mode === 'email-binding'
+      ? (state.platformAuthChallengeId ? '完成绑定' : '先获取验证码')
+      : key === 'login'
+        ? '登录'
+        : key === 'register'
+          ? '注册'
+          : '提交';
+    const span = fields.submit.querySelector('span');
+    if (span) span.textContent = label;
+  }
+  if (fields.requestCode) {
+    const hasChallenge = mode === 'email-binding'
+      ? Boolean(state.platformAuthChallengeId)
+      : Boolean(state.platformAuthChallenges[key]);
+    fields.requestCode.textContent = hasChallenge ? '重新获取' : '获取验证码';
+  }
 }
 
 function clearWechatPollTimer() {
@@ -304,74 +425,52 @@ function clearWechatPollTimer() {
 
 function setPlatformAuthMode(mode) {
   state.platformAuthMode = mode;
-  state.platformAuthChallengeId = null;
   const isWechat = mode === 'wechat';
+  const key = authModeKey(mode);
+  const isLogin = key === 'login';
+  const isRegister = key === 'register';
   const isBinding = mode === 'email-binding';
-  const isLogin = mode === 'login';
-  const isRegister = mode === 'register';
   document.querySelector('#platform-login-title').textContent = isWechat ? '微信扫码登录' : isBinding ? '绑定邮箱' : isLogin ? '登录' : isRegister ? '注册' : '忘记密码';
-  const login = mode === 'login';
-  const register = isRegister;
   elements.platformAuthCopy.hidden = isWechat;
-  elements.platformEmailField.hidden = isWechat;
-  elements.platformCodeField.hidden = isLogin || isWechat;
-  elements.platformPasswordField.hidden = isWechat;
-  elements.platformConfirmPasswordField.hidden = login || isWechat || isBinding;
-  elements.platformLoginActions.hidden = isWechat;
+  elements.platformAuthCopy.textContent = isBinding ? '为微信账号绑定邮箱' : isLogin ? '使用 Elunvi 账号继续' : isRegister ? '创建账号后即可使用 Mart' : '输入验证码并设置新密码';
+  document.querySelectorAll('.platform-auth-form').forEach((form) => {
+    form.hidden = isWechat || form.id !== `platform-${key}-form`;
+  });
+  elements.platformAuthForms.hidden = isWechat;
   elements.platformWechatStart.hidden = !isLogin;
-  elements.platformAuthDivider.hidden = !isLogin;
   elements.platformWechatPanel.hidden = !isWechat;
-  elements.platformAuthLinks.hidden = isWechat || isBinding;
-  elements.platformAuthLinksCopy.textContent = isLogin ? '还没有 Elunvi 账号？' : '已有 Elunvi 账号？';
-  elements.platformAuthRegisterLink.hidden = !isLogin;
-  elements.platformAuthResetLink.hidden = !isLogin;
-  elements.platformAuthLoginLink.hidden = isLogin;
-  elements.platformLoginError.hidden = true;
-  setPlatformAuthInlineError();
+  clearAuthErrors(mode);
+  updateAuthFormLabels(mode);
   if (!isWechat) elements.platformWechatFrame.src = 'about:blank';
   document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.platformAuthMode === mode);
     button.setAttribute('aria-selected', button.dataset.platformAuthMode === mode ? 'true' : 'false');
   });
-  elements.platformAuthCopy.textContent = isBinding ? '为微信账号绑定邮箱' : login ? '使用 Elunvi 账号继续' : register ? '创建账号后即可使用 Mart' : '输入验证码并设置新密码';
-  elements.platformPasswordField.hidden = isWechat;
-  elements.platformPassword.required = mode !== 'login' && !isBinding;
-  elements.platformPassword.autocomplete = register || mode === 'reset' ? 'new-password' : 'current-password';
-  elements.platformConfirmPasswordField.hidden = login || isWechat || isBinding;
-  elements.platformConfirmPassword.required = !login && !isBinding;
-  elements.platformLoginSubmit.querySelector('span').textContent = isBinding ? (state.platformAuthChallengeId ? '完成绑定' : '先获取验证码') : login ? '登录' : register ? (state.platformAuthChallengeId ? '完成注册' : '先获取验证码') : (state.platformAuthChallengeId ? '重置密码' : '先获取验证码');
-  elements.platformRequestCode.textContent = state.platformAuthChallengeId ? '重新获取' : '获取验证码';
-  elements.platformLoginError.hidden = true;
 }
 
-async function requestPlatformCode() {
-  setPlatformAuthInlineError();
-  const email = document.querySelector('#platform-email').value.trim();
-  if (!email) {
-    elements.platformLoginErrorText.textContent = '请先输入邮箱';
-    elements.platformLoginError.hidden = false;
-    return;
-  }
-  elements.platformRequestCode.disabled = true;
-  elements.platformLoginError.hidden = true;
+async function requestPlatformCode(mode = state.platformAuthMode) {
+  const key = authModeKey(mode);
+  const fields = authFields(mode);
+  if (!validateAuthFields(mode, { onlyEmail: true })) return false;
+  fields.requestCode.disabled = true;
+  setServerError(mode);
   try {
-    const result = state.platformAuthMode === 'register'
-      ? await window.pddMonitor.platform.requestRegistrationCode(email)
-      : state.platformAuthMode === 'email-binding'
-        ? await window.pddMonitor.platform.emailBindingCode(email)
-        : await window.pddMonitor.platform.requestPasswordResetCode(email);
-    setPlatformAuthMode(state.platformAuthMode);
-    state.platformAuthChallengeId = result.challengeId;
-    elements.platformLoginSubmit.querySelector('span').textContent = state.platformAuthMode === 'register' ? '完成注册' : '重置密码';
-    elements.platformRequestCode.textContent = '重新获取';
-    elements.platformCode.focus();
-    elements.platformLoginErrorText.textContent = '验证码已发送，请检查邮箱。';
-    elements.platformLoginError.hidden = false;
+    const result = key === 'register'
+      ? await window.pddMonitor.platform.requestRegistrationCode(fields.email.value.trim())
+      : mode === 'email-binding'
+        ? await window.pddMonitor.platform.emailBindingCode(fields.email.value.trim())
+        : await window.pddMonitor.platform.requestPasswordResetCode(fields.email.value.trim());
+    if (mode === 'email-binding') state.platformAuthChallengeId = result.challengeId;
+    else state.platformAuthChallenges[key] = result.challengeId;
+    updateAuthFormLabels(mode);
+    fields.code.focus();
+    setServerError(mode, '验证码已发送，请检查邮箱。');
+    return true;
   } catch (error) {
-    elements.platformLoginErrorText.textContent = friendlyError(error) || '验证码发送失败，请稍后重试';
-    elements.platformLoginError.hidden = false;
+    setServerError(mode, friendlyError(error) || '验证码发送失败，请稍后重试');
+    return false;
   } finally {
-    elements.platformRequestCode.disabled = false;
+    fields.requestCode.disabled = false;
   }
 }
 
@@ -1113,55 +1212,87 @@ function updateChannelVisibility() {
   document.querySelector('#dingtalk-channel').classList.toggle('is-enabled', document.querySelector('#dingtalk-enabled').checked);
 }
 
-async function submitPlatformLogin(event) {
+async function submitLoginForm(event) {
   event.preventDefault();
-  const submit = elements.platformLoginSubmit;
-  const email = document.querySelector('#platform-email').value.trim();
-  const password = document.querySelector('#platform-password').value;
-  const code = elements.platformCode.value.trim();
-  const confirmPassword = elements.platformConfirmPassword.value;
-  if (!email || (state.platformAuthMode === 'login' && !password)) return;
-  if (state.platformAuthMode !== 'login' && !state.platformAuthChallengeId) {
-    await requestPlatformCode();
-    return;
-  }
-  if (state.platformAuthMode === 'email-binding' && !code) {
-    elements.platformLoginErrorText.textContent = '请输入邮箱验证码';
-    elements.platformLoginError.hidden = false;
-    return;
-  }
-  if (state.platformAuthMode !== 'login' && state.platformAuthMode !== 'email-binding' && (!code || !confirmPassword || password !== confirmPassword)) {
-    elements.platformLoginErrorText.textContent = password !== confirmPassword ? '两次输入的密码不一致' : '请输入验证码和确认密码';
-    elements.platformLoginError.hidden = false;
-    return;
-  }
-  submit.disabled = true;
-  elements.platformLoginError.hidden = true;
-  setPlatformAuthInlineError();
+  const fields = authFields('login');
+  if (!validateAuthFields('login')) return;
+  setServerError('login');
+  fields.submit.disabled = true;
   try {
-    let result;
-    if (state.platformAuthMode === 'login') {
-      result = await window.pddMonitor.platform.login({ email, password });
-    } else if (state.platformAuthMode === 'register') {
-      result = await window.pddMonitor.platform.completeRegistration({ challengeId: state.platformAuthChallengeId, code, password });
-    } else if (state.platformAuthMode === 'email-binding') {
-      result = await window.pddMonitor.platform.emailBindingComplete({ challengeId: state.platformAuthChallengeId, code, newPassword: password || '' });
-    } else {
-      await window.pddMonitor.platform.resetPassword({ challengeId: state.platformAuthChallengeId, code, newPassword: password });
-      setPlatformAuthMode('login');
-      elements.platformPassword.value = '';
-      elements.platformConfirmPassword.value = '';
-      elements.platformCode.value = '';
-      elements.platformLoginErrorText.textContent = '密码已重置，请使用新密码登录。';
-      elements.platformLoginError.hidden = false;
-      return;
-    }
+    const result = await window.pddMonitor.platform.login({
+      email: fields.email.value.trim(),
+      password: fields.password.value
+    });
     await finishPlatformSignIn(result.profile);
   } catch (error) {
-    setPlatformAuthInlineError(friendlyError(error) || '登录失败，请稍后重试');
-    elements.platformLoginError.hidden = true;
+    setServerError('login', friendlyError(error) || '登录失败，请稍后重试');
   } finally {
-    submit.disabled = false;
+    fields.submit.disabled = false;
+  }
+}
+
+async function submitRegistrationForm(event) {
+  event.preventDefault();
+  const mode = 'register';
+  const fields = authFields(mode);
+  if (!validateAuthFields(mode, { requireCode: Boolean(state.platformAuthChallenges.register) })) return;
+  if (!state.platformAuthChallenges.register) {
+    await requestPlatformCode(mode);
+    return;
+  }
+  setServerError(mode);
+  fields.submit.disabled = true;
+  try {
+    const result = await window.pddMonitor.platform.completeRegistration({
+      challengeId: state.platformAuthChallenges.register,
+      code: fields.code.value.trim(),
+      password: fields.password.value
+    });
+    await finishPlatformSignIn(result.profile);
+  } catch (error) {
+    setServerError(mode, friendlyError(error) || '注册失败，请稍后重试');
+  } finally {
+    fields.submit.disabled = false;
+  }
+}
+
+async function submitResetForm(event) {
+  event.preventDefault();
+  const mode = state.platformAuthMode === 'email-binding' ? 'email-binding' : 'reset';
+  const fields = authFields(mode);
+  const challengeId = mode === 'email-binding' ? state.platformAuthChallengeId : state.platformAuthChallenges.reset;
+  if (!validateAuthFields(mode, { requireCode: Boolean(challengeId) })) return;
+  if (!challengeId) {
+    await requestPlatformCode(mode);
+    return;
+  }
+  setServerError(mode);
+  fields.submit.disabled = true;
+  try {
+    if (mode === 'email-binding') {
+      const result = await window.pddMonitor.platform.emailBindingComplete({
+        challengeId,
+        code: fields.code.value.trim(),
+        newPassword: fields.password.value || ''
+      });
+      await finishPlatformSignIn(result.profile);
+      return;
+    }
+    await window.pddMonitor.platform.resetPassword({
+      challengeId,
+      code: fields.code.value.trim(),
+      newPassword: fields.password.value
+    });
+    state.platformAuthChallenges.reset = null;
+    fields.password.value = '';
+    fields.confirm.value = '';
+    fields.code.value = '';
+    setPlatformAuthMode('login');
+    setServerError('login', '密码已重置，请使用新密码登录。');
+  } catch (error) {
+    setServerError(mode, friendlyError(error) || (mode === 'email-binding' ? '邮箱绑定失败，请稍后重试' : '重置密码失败，请稍后重试'));
+  } finally {
+    fields.submit.disabled = false;
   }
 }
 
@@ -1178,8 +1309,7 @@ async function finishPlatformSignIn(profile) {
 
 async function beginWechatLogin() {
   elements.platformWechatStart.disabled = true;
-  elements.platformLoginError.hidden = true;
-  setPlatformAuthInlineError();
+  setServerError('login');
   try {
     const result = await window.pddMonitor.platform.wechatStart();
     state.wechatExpiresAt = result.expiresAt;
@@ -1190,8 +1320,7 @@ async function beginWechatLogin() {
     elements.platformLoginModal.hidden = false;
     void pollWechatLogin(result.pollIntervalSeconds);
   } catch (error) {
-    elements.platformLoginErrorText.textContent = friendlyError(error) || '微信登录暂时无法开始';
-    elements.platformLoginError.hidden = false;
+    setServerError('login', friendlyError(error) || '微信登录暂时无法开始');
   } finally {
     elements.platformWechatStart.disabled = false;
   }
@@ -1245,7 +1374,7 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
     if (result.state === 'binding_required') {
       clearWechatPollTimer();
       setPlatformAuthMode('email-binding');
-      elements.platformEmail.focus();
+      authFields('email-binding').email.focus();
       return;
     }
     if (result.state === 'expired') {
@@ -1265,12 +1394,15 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
 
 document.querySelectorAll('.nav-button').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
 document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => button.addEventListener('click', () => setPlatformAuthMode(button.dataset.platformAuthMode)));
-elements.platformRequestCode.addEventListener('click', () => void requestPlatformCode());
+document.querySelector('#platform-register-request-code').addEventListener('click', () => void requestPlatformCode('register'));
+document.querySelector('#platform-reset-request-code').addEventListener('click', () => void requestPlatformCode('reset'));
 document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', () => openLoginModal()));
 elements.addAccount.addEventListener('click', () => openLoginModal());
 elements.platformSignin.addEventListener('click', () => showPlatformLogin());
 elements.platformAccount.addEventListener('click', logoutPlatform);
-elements.platformLoginForm.addEventListener('submit', submitPlatformLogin);
+elements.platformLoginForm.addEventListener('submit', submitLoginForm);
+document.querySelector('#platform-register-form').addEventListener('submit', submitRegistrationForm);
+document.querySelector('#platform-reset-form').addEventListener('submit', submitResetForm);
 elements.platformWechatStart.addEventListener('click', () => void beginWechatLogin());
 elements.platformWechatRefresh.addEventListener('click', () => void refreshWechatLogin());
 document.querySelectorAll('[data-password-toggle]').forEach((button) => button.addEventListener('click', () => togglePasswordVisibility(button)));
