@@ -1,6 +1,6 @@
 # Elunvi Mart Platform Integration Design
 
-日期：2026-09-22  
+日期：2026-09-22
 状态：已获用户确认的设计方向，待规格审阅
 
 ## 1. 目标与边界
