@@ -414,8 +414,13 @@ class PlatformService {
         accessExpiresAt: tokenResponse.data.access_expires_at,
         refreshExpiresAt: tokenResponse.data.refresh_expires_at
       });
+      const profile = await this.getProfile();
+      const security = await this.getSecurity();
+      if (security.availableActions.includes('bind_email')) {
+        return { state: 'binding_required', bindingKind: 'account', profile };
+      }
       this.wechatFlow = null;
-      return { state: 'signed_in', profile: await this.getProfile() };
+      return { state: 'signed_in', profile };
     } catch (error) {
       if (error.status === 401 || (error.status === 429 && error.code === 'AUTH_REQUIRED')) {
         return { state: 'pending', retryAfterSeconds: flow.pollIntervalSeconds };

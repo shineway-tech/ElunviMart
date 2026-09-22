@@ -1494,7 +1494,7 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
     }
     if (result.state === 'binding_required') {
       clearWechatPollTimer();
-      state.platformAuthBindingKind = 'device';
+      state.platformAuthBindingKind = result.bindingKind || 'device';
       setPlatformAuthMode('email-binding');
       authFields('email-binding').email.focus();
       return;

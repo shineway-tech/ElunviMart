@@ -444,6 +444,7 @@ function registerIpc(adapter) {
   });
   ipcMain.handle('platform:accountEmailBindingComplete', async (_event, input) => {
     const security = await platformService.completeAuthenticatedEmailBinding(input || {});
+    platformService.cancelWechatLogin();
     const profile = await platformService.getProfile();
     activateUserStore(profile.userId);
     sendToRenderer('platform:changed', { status: 'signed_in', profile });
