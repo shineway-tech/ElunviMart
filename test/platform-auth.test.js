@@ -56,7 +56,7 @@ test('PlatformService polls WeChat device login and supports required email bind
   const service = new PlatformService({
     client: { request: async (path, options) => {
       calls.push({ path, options });
-      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat', device_secret: 'secret-wechat', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 1, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat' } };
+      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat', device_secret: 'secret-wechat', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 5, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat' } };
       if (path.endsWith('/token')) {
         tokenPolls += 1;
         if (tokenPolls === 1) throw Object.assign(new Error('pending'), { status: 429, code: 'AUTH_REQUIRED' });
@@ -73,6 +73,7 @@ test('PlatformService polls WeChat device login and supports required email bind
     fetchImpl: async () => ({ ok: true, url: 'https://open.weixin.qq.com/connect/qrconnect', text: async () => '<img class="js_qrcode_img" src="/connect/qrcode/test-code">' })
   });
   const started = await service.startWechatLogin();
+  assert.equal(started.pollIntervalSeconds, 1);
   assert.match(started.wechatStartUri, /\/v1\/auth\/wechat\/start/);
   assert.equal(started.authorizationUrl, 'https://open.weixin.qq.com/connect/qrconnect');
   assert.equal(started.qrImageUrl, 'https://open.weixin.qq.com/connect/qrcode/test-code');
@@ -92,7 +93,7 @@ test('PlatformService completes the WeChat callback through the long-poll result
   const service = new PlatformService({
     client: { request: async (path, options) => {
       calls.push({ path, options });
-      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat-callback', device_secret: 'secret-wechat-callback', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 1, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat-callback' } };
+      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat-callback', device_secret: 'secret-wechat-callback', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 5, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat-callback' } };
       if (path.endsWith('/token')) {
         tokenPolls += 1;
         if (tokenPolls === 1) throw Object.assign(new Error('pending'), { status: 429, code: 'AUTH_REQUIRED' });
@@ -126,7 +127,7 @@ test('PlatformService exposes a scanned state before WeChat confirmation', async
   const qrUrls = [];
   const service = new PlatformService({
     client: { request: async (path) => {
-      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat-scanned', device_secret: 'secret-wechat-scanned', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 1, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat-scanned' } };
+      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat-scanned', device_secret: 'secret-wechat-scanned', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 5, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat-scanned' } };
       if (path.endsWith('/token')) {
         tokenPolls += 1;
         throw Object.assign(new Error('pending'), { status: 429, code: 'AUTH_REQUIRED' });

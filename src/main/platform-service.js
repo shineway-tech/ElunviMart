@@ -338,6 +338,8 @@ class PlatformService {
 
   async startWechatLogin() {
     this.wechatFlow = await this.createDeviceFlow();
+    // Mart uses a one-second status check regardless of Platform's suggested interval.
+    this.wechatFlow.pollIntervalSeconds = 1;
     const wechatStartUri = resolveWechatStartUri(this.wechatFlow.authorizationUrl, this.config, this.wechatFlow.deviceSessionId);
     const { imageUrl: qrImageUrl, pageUrl: authorizationUrl, qrUuid } = await fetchWechatQrPage(wechatStartUri, this.fetchImpl);
     this.wechatFlow.authorizationUrl = authorizationUrl;
