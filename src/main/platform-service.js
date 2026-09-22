@@ -339,7 +339,11 @@ class PlatformService {
   async startWechatLogin() {
     this.wechatFlow = await this.createDeviceFlow();
     const wechatStartUri = resolveWechatStartUri(this.wechatFlow.authorizationUrl, this.config, this.wechatFlow.deviceSessionId);
-    const { imageUrl: qrImageUrl, pageUrl: authorizationUrl } = await fetchWechatQrPage(wechatStartUri, this.fetchImpl);
+    const { imageUrl: qrImageUrl, pageUrl: authorizationUrl, qrUuid } = await fetchWechatQrPage(wechatStartUri, this.fetchImpl);
+    this.wechatFlow.authorizationUrl = authorizationUrl;
+    this.wechatFlow.qrUuid = qrUuid;
+    this.wechatFlow.qrPollPromise = null;
+    this.wechatFlow.qrAuthorized = false;
     return {
       wechatStartUri,
       authorizationUrl,
@@ -356,6 +360,7 @@ class PlatformService {
       this.wechatFlow = null;
       return { state: 'expired' };
     }
+    startWechatQrWatcher(this, flow);
     try {
       const tokenResponse = await this.client.request(`/v1/auth/device-sessions/${encodeURIComponent(flow.deviceSessionId)}/token`, {
         method: 'POST',
@@ -476,7 +481,75 @@ async function fetchWechatQrPage(startUri, fetchImpl) {
   if (imageUrl.origin !== pageUrl.origin || !imageUrl.pathname.startsWith('/connect/qrcode/')) {
     throw new Error('微信二维码地址不受支持');
   }
-  return { imageUrl: imageUrl.toString(), pageUrl: pageUrl.toString() };
+  return { imageUrl: imageUrl.toString(), pageUrl: pageUrl.toString(), qrUuid: imageUrl.pathname.split('/').pop() };
+}
+
+function startWechatQrWatcher(service, flow) {
+  if (!flow.qrUuid || flow.qrPollPromise || flow.qrAuthorized || flow.qrCallbackStarted) return;
+  flow.qrPollPromise = watchWechatQr(service, flow)
+    .catch(() => {})
+    .finally(() => { flow.qrPollPromise = null; });
+}
+
+async function watchWechatQr(service, flow) {
+  while (service.wechatFlow === flow && (!flow.expiresAt || Date.now() < Date.parse(flow.expiresAt))) {
+    const result = await fetchWechatQrStatus(flow.qrUuid, service.fetchImpl);
+    if (!result) return;
+    if (result.errorCode === 405 && result.code) {
+      flow.qrCallbackStarted = true;
+      await completeWechatQrCallback(flow, service.config, result.code, service.fetchImpl);
+      if (service.wechatFlow === flow) flow.qrAuthorized = true;
+      return;
+    }
+    if (result.errorCode === 402) {
+      flow.qrExpired = true;
+      return;
+    }
+    if (result.errorCode === 403) {
+      flow.qrCancelled = true;
+      return;
+    }
+  }
+}
+
+async function fetchWechatQrStatus(qrUuid, fetchImpl) {
+  if (typeof fetchImpl !== 'function') return null;
+  const url = `https://long.open.weixin.qq.com/connect/l/qrconnect?uuid=${encodeURIComponent(qrUuid)}`;
+  let response;
+  try {
+    response = await fetchImpl(url, { redirect: 'follow' });
+  } catch {
+    return null;
+  }
+  if (!response?.ok) return null;
+  const body = await response.text();
+  const errorCode = Number(body.match(/window\.wx_errcode\s*=\s*(-?\d+)/u)?.[1]);
+  if (!Number.isFinite(errorCode)) return null;
+  const code = body.match(/window\.wx_code\s*=\s*['"]([^'"]*)['"]/u)?.[1] || '';
+  return { errorCode, code };
+}
+
+async function completeWechatQrCallback(flow, config, code, fetchImpl) {
+  let pageUrl;
+  try { pageUrl = new URL(flow.authorizationUrl); } catch { throw new Error('微信登录地址无效'); }
+  const redirectValue = pageUrl.searchParams.get('redirect_uri');
+  const state = pageUrl.searchParams.get('state');
+  if (!redirectValue || !state) throw new Error('微信回调参数缺失');
+  let callbackUrl;
+  let apiBase;
+  try {
+    apiBase = new URL(config.apiBaseUrl);
+    callbackUrl = new URL(redirectValue);
+  } catch {
+    throw new Error('微信回调地址无效');
+  }
+  if (callbackUrl.origin !== apiBase.origin || callbackUrl.pathname !== '/v1/auth/wechat/callback') {
+    throw new Error('微信回调地址不受支持');
+  }
+  callbackUrl.searchParams.set('code', code);
+  callbackUrl.searchParams.set('state', state);
+  const response = await fetchImpl(callbackUrl.toString(), { redirect: 'manual' });
+  if (!response?.ok) throw new Error('Platform 未确认微信登录');
 }
 
 module.exports = {

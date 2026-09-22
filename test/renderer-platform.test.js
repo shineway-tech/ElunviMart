@@ -18,7 +18,6 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.match(html, /id="platform-reset-request-code"/);
   assert.match(html, /id="platform-wechat-start"/);
   assert.match(html, /id="platform-wechat-frame"/);
-  assert.match(html, /id="platform-wechat-bridge"/);
   assert.match(html, /id="platform-wechat-refresh"/);
   assert.match(html, /id="platform-wechat-countdown"/);
   assert.match(html, /class="platform-auth-brand"/);

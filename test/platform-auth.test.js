@@ -84,3 +84,38 @@ test('PlatformService polls WeChat device login and supports required email bind
   assert.equal(profile.userId, 'wechat-user');
   assert.equal(calls.some((call) => call.path.endsWith('/email-binding')), true);
 });
+
+test('PlatformService completes the WeChat callback through the long-poll result', async () => {
+  const calls = [];
+  let tokenPolls = 0;
+  const fetchCalls = [];
+  const service = new PlatformService({
+    client: { request: async (path, options) => {
+      calls.push({ path, options });
+      if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat-callback', device_secret: 'secret-wechat-callback', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 1, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat-callback' } };
+      if (path.endsWith('/token')) {
+        tokenPolls += 1;
+        if (tokenPolls === 1) throw Object.assign(new Error('pending'), { status: 429, code: 'AUTH_REQUIRED' });
+        return { data: { access_token: 'wechat-access', refresh_token: 'wechat-refresh' } };
+      }
+      if (path === '/v1/me/profile') return { data: { user_id: 'wechat-user', display_name: 'WeChat User' } };
+      throw new Error(`unexpected path ${path}`);
+    } },
+    session: new PlatformSession({ tokenStore: new MemoryTokenStore() }),
+    config: { apiBaseUrl: 'https://elunvi-api.honeykid.cn', clientId: 'elunvi-mart-macos', redirectUri: 'elunvi-mart://auth/callback', scopes: [] },
+    fetchImpl: async (url) => {
+      fetchCalls.push(String(url));
+      if (String(url).startsWith('https://long.open.weixin.qq.com/')) return { ok: true, status: 200, text: async () => "window.wx_errcode=405;window.wx_code='approved-code';" };
+      if (String(url).startsWith('https://elunvi-api.honeykid.cn/v1/auth/wechat/callback')) return { ok: true, status: 204, text: async () => '' };
+      return { ok: true, status: 200, url: 'https://open.weixin.qq.com/connect/qrconnect?redirect_uri=https%3A%2F%2Felunvi-api.honeykid.cn%2Fv1%2Fauth%2Fwechat%2Fcallback&state=state-callback', text: async () => '<img class="js_qrcode_img" src="/connect/qrcode/qr-callback">' };
+    }
+  });
+  await service.startWechatLogin();
+  assert.deepEqual(await service.pollWechatLogin(), { state: 'pending', retryAfterSeconds: 1 });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const profile = await service.pollWechatLogin();
+  assert.equal(profile.state, 'signed_in');
+  assert.equal(fetchCalls.some((url) => url.startsWith('https://long.open.weixin.qq.com/')), true);
+  assert.equal(fetchCalls.some((url) => url.includes('code=approved-code') && url.includes('state=state-callback')), true);
+  assert.equal(calls.some((call) => call.path.endsWith('/token')), true);
+});

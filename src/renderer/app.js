@@ -71,7 +71,6 @@ const elements = {
   platformWechatStart: document.querySelector('#platform-wechat-start'),
   platformWechatPanel: document.querySelector('#platform-wechat-panel'),
   platformWechatFrame: document.querySelector('#platform-wechat-frame'),
-  platformWechatBridge: document.querySelector('#platform-wechat-bridge'),
   platformWechatStatus: document.querySelector('#platform-wechat-status'),
   platformWechatCountdown: document.querySelector('#platform-wechat-countdown'),
   platformWechatBack: document.querySelector('#platform-wechat-back'),
@@ -481,7 +480,6 @@ function clearWechatPollTimer() {
   state.wechatPollTimer = null;
   state.wechatCountdownTimer = null;
   state.wechatExpiresAt = null;
-  if (elements.platformWechatBridge) elements.platformWechatBridge.src = 'about:blank';
 }
 
 function setPlatformAuthMode(mode) {
@@ -1385,7 +1383,6 @@ async function beginWechatLogin() {
     state.wechatExpiresAt = result.expiresAt;
     setPlatformAuthMode('wechat');
     elements.platformWechatFrame.src = result.qrImageUrl;
-    if (elements.platformWechatBridge) elements.platformWechatBridge.src = result.authorizationUrl || result.wechatStartUri;
     elements.platformWechatStatus.textContent = '请使用微信扫描二维码';
     startWechatCountdown();
     elements.platformLoginModal.hidden = false;
