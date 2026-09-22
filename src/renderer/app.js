@@ -64,6 +64,7 @@ const elements = {
   platformLoginErrorText: document.querySelector('#platform-login-error-text'),
   platformAuthCopy: document.querySelector('#platform-auth-copy'),
   platformAuthLinks: document.querySelector('#platform-auth-links'),
+  platformAuthInlineError: document.querySelector('#platform-auth-inline-error'),
   platformAuthLinksCopy: document.querySelector('#platform-auth-links-copy'),
   platformAuthRegisterLink: document.querySelector('#platform-auth-register-link'),
   platformAuthResetLink: document.querySelector('#platform-auth-reset-link'),
@@ -277,10 +278,19 @@ function setPlatformShell(status) {
 function showPlatformLogin(message = '') {
   clearWechatPollTimer();
   setPlatformAuthMode('login');
+  setPlatformAuthInlineError(message);
   elements.platformLoginError.hidden = !message;
   elements.platformLoginErrorText.textContent = message;
   elements.platformLoginModal.hidden = false;
   document.querySelector('#platform-email').focus();
+}
+
+function setPlatformAuthInlineError(message = '') {
+  const hasMessage = Boolean(message);
+  elements.platformAuthInlineError.textContent = message;
+  elements.platformAuthInlineError.title = message;
+  elements.platformAuthInlineError.hidden = !hasMessage;
+  elements.platformAuthLinks.classList.toggle('has-inline-error', hasMessage);
 }
 
 function clearWechatPollTimer() {
@@ -314,6 +324,7 @@ function setPlatformAuthMode(mode) {
   elements.platformAuthResetLink.hidden = !isLogin;
   elements.platformAuthLoginLink.hidden = isLogin;
   elements.platformLoginError.hidden = true;
+  setPlatformAuthInlineError();
   if (!isWechat) elements.platformWechatFrame.src = 'about:blank';
   document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => {
     button.classList.toggle('is-active', button.dataset.platformAuthMode === mode);
@@ -331,6 +342,7 @@ function setPlatformAuthMode(mode) {
 }
 
 async function requestPlatformCode() {
+  setPlatformAuthInlineError();
   const email = document.querySelector('#platform-email').value.trim();
   if (!email) {
     elements.platformLoginErrorText.textContent = '请先输入邮箱';
@@ -1129,6 +1141,7 @@ async function submitPlatformLogin(event) {
   }
   submit.disabled = true;
   elements.platformLoginError.hidden = true;
+  setPlatformAuthInlineError();
   try {
     let result;
     if (state.platformAuthMode === 'login') {
@@ -1149,8 +1162,8 @@ async function submitPlatformLogin(event) {
     }
     await finishPlatformSignIn(result.profile);
   } catch (error) {
-    elements.platformLoginErrorText.textContent = friendlyError(error) || '登录失败，请稍后重试';
-    elements.platformLoginError.hidden = false;
+    setPlatformAuthInlineError(friendlyError(error) || '登录失败，请稍后重试');
+    elements.platformLoginError.hidden = true;
   } finally {
     submit.disabled = false;
   }
@@ -1170,6 +1183,7 @@ async function finishPlatformSignIn(profile) {
 async function beginWechatLogin() {
   elements.platformWechatStart.disabled = true;
   elements.platformLoginError.hidden = true;
+  setPlatformAuthInlineError();
   try {
     const result = await window.pddMonitor.platform.wechatStart();
     state.wechatExpiresAt = result.expiresAt;

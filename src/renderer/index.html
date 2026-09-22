@@ -182,10 +182,13 @@
               <button class="button" type="button" id="platform-wechat-back">返回其他登录方式</button>
             </div>
             <div class="platform-auth-links" id="platform-auth-links">
-              <span id="platform-auth-links-copy">还没有 Elunvi 账号？</span>
-              <button class="link-button" type="button" data-platform-auth-mode="register" id="platform-auth-register-link">立即注册</button>
-              <button class="link-button" type="button" data-platform-auth-mode="reset" id="platform-auth-reset-link">忘记密码</button>
-              <button class="link-button" type="button" data-platform-auth-mode="login" id="platform-auth-login-link" hidden>返回登录</button>
+              <span class="platform-auth-inline-error" id="platform-auth-inline-error" role="alert" hidden></span>
+              <div class="platform-auth-link-group">
+                <span id="platform-auth-links-copy">还没有 Elunvi 账号？</span>
+                <button class="link-button" type="button" data-platform-auth-mode="register" id="platform-auth-register-link">立即注册</button>
+                <button class="link-button" type="button" data-platform-auth-mode="reset" id="platform-auth-reset-link">忘记密码</button>
+                <button class="link-button" type="button" data-platform-auth-mode="login" id="platform-auth-login-link" hidden>返回登录</button>
+              </div>
             </div>
           </form>
         </div>

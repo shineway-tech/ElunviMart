@@ -17,6 +17,7 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.match(html, /class="platform-auth-brand"/);
   assert.match(html, /id="platform-auth-register-link"/);
   assert.match(html, /id="platform-auth-reset-link"/);
+  assert.match(html, /id="platform-auth-inline-error"/);
   assert.match(html, /platform-auth-illustration\.png/);
   assert.match(html, /本地商家的店铺监控助手/);
   assert.match(html, /更专注，更高效/);
