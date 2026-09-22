@@ -324,6 +324,12 @@ function reportFirstInvalid(fields) {
   return false;
 }
 
+function reportChallengeRequired(fields) {
+  setFieldValidation(fields, 'code', '请先点击获取验证码');
+  fields.code?.focus();
+  fields.code?.reportValidity();
+}
+
 function clearAuthErrors(mode = state.platformAuthMode) {
   const fields = authFields(mode);
   ['email', 'code', 'password', 'confirm'].forEach((name) => setFieldValidation(fields, name));
@@ -1236,7 +1242,10 @@ async function submitRegistrationForm(event) {
   const mode = 'register';
   const fields = authFields(mode);
   if (!validateAuthFields(mode)) return;
-  if (!state.platformAuthChallenges.register) return;
+  if (!state.platformAuthChallenges.register) {
+    reportChallengeRequired(fields);
+    return;
+  }
   setServerError(mode);
   fields.submit.disabled = true;
   try {
@@ -1259,7 +1268,10 @@ async function submitResetForm(event) {
   const fields = authFields(mode);
   const challengeId = mode === 'email-binding' ? state.platformAuthChallengeId : state.platformAuthChallenges.reset;
   if (!validateAuthFields(mode)) return;
-  if (!challengeId) return;
+  if (!challengeId) {
+    reportChallengeRequired(fields);
+    return;
+  }
   setServerError(mode);
   fields.submit.disabled = true;
   try {
