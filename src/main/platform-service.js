@@ -496,9 +496,11 @@ function startWechatQrWatcher(service, flow) {
 }
 
 async function watchWechatQr(service, flow) {
+  let lastErrorCode = null;
   while (service.wechatFlow === flow && (!flow.expiresAt || Date.now() < Date.parse(flow.expiresAt))) {
-    const result = await fetchWechatQrStatus(flow.qrUuid, service.fetchImpl);
+    const result = await fetchWechatQrStatus(flow.qrUuid, service.fetchImpl, lastErrorCode);
     if (!result) return;
+    lastErrorCode = result.errorCode;
     if (result.errorCode === 405 && result.code) {
       flow.qrCallbackStarted = true;
       await completeWechatQrCallback(flow, service.config, result.code, service.fetchImpl);
@@ -518,12 +520,15 @@ async function watchWechatQr(service, flow) {
       flow.qrCancelled = true;
       return;
     }
+    if (result.errorCode === 666) return;
   }
 }
 
-async function fetchWechatQrStatus(qrUuid, fetchImpl) {
+async function fetchWechatQrStatus(qrUuid, fetchImpl, lastErrorCode = null) {
   if (typeof fetchImpl !== 'function') return null;
-  const url = `https://long.open.weixin.qq.com/connect/l/qrconnect?uuid=${encodeURIComponent(qrUuid)}`;
+  const query = new URLSearchParams({ uuid: qrUuid });
+  if (Number.isFinite(lastErrorCode)) query.set('last', String(lastErrorCode));
+  const url = `https://long.open.weixin.qq.com/connect/l/qrconnect?${query.toString()}`;
   let response;
   try {
     response = await fetchImpl(url, { redirect: 'follow' });

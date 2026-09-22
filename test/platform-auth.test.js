@@ -123,6 +123,7 @@ test('PlatformService completes the WeChat callback through the long-poll result
 test('PlatformService exposes a scanned state before WeChat confirmation', async () => {
   let tokenPolls = 0;
   let qrPolls = 0;
+  const qrUrls = [];
   const service = new PlatformService({
     client: { request: async (path) => {
       if (path === '/v1/auth/device-sessions') return { data: { device_session_id: 'device-wechat-scanned', device_secret: 'secret-wechat-scanned', expires_at: new Date(Date.now() + 60_000).toISOString(), poll_interval_seconds: 1, wechat_start_uri: '/v1/auth/wechat/start?device_session_id=device-wechat-scanned' } };
@@ -136,11 +137,14 @@ test('PlatformService exposes a scanned state before WeChat confirmation', async
     config: { apiBaseUrl: 'https://elunvi-api.honeykid.cn', clientId: 'elunvi-mart-macos', redirectUri: 'elunvi-mart://auth/callback', scopes: [] },
     fetchImpl: async (url) => {
       if (String(url).startsWith('https://long.open.weixin.qq.com/')) {
+        qrUrls.push(String(url));
         qrPolls += 1;
         if (qrPolls === 1) return { ok: true, status: 200, text: async () => 'window.wx_errcode=404;window.wx_code=\'\';' };
+        if (new URL(url).searchParams.get('last') === '404') return { ok: true, status: 200, text: async () => "window.wx_errcode=405;window.wx_code='approved-code';" };
         await new Promise((resolve) => setTimeout(resolve, 50));
         return { ok: true, status: 200, text: async () => 'window.wx_errcode=408;window.wx_code=\'\';' };
       }
+      if (String(url).startsWith('https://elunvi-api.honeykid.cn/v1/auth/wechat/callback')) return { ok: true, status: 204, text: async () => '' };
       return { ok: true, status: 200, url: 'https://open.weixin.qq.com/connect/qrconnect?redirect_uri=https%3A%2F%2Felunvi-api.honeykid.cn%2Fv1%2Fauth%2Fwechat%2Fcallback&state=state-scanned', text: async () => '<img class="js_qrcode_img" src="/connect/qrcode/qr-scanned">' };
     }
   });
@@ -148,6 +152,9 @@ test('PlatformService exposes a scanned state before WeChat confirmation', async
   assert.deepEqual(await service.pollWechatLogin(), { state: 'pending', retryAfterSeconds: 1 });
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert.deepEqual(await service.pollWechatLogin(), { state: 'scanned', retryAfterSeconds: 1 });
-  assert.equal(tokenPolls, 1);
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.deepEqual(await service.pollWechatLogin(), { state: 'pending', retryAfterSeconds: 1 });
+  assert.equal(qrUrls.some((url) => new URL(url).searchParams.get('last') === '404'), true);
+  assert.equal(tokenPolls, 2);
   service.cancelWechatLogin();
 });
