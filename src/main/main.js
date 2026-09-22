@@ -1,15 +1,11 @@
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage } = require('electron');
 const { SqliteStore } = require('./store');
 const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./merchant-profile');
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
 const { assertWebhook, sendChannelTest, sendConfiguredNotifications } = require('./notifier');
 const { MonitorScheduler } = require('./scheduler');
-const { ELUNVI_PLATFORM_CONFIG, validatePlatformConfig } = require('./platform-config');
-const { PlatformClient } = require('./platform-client');
-const { SafeTokenStore } = require('./platform-session');
-const { registerPlatformIpc } = require('./platform-ipc');
 const {
   reconcileProducts,
   buildStatusAlert,
@@ -404,20 +400,6 @@ app.whenReady().then(() => {
     getAntiContent: (id) => antiContentByAccount.get(id) || '',
     ensureBidPage
   });
-  const platformConfig = validatePlatformConfig({
-      ...ELUNVI_PLATFORM_CONFIG,
-      clientId: ELUNVI_PLATFORM_CONFIG.clients[process.platform] || ELUNVI_PLATFORM_CONFIG.clients.darwin
-  });
-  const platformClient = new PlatformClient({
-    config: platformConfig,
-    tokenStore: new SafeTokenStore({ userDataPath, safeStorage })
-  });
-  const storedPlatformSession = platformClient.tokenStore?.load?.();
-  if (storedPlatformSession) {
-    platformClient.refresh().catch((error) => {
-      console.error('Platform session refresh failed:', error.code || error.message);
-    });
-  }
   scheduler = new MonitorScheduler(async (accountId) => {
     const account = store.getAccount(accountId);
     if (!account) return;
@@ -435,7 +417,6 @@ app.whenReady().then(() => {
     }
   }, () => store.getAccounts());
   registerIpc(adapter);
-  registerPlatformIpc(ipcMain, { client: platformClient, shell });
   scheduler.configure(publicSettings(store.getSettings()));
   createMainWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createMainWindow(); });
