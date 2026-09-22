@@ -127,6 +127,28 @@ class PlatformService {
     return toSecurity(response.data);
   }
 
+  async requestAuthenticatedPasswordCode(email) {
+    await this.requireSignedIn();
+    if (!String(email || '').trim()) throw new Error('请输入邮箱');
+    const response = await this.client.request('/v1/me/email-binding-challenges', {
+      method: 'POST',
+      body: { email: String(email).trim() }
+    });
+    return { challengeId: response.data.challenge_id, expiresAt: response.data.expires_at };
+  }
+
+  async completeAuthenticatedPassword({ challengeId, code, newPassword }) {
+    await this.requireSignedIn();
+    if (!String(challengeId || '').trim() || !String(code || '').trim() || !String(newPassword || '').trim()) {
+      throw new Error('验证码和新密码不能为空');
+    }
+    const response = await this.client.request('/v1/me/password', {
+      method: 'POST',
+      body: { challenge_id: challengeId, code, new_password: newPassword }
+    });
+    return toSecurity(response.data);
+  }
+
   async getTeamAccountState() {
     await this.requireSignedIn();
     const response = await this.client.request('/v1/me/team-account-state');
@@ -420,7 +442,7 @@ class PlatformService {
         return { state: 'binding_required', bindingKind: 'account', profile };
       }
       this.wechatFlow = null;
-      return { state: 'signed_in', profile };
+      return { state: 'signed_in', profile, security };
     } catch (error) {
       if (error.status === 401 || (error.status === 429 && error.code === 'AUTH_REQUIRED')) {
         return { state: 'pending', retryAfterSeconds: flow.pollIntervalSeconds };

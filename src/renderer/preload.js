@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     emailBindingComplete: (input) => ipcRenderer.invoke('platform:emailBindingComplete', input),
     accountEmailBindingCode: (email) => ipcRenderer.invoke('platform:accountEmailBindingCode', email),
     accountEmailBindingComplete: (input) => ipcRenderer.invoke('platform:accountEmailBindingComplete', input),
+    accountPasswordCode: (email) => ipcRenderer.invoke('platform:accountPasswordCode', email),
+    accountPasswordComplete: (input) => ipcRenderer.invoke('platform:accountPasswordComplete', input),
     wechatCancel: () => ipcRenderer.invoke('platform:wechatCancel'),
     logout: () => ipcRenderer.invoke('platform:logout'),
     profile: () => ipcRenderer.invoke('platform:profile'),

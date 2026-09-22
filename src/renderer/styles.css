@@ -170,3 +170,28 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-modal .platform-wechat-frame{width:260px;height:260px}
 .platform-auth-modal .platform-wechat-panel .button{border-radius:7px}
 @media(max-height:700px){.platform-auth-layout{min-height:0}.platform-auth-brand{padding:54px 24px 22px}.platform-auth-brand-mark{width:38px;height:38px}.platform-auth-brand-heading>strong{font-size:20px}.platform-auth-brand>p{margin-top:16px;font-size:13px}.platform-auth-illustration{max-width:205px;margin-top:30px}.platform-auth-pane{padding:22px 28px}.platform-auth-header{margin-bottom:18px}.platform-auth-modal form{gap:12px}}
+
+/* Sidebar account control: keep identity and account actions together at the bottom. */
+.sidebar-footer{position:relative;margin-top:auto;padding-top:18px;border-top:1px solid #303740}
+.platform-account-wrap{position:relative}
+.platform-account{width:100%;min-width:0;padding:7px 8px;border:1px solid transparent;border-radius:11px;color:#eef2f7;background:transparent;text-align:left}
+.platform-account:hover,.platform-account[aria-expanded="true"]{border-color:#394452;background:#242b35}
+.platform-account-copy{min-width:0;flex:1}
+.platform-account strong,.platform-account small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.platform-account strong{color:#f5f7fa;font-size:12px;font-weight:600}
+.platform-account small{color:#aab3c0;font-size:11px}
+.platform-account-chevron{flex:0 0 auto;width:15px!important;color:#aab3c0}
+.platform-avatar{width:34px;height:34px;overflow:hidden;border-radius:50%;color:#ff6a60;background:#303946}
+.platform-avatar img{display:block;width:100%;height:100%;object-fit:cover}
+.platform-avatar svg{width:17px;height:17px;color:#d7dee7}
+.platform-account-menu{position:absolute;right:0;bottom:calc(100% + 10px);z-index:15;width:218px;padding:8px;border:1px solid #dfe4ea;border-radius:10px;background:#fff;box-shadow:0 14px 34px rgba(14,23,35,.22)}
+.platform-account-menu:after{content:"";position:absolute;right:24px;bottom:-7px;width:12px;height:12px;border-right:1px solid #dfe4ea;border-bottom:1px solid #dfe4ea;background:#fff;transform:rotate(45deg)}
+.platform-account-menu-heading{display:grid;gap:3px;padding:7px 9px 9px;border-bottom:1px solid #edf0f3}
+.platform-account-menu-heading span{color:#252b33;font-size:12px;font-weight:600}
+.platform-account-menu-heading small{overflow:hidden;color:#8b95a1;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.platform-account-menu-item{position:relative;z-index:1;display:flex;align-items:center;gap:9px;width:100%;min-height:38px;padding:8px 9px;border:0;border-radius:7px;color:#303844;background:transparent;cursor:pointer;text-align:left;font-size:13px}
+.platform-account-menu-item:hover{background:#f5f7f9}
+.platform-account-menu-item svg{width:17px;height:17px;color:#707b88}
+.platform-account-menu-item.is-danger{margin-top:5px;border-top:1px solid #edf0f3;border-radius:0 0 7px 7px;color:var(--accent)}
+.platform-account-menu-item.is-danger svg{color:var(--accent)}
+.platform-account-menu[hidden]{display:none}

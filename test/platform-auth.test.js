@@ -28,6 +28,27 @@ test('PlatformService validates the password reset payload before sending it', a
   await assert.rejects(() => service.resetPassword({ challengeId: '', code: '', newPassword: '' }), /验证码和新密码不能为空/);
 });
 
+test('PlatformService changes the authenticated password through an email challenge', async () => {
+  const calls = [];
+  const service = new PlatformService({
+    client: {
+      request: async (path, options) => {
+        calls.push({ path, options });
+        if (path === '/v1/me/email-binding-challenges') return { data: { challenge_id: 'password-change-1', expires_at: '2026-09-22T08:00:00Z' } };
+        if (path === '/v1/me/password') return { data: { password_configured: true, available_actions: [] } };
+        throw new Error(`unexpected path ${path}`);
+      }
+    },
+    session: new PlatformSession({ tokenStore: new MemoryTokenStore({ accessToken: 'access', refreshToken: 'refresh' }) }),
+    config: { apiBaseUrl: 'https://elunvi-api.honeykid.cn', clientId: 'elunvi-mart-macos', redirectUri: 'elunvi-mart://auth/callback', scopes: [] }
+  });
+  const challenge = await service.requestAuthenticatedPasswordCode('person@example.com');
+  const security = await service.completeAuthenticatedPassword({ challengeId: challenge.challengeId, code: '123456', newPassword: 'new-password-1' });
+  assert.equal(security.passwordConfigured, true);
+  assert.deepEqual(calls.map((call) => call.path), ['/v1/me/email-binding-challenges', '/v1/me/password']);
+  assert.deepEqual(calls[1].options.body, { challenge_id: 'password-change-1', code: '123456', new_password: 'new-password-1' });
+});
+
 test('PlatformService binds an email for an authenticated user', async () => {
   const calls = [];
   const service = new PlatformService({
