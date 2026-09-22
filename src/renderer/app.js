@@ -1,3 +1,5 @@
+const platformUi = window.ElunviPlatformUI;
+
 const state = {
   accounts: [],
   currentAccount: null,
@@ -8,7 +10,18 @@ const state = {
   syncInProgress: false,
   loginAccountId: null,
   loginMode: 'create',
-  pendingRemoval: null
+  pendingRemoval: null,
+  platform: {
+    authenticated: false,
+    profile: null,
+    wallet: null,
+    packages: [],
+    checkout: null,
+    attempt: null,
+    paymentBusy: false,
+    wechatBusy: false,
+    lastError: null
+  }
 };
 
 const elements = {
@@ -42,6 +55,7 @@ const elements = {
   removeAccountDescription: document.querySelector('#remove-account-description'),
   confirmRemoveAccount: document.querySelector('#confirm-remove-account')
 };
+elements.platformRoot = document.querySelector('#platform-view');
 
 const PRODUCT_PAGE_SIZE = 10;
 
@@ -237,6 +251,7 @@ function showView(name) {
   document.querySelectorAll('.nav-button').forEach((button) => button.classList.toggle('is-active', button.dataset.view === name));
   const isAccounts = name === 'accounts';
   const isSettings = name === 'settings';
+  const isPlatform = name === 'platform';
   elements.addAccount.hidden = !isAccounts;
   elements.pageMeta.hidden = true;
   elements.pageBack.hidden = true;
@@ -245,6 +260,9 @@ function showView(name) {
   } else if (isSettings) {
     elements.title.textContent = '监控设置';
     loadSettings();
+  } else if (isPlatform) {
+    elements.title.textContent = '平台账户';
+    loadPlatformStatus();
   }
   hideNotice();
 }
@@ -460,6 +478,155 @@ async function syncProducts() {
   }
 }
 
+function platformErrorMessage(error) {
+  const message = String(error?.message || error || '平台操作没有完成，请稍后重试。');
+  const requestId = error?.requestId ? `（请求 ID：${error.requestId}）` : '';
+  return `${message}${requestId}`;
+}
+
+function renderPlatform() {
+  platformUi.renderPlatform(elements.platformRoot, state.platform);
+  const hint = document.querySelector('#platform-wechat-hint');
+  if (hint) {
+    hint.hidden = !state.platform.wechatBusy;
+    hint.textContent = state.platform.wechatBusy ? '已打开系统浏览器，请完成微信扫码；客户端会自动等待登录结果。' : '';
+  }
+  const passwordLogin = document.querySelector('#platform-password-login');
+  const wechatLogin = document.querySelector('#platform-wechat-login');
+  if (passwordLogin) passwordLogin.disabled = state.platform.wechatBusy || state.platform.paymentBusy;
+  if (wechatLogin) wechatLogin.disabled = state.platform.wechatBusy || state.platform.paymentBusy;
+  const closeButton = document.querySelector('#platform-close-payment');
+  if (closeButton) closeButton.hidden = !state.platform.checkout || !['pending', 'manual_review'].includes(state.platform.checkout.state);
+  refreshIcons();
+}
+
+async function loadPlatformStatus() {
+  try {
+    const status = await window.pddMonitor.platform.status();
+    state.platform = { ...state.platform, ...status, lastError: status.lastError || null };
+    if (state.platform.authenticated && state.platform.packages.length === 0) state.platform.packages = await window.pddMonitor.platform.packages();
+    renderPlatform();
+  } catch (error) {
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  }
+}
+
+async function loginPlatformWithPassword(event) {
+  event.preventDefault();
+  const email = document.querySelector('#platform-email');
+  const password = document.querySelector('#platform-password');
+  const button = document.querySelector('#platform-password-login');
+  try {
+    button.disabled = true;
+    const status = await window.pddMonitor.platform.loginWithPassword(email.value.trim(), password.value);
+    state.platform = { ...state.platform, ...status, packages: await window.pddMonitor.platform.packages(), lastError: null };
+    email.value = '';
+    password.value = '';
+    renderPlatform();
+  } catch (error) {
+    password.value = '';
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function completePlatformWechatLogin() {
+  try {
+    const result = await window.pddMonitor.platform.completeWechatLogin();
+    if (result?.state === 'pending') {
+      window.setTimeout(completePlatformWechatLogin, Math.max(1000, Number(state.platform.pollIntervalSeconds || 2) * 1000));
+      return;
+    }
+    state.platform = { ...state.platform, ...result, packages: await window.pddMonitor.platform.packages(), wechatBusy: false, lastError: null };
+    renderPlatform();
+  } catch (error) {
+    state.platform.wechatBusy = false;
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  }
+}
+
+async function startPlatformWechatLogin() {
+  try {
+    state.platform.wechatBusy = true;
+    state.platform.lastError = null;
+    renderPlatform();
+    const result = await window.pddMonitor.platform.startWechatLogin();
+    state.platform.pollIntervalSeconds = result.pollIntervalSeconds;
+    renderPlatform();
+    await completePlatformWechatLogin();
+  } catch (error) {
+    state.platform.wechatBusy = false;
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  }
+}
+
+async function logoutPlatform() {
+  try {
+    await window.pddMonitor.platform.logout();
+    state.platform = { authenticated: false, profile: null, wallet: null, packages: [], checkout: null, attempt: null, paymentBusy: false, wechatBusy: false, lastError: null };
+    renderPlatform();
+  } catch (error) {
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  }
+}
+
+async function refreshPlatformCheckout() {
+  if (!state.platform.checkout?.checkoutId || state.platform.paymentBusy) return;
+  try {
+    const checkout = await window.pddMonitor.platform.getCheckout(state.platform.checkout.checkoutId);
+    state.platform.checkout = checkout;
+    if (checkout.state === 'paid') {
+      const status = await window.pddMonitor.platform.status();
+      state.platform = { ...state.platform, ...status };
+    }
+    renderPlatform();
+  } catch (error) {
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  }
+}
+
+async function createPlatformPayment() {
+  const packageCode = document.querySelector('#platform-package').value;
+  const channel = document.querySelector('#platform-payment-channel').value;
+  if (!packageCode || state.platform.paymentBusy) return;
+  try {
+    state.platform.paymentBusy = true;
+    state.platform.lastError = null;
+    renderPlatform();
+    const checkout = await window.pddMonitor.platform.createCheckout(packageCode, platformUi.createIdempotencyKey());
+    const attempt = await window.pddMonitor.platform.createPaymentAttempt(checkout.checkoutId, channel);
+    state.platform.checkout = checkout;
+    state.platform.attempt = attempt;
+    state.platform.lastError = null;
+    renderPlatform();
+  } catch (error) {
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  } finally {
+    state.platform.paymentBusy = false;
+    renderPlatform();
+  }
+}
+
+async function closePlatformCheckout() {
+  if (!state.platform.checkout?.checkoutId) return;
+  try {
+    state.platform.checkout = await window.pddMonitor.platform.closeCheckout(state.platform.checkout.checkoutId);
+    state.platform.attempt = null;
+    renderPlatform();
+  } catch (error) {
+    state.platform.lastError = { message: platformErrorMessage(error) };
+    renderPlatform();
+  }
+}
+
 function channelConfig(kind) {
   if (kind === 'wecom') return { webhook: document.querySelector('#wecom-webhook').value.trim() };
   return { webhook: document.querySelector('#dingtalk-webhook').value.trim(), secret: document.querySelector('#dingtalk-secret').value.trim() };
@@ -532,6 +699,12 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
     showNotice(error.message, true);
   }
 });
+document.querySelector('#platform-login-form').addEventListener('submit', loginPlatformWithPassword);
+document.querySelector('#platform-wechat-login').addEventListener('click', startPlatformWechatLogin);
+document.querySelector('#platform-logout').addEventListener('click', logoutPlatform);
+document.querySelector('#platform-pay').addEventListener('click', createPlatformPayment);
+document.querySelector('#platform-refresh-payment').addEventListener('click', refreshPlatformCheckout);
+document.querySelector('#platform-close-payment').addEventListener('click', closePlatformCheckout);
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !elements.removeAccountModal.hidden) closeRemoveAccountModal();
@@ -541,3 +714,4 @@ window.pddMonitor.onAccountsChanged(() => loadAccounts());
 
 refreshIcons();
 loadAccounts().catch((error) => showNotice(error.message, true));
+loadPlatformStatus();

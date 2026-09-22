@@ -13,6 +13,7 @@
       <div class="brand"><span class="brand-mark"><img src="assets/elunvi-mart.png" alt="Elunvi Mart"></span><span>Elunvi Mart</span></div>
       <nav class="nav" aria-label="主导航">
         <button class="nav-button is-active" type="button" data-view="accounts"><i data-lucide="store"></i><span>商家账号</span></button>
+        <button class="nav-button" type="button" data-view="platform"><i data-lucide="wallet-cards"></i><span>平台账户</span></button>
         <button class="nav-button" type="button" data-view="settings"><i data-lucide="settings"></i><span>监控设置</span></button>
       </nav>
       <div class="account-limit" id="account-limit">已添加 0 / 10 个账号</div>
@@ -73,6 +74,30 @@
           </section>
         </section>
 
+        <section class="view platform-view" id="platform-view" hidden>
+          <div class="section-header"><div><h2>ElunviPlatform 账户</h2><p>平台用户、钱包和充值与拼多多商家账号分开管理。</p></div></div>
+          <section class="platform-card" id="platform-login-card">
+            <div class="platform-card-heading"><span class="platform-icon"><i data-lucide="shield-check"></i></span><div><h3>登录平台账户</h3><p>使用平台邮箱密码，或通过系统浏览器完成微信扫码登录。</p></div></div>
+            <form class="platform-login-form" id="platform-login-form">
+              <label class="field-label">邮箱<input class="input" id="platform-email" type="email" autocomplete="username" required></label>
+              <label class="field-label">密码<input class="input" id="platform-password" type="password" autocomplete="current-password" required></label>
+              <div class="platform-actions"><button class="button button-primary" type="submit" id="platform-password-login">邮箱登录</button><button class="button" type="button" id="platform-wechat-login"><i data-lucide="scan-line"></i>微信扫码登录</button></div>
+            </form>
+            <p class="platform-login-hint" id="platform-wechat-hint" aria-live="polite" hidden></p>
+          </section>
+          <section class="platform-card" id="platform-account-card" hidden>
+            <div class="platform-profile"><span class="platform-icon"><i data-lucide="user-round"></i></span><div><h3 id="platform-user-name">平台用户</h3><p>平台用户 ID：<span id="platform-user-id">未提供</span></p></div><button class="button" type="button" id="platform-logout">退出平台账户</button></div>
+            <div class="platform-wallet"><div><span class="platform-label">可用点数</span><strong id="platform-wallet-balance">—</strong></div><span class="secondary-text">余额以 ElunviPlatform 返回为准</span></div>
+            <div class="platform-payment-form">
+              <div class="platform-payment-heading"><div><h3>充值点数</h3><p>订单和支付状态由平台确认，客户端不会本地改写余额。</p></div><span id="platform-payment-status" class="status status-info" aria-live="polite">尚未发起支付</span></div>
+              <div class="platform-payment-fields"><label class="field-label">点数套餐<select class="select" id="platform-package" aria-label="点数套餐"></select></label><label class="field-label">支付方式<select class="select" id="platform-payment-channel"><option value="wechat">微信支付</option><option value="alipay">支付宝</option></select></label><button class="button button-primary" type="button" id="platform-pay">创建支付</button></div>
+              <pre class="platform-qr" id="platform-payment-qr" aria-live="polite">支付二维码将在创建支付后显示</pre>
+              <div class="platform-payment-actions"><button class="button" type="button" id="platform-refresh-payment">刷新订单状态</button><button class="button" type="button" id="platform-close-payment" hidden>关闭未支付订单</button></div>
+            </div>
+          </section>
+          <div class="platform-error notice is-error" id="platform-error" role="alert" hidden></div>
+        </section>
+
         <section class="view settings-view" id="settings-view" hidden>
           <form id="settings-form">
             <section class="settings-section">
@@ -119,6 +144,7 @@
   </div>
 
   <script src="../../node_modules/lucide/dist/umd/lucide.js"></script>
+  <script src="platform-ui.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
