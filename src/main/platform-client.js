@@ -172,9 +172,15 @@ class PlatformClient {
   async acceptTokens(response) {
     const value = exactRecord(response.data, ['access_token', 'refresh_token', 'access_expires_at', 'refresh_expires_at'], '平台会话');
     const metadata = { refreshToken: text(value.refresh_token, '平台会话'), accessExpiresAt: timestamp(value.access_expires_at, '平台会话'), refreshExpiresAt: timestamp(value.refresh_expires_at, '平台会话') };
-    this.accessToken = text(value.access_token, '平台会话');
+    const accessToken = text(value.access_token, '平台会话');
+    try {
+      this.tokenStore?.save?.(metadata);
+    } catch (error) {
+      this.clearMemory();
+      throw error;
+    }
+    this.accessToken = accessToken;
     this.accessExpiresAt = metadata.accessExpiresAt;
-    this.tokenStore?.save?.(metadata);
     return { accessExpiresAt: metadata.accessExpiresAt, refreshExpiresAt: metadata.refreshExpiresAt, requestId: response.requestId };
   }
 
@@ -199,7 +205,11 @@ class PlatformClient {
       const response = await this.fetchImpl(`${this.config.apiBaseUrl.replace(/\/$/u, '')}${requestPath}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
       const requestId = response.headers.get('x-request-id');
       const payload = await readResponse(response);
-      if (!response.ok) throw apiError(response.status, requestId, payload);
+      if (!response.ok) {
+        const error = apiError(response.status, requestId, payload);
+        if (response.status === 401) this.clearSession();
+        throw error;
+      }
       return { data: payload, requestId, status: response.status };
     } catch (error) {
       if (error?.name === 'AbortError') throw new PlatformApiError('平台请求超时，请稍后重试', { code: 'NETWORK_TIMEOUT', retryable: true });
