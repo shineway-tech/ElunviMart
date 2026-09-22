@@ -118,11 +118,15 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-modal{width:min(760px,100%);padding:0;overflow:hidden}
 .platform-auth-layout{display:grid;grid-template-columns:minmax(220px,.78fr) minmax(0,1.22fr);min-height:500px}
 .platform-auth-brand{display:flex;flex-direction:column;align-items:flex-start;padding:38px 30px 28px;color:#f5f6f7;background:#15191d}
-.platform-auth-brand-mark{width:52px;height:52px;margin-bottom:18px;overflow:hidden;border-radius:13px;box-shadow:0 5px 16px rgba(0,0,0,.18)}
+.platform-auth-brand-heading{display:flex;align-items:center;gap:10px}
+.platform-auth-brand-mark{width:34px;height:34px;overflow:hidden;border-radius:9px;box-shadow:0 4px 12px rgba(0,0,0,.18)}
 .platform-auth-brand-mark img{display:block;width:100%;height:100%;object-fit:cover}
-.platform-auth-brand>strong{font-size:20px;font-weight:650;letter-spacing:.01em}
-.platform-auth-brand>p{margin:36px 0 auto;color:#f5f6f7;font-size:21px;font-weight:600;line-height:1.45}
-.platform-auth-brand>small{margin-top:18px;color:#aeb5be;font-size:12px}
+.platform-auth-brand-heading>strong{font-size:18px;font-weight:650;letter-spacing:.01em}
+.platform-auth-brand>p{margin:42px 0 0;color:#f5f6f7;font-size:13px;font-weight:400;line-height:1.45}
+.platform-auth-brand-subtitle{margin-top:7px;color:#aeb5be;font-size:12px;line-height:1.4}
+.platform-auth-illustration{display:block;width:min(100%,220px);height:auto;margin:44px auto 0;object-fit:contain}
+.platform-auth-brand-footer{display:grid;gap:4px;margin-top:auto;color:#aeb5be;font-size:11px;line-height:1.35}
+.platform-auth-brand-footer strong{color:#d5d9de;font-size:11px;font-weight:500}
 .platform-auth-pane{display:flex;flex-direction:column;padding:28px 34px 26px;background:var(--surface)}
 .platform-auth-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:26px}
 .platform-auth-header h2{margin:0;font-size:24px;font-weight:650;line-height:1.2}
@@ -131,6 +135,9 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-modal .field-label{display:grid;gap:7px;color:var(--text);font-size:13px;font-weight:500}
 .platform-auth-input{position:relative;display:flex;align-items:center}
 .platform-auth-input>svg{position:absolute;left:13px;z-index:1;width:17px;height:17px;color:#77818c;pointer-events:none}
+.platform-auth-input .platform-password-toggle{position:absolute;right:9px;display:grid;place-items:center;width:30px;height:30px;padding:0;border:0;border-radius:6px;color:#77818c;background:transparent;cursor:pointer}
+.platform-auth-input .platform-password-toggle:hover{color:var(--text);background:var(--soft)}
+.platform-auth-input .platform-password-toggle svg{width:17px;height:17px}
 .platform-auth-modal .input{width:100%;min-height:44px;border-color:#d8dde3;border-radius:8px;font-size:14px}
 .platform-auth-modal .platform-auth-input .input{padding-left:40px}
 .platform-auth-modal .input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,48,37,.1)}
@@ -138,6 +145,9 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-modal .inline-field .button{min-height:44px;border-radius:8px}
 .platform-auth-actions{display:grid;gap:14px;margin-top:4px}
 .platform-auth-submit,.platform-auth-wechat{width:100%;min-height:44px;border-radius:8px;font-size:14px;font-weight:600}
+.platform-auth-wechat{border-color:#d8dde3;color:var(--text);background:#fff}
+.platform-auth-wechat:hover{border-color:#bfc7d0;color:var(--text);background:var(--soft)}
+.platform-auth-wechat .platform-wechat-icon{width:20px;height:20px;flex:0 0 auto}
 .platform-auth-divider{display:flex;align-items:center;gap:12px;color:#9aa2ab;font-size:12px}
 .platform-auth-divider:before,.platform-auth-divider:after{content:"";height:1px;flex:1;background:var(--line)}
 .platform-auth-links{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:3px;color:var(--muted);font-size:12px}
@@ -148,4 +158,4 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-auth-modal .platform-wechat-panel{flex:1;align-content:center;justify-items:center;gap:10px;padding:0}
 .platform-auth-modal .platform-wechat-frame{width:260px;height:260px}
 .platform-auth-modal .platform-wechat-panel .button{min-height:36px;border-radius:7px}
-@media(max-height:700px){.platform-auth-layout{min-height:0}.platform-auth-brand{padding:26px 26px 22px}.platform-auth-brand>p{margin-top:24px;font-size:18px}.platform-auth-pane{padding:22px 28px}.platform-auth-header{margin-bottom:18px}.platform-auth-modal form{gap:12px}}
+@media(max-height:700px){.platform-auth-layout{min-height:0}.platform-auth-brand{padding:26px 26px 22px}.platform-auth-brand>p{margin-top:26px;font-size:12px}.platform-auth-illustration{max-width:165px;margin-top:24px}.platform-auth-pane{padding:22px 28px}.platform-auth-header{margin-bottom:18px}.platform-auth-modal form{gap:12px}}

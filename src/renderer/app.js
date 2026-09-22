@@ -133,6 +133,18 @@ function refreshIcons() {
   window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
 }
 
+function togglePasswordVisibility(button) {
+  const input = document.querySelector(`#${button.dataset.passwordToggle}`);
+  if (!input) return;
+  const visible = input.type === 'text';
+  input.type = visible ? 'password' : 'text';
+  const label = visible ? '显示密码' : '隐藏密码';
+  button.setAttribute('aria-label', label);
+  button.setAttribute('title', label);
+  button.innerHTML = `<i data-lucide="${visible ? 'eye' : 'eye-off'}"></i>`;
+  refreshIcons();
+}
+
 function renderAccountAvatar(container, avatarUrl) {
   container.replaceChildren();
   if (avatarUrl) {
@@ -1220,6 +1232,7 @@ elements.platformSignin.addEventListener('click', () => showPlatformLogin());
 elements.platformAccount.addEventListener('click', logoutPlatform);
 elements.platformLoginForm.addEventListener('submit', submitPlatformLogin);
 elements.platformWechatStart.addEventListener('click', () => void beginWechatLogin());
+document.querySelectorAll('[data-password-toggle]').forEach((button) => button.addEventListener('click', () => togglePasswordVisibility(button)));
 elements.platformWechatBack.addEventListener('click', async () => {
   clearWechatPollTimer();
   await window.pddMonitor.platform.wechatCancel();
