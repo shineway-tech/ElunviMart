@@ -1235,11 +1235,8 @@ async function submitRegistrationForm(event) {
   event.preventDefault();
   const mode = 'register';
   const fields = authFields(mode);
-  if (!validateAuthFields(mode, { requireCode: Boolean(state.platformAuthChallenges.register) })) return;
-  if (!state.platformAuthChallenges.register) {
-    await requestPlatformCode(mode);
-    return;
-  }
+  if (!validateAuthFields(mode)) return;
+  if (!state.platformAuthChallenges.register) return;
   setServerError(mode);
   fields.submit.disabled = true;
   try {
@@ -1261,11 +1258,8 @@ async function submitResetForm(event) {
   const mode = state.platformAuthMode === 'email-binding' ? 'email-binding' : 'reset';
   const fields = authFields(mode);
   const challengeId = mode === 'email-binding' ? state.platformAuthChallengeId : state.platformAuthChallenges.reset;
-  if (!validateAuthFields(mode, { requireCode: Boolean(challengeId) })) return;
-  if (!challengeId) {
-    await requestPlatformCode(mode);
-    return;
-  }
+  if (!validateAuthFields(mode)) return;
+  if (!challengeId) return;
   setServerError(mode);
   fields.submit.disabled = true;
   try {
@@ -1395,7 +1389,7 @@ async function pollWechatLogin(retryAfterSeconds = 1) {
 document.querySelectorAll('.nav-button').forEach((button) => button.addEventListener('click', () => showView(button.dataset.view)));
 document.querySelectorAll('[data-platform-auth-mode]').forEach((button) => button.addEventListener('click', () => setPlatformAuthMode(button.dataset.platformAuthMode)));
 document.querySelector('#platform-register-request-code').addEventListener('click', () => void requestPlatformCode('register'));
-document.querySelector('#platform-reset-request-code').addEventListener('click', () => void requestPlatformCode('reset'));
+document.querySelector('#platform-reset-request-code').addEventListener('click', () => void requestPlatformCode(state.platformAuthMode === 'email-binding' ? 'email-binding' : 'reset'));
 document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', () => openLoginModal()));
 elements.addAccount.addEventListener('click', () => openLoginModal());
 elements.platformSignin.addEventListener('click', () => showPlatformLogin());
