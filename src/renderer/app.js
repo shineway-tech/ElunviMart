@@ -1303,16 +1303,12 @@ function renderTeamSummary(team, membership) {
   for (const [icon, label, value] of tiles) {
     const tile = document.createElement('div');
     tile.className = 'hero-metric';
-    const iconTile = document.createElement('span');
-    iconTile.className = 'metric-icon';
-    iconTile.append(createIcon(icon));
-    const body = document.createElement('div');
     const name = document.createElement('span');
-    name.textContent = label;
+    name.className = 'metric-label';
+    name.append(createIcon(icon), document.createTextNode(label));
     const strong = document.createElement('strong');
     strong.textContent = value;
-    body.append(name, strong);
-    tile.append(iconTile, body);
+    tile.append(name, strong);
     metrics.append(tile);
   }
 

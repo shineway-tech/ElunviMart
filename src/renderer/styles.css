@@ -228,27 +228,26 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .tab-bar button.is-active{color:var(--accent);font-weight:600}
 .tab-bar button.is-active:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px 2px 0 0;background:var(--accent)}
 
-/* 团队概览：身份行 + 图标指标砖，操作按钮收到头部右侧 */
-.team-hero{display:grid;gap:18px;padding:20px 22px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 1px 2px rgba(32,33,36,.04)}
-.team-hero-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+/* 团队概览：品牌色头部带 + 分隔式指标（不再卡里套盒子） */
+.team-hero{overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--surface);box-shadow:0 1px 2px rgba(32,33,36,.04)}
+.team-hero-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:18px 22px;background:linear-gradient(100deg,var(--accent-soft) 0%,rgba(255,255,255,0) 58%)}
 .team-identity{display:flex;align-items:center;gap:14px;min-width:0}
-.team-avatar{display:grid;place-items:center;width:48px;height:48px;flex:0 0 auto;border-radius:12px;color:#fff;background:linear-gradient(140deg,#c92b21 0%,var(--accent) 60%,#e2503f 100%);font-size:19px;font-weight:650}
+.team-avatar{display:grid;place-items:center;width:48px;height:48px;flex:0 0 auto;border-radius:13px;color:#fff;background:linear-gradient(140deg,#c92b21 0%,var(--accent) 62%,#e2503f 100%);box-shadow:0 8px 16px -10px rgba(217,48,37,.75);font-size:19px;font-weight:650}
 .team-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
-.team-title-row h3{margin:0;font-size:18px;font-weight:650;letter-spacing:-.01em;color:var(--text)}
+.team-title-row h3{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em;color:var(--text)}
 .team-hero-actions{display:flex;flex-wrap:wrap;gap:8px}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:500}
-.chip-plan{color:var(--accent);background:var(--accent-soft)}
-.chip-owner{color:var(--green);background:var(--green-soft)}
-.chip-member{color:var(--muted);background:var(--soft)}
-.chip-muted{color:var(--muted);background:var(--soft)}
-.team-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.hero-metric{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:var(--soft)}
-.hero-metric .metric-icon{display:grid;place-items:center;width:34px;height:34px;flex:0 0 auto;border-radius:9px;color:var(--accent);background:var(--accent-soft)}
-.hero-metric .metric-icon svg{width:18px;height:18px}
-.hero-metric>div{min-width:0}
-.hero-metric span{display:block;color:var(--muted);font-size:12px}
-.hero-metric strong{display:block;margin-top:4px;font-size:20px;font-weight:650;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
-@media(max-width:1000px){.team-hero-head{align-items:flex-start}.team-metrics{grid-template-columns:1fr}}
+.chip-plan{color:var(--accent);background:#fff;box-shadow:inset 0 0 0 1px #efb8b2}
+.chip-owner{color:var(--green);background:#fff;box-shadow:inset 0 0 0 1px #bfe3d3}
+.chip-member{color:var(--muted);background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.chip-muted{color:var(--muted);background:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+.team-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--line)}
+.hero-metric{display:grid;gap:7px;padding:15px 22px 17px;border-left:1px solid var(--line)}
+.hero-metric:first-child{border-left:0}
+.hero-metric .metric-label{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.hero-metric .metric-label svg{width:15px;height:15px;color:var(--accent)}
+.hero-metric strong{font-size:26px;font-weight:700;line-height:1.05;letter-spacing:-.01em;color:var(--text);font-variant-numeric:tabular-nums}
+@media(max-width:1000px){.team-hero-head{align-items:flex-start}.team-metrics{grid-template-columns:1fr}.hero-metric{border-left:0;border-top:1px solid var(--line)}}
 
 /* 会员档位卡 */
 .plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;padding-top:16px}
