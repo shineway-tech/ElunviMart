@@ -114,6 +114,7 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /function loadSidebarAccount\(\)/);
   // 侧边栏的切换团队按钮与菜单
   assert.match(html, /id="platform-account-switch"[\s\S]*id="team-switch-menu"/);
+  assert.match(html, /class="summary-icon"/);
   assert.match(renderer, /function toggleTeamSwitchMenu\(\)/);
   assert.match(renderer, /function closeTeamSwitchMenu\(\)/);
   // 切团队要同时同步 teamId 和当前团队对象，否则并行加载会读到上一个团队
