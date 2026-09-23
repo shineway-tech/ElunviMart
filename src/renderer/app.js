@@ -14,6 +14,7 @@ const state = {
     transactionTotal: 0,
     teamOrders: [],
     walletOrders: [],
+    walletPackageId: null,
     preferencesLoaded: false
   },
   purchase: { kind: null, order: null, attempt: null },
@@ -114,6 +115,7 @@ const elements = {
   teamTabPlans: document.querySelector('#team-tab-plans'),
   teamTabCount: document.querySelector('#team-tab-count'),
   walletTabs: document.querySelector('#wallet-tabs'),
+  walletPurchaseBar: document.querySelector('#wallet-purchase-bar'),
   walletTabCount: document.querySelector('#wallet-tab-count'),
   teamMembers: document.querySelector('#team-members-list'),
   teamOrderList: document.querySelector('#team-order-list'),
@@ -739,6 +741,12 @@ const ORDER_STATUS_LABELS = { 1: '待支付', 2: '已支付', 3: '已关闭', 4:
 
 const MEMBER_ROLE_OWNER = 1;
 
+function setTabCount(node, value) {
+  const text = value ? String(value) : '';
+  node.textContent = text;
+  node.hidden = !text;
+}
+
 function renderEmptyState(container, copy, actionLabel = '', onAction = null) {
   const text = document.createElement('p');
   text.className = 'empty-copy';
@@ -875,11 +883,6 @@ function renderWalletSummary(team) {
 
   const foot = document.createElement('div');
   foot.className = 'wallet-hero-foot';
-  const note = document.createElement('span');
-  note.textContent = isOwner
-    ? '1 元到账 100 积分 · 只有负责人可以充值'
-    : '由团队负责人充值，成员可查看余额和流水';
-  foot.append(note);
   if (isOwner) {
     const recharge = document.createElement('button');
     recharge.className = 'button';
@@ -887,6 +890,8 @@ function renderWalletSummary(team) {
     recharge.textContent = '去充值';
     recharge.addEventListener('click', () => setWalletTab('recharge'));
     foot.append(recharge);
+  } else {
+    foot.hidden = true;
   }
 
   elements.walletSummary.append(head, value, foot);
@@ -898,13 +903,27 @@ function renderWalletPackages(team) {
   const isOwner = team.role === MEMBER_ROLE_OWNER;
   const packages = state.mart.packages || [];
   if (!packages.length) {
+    elements.walletPurchaseBar.hidden = true;
     renderEmptyState(elements.walletPackages, '暂无可购买的充值档位。');
     return;
   }
+  // 默认选中折扣档（更划算），之后保留用户上一次的选择
+  if (!packages.some((item) => item.id === state.walletPackageId)) {
+    const preferred = packages.find((item) => item.payable_fen < item.price_fen) || packages[0];
+    state.walletPackageId = preferred.id;
+  }
   for (const item of packages) {
+    const selected = item.id === state.walletPackageId;
     const discounted = item.payable_fen < item.price_fen;
-    const card = document.createElement('article');
-    card.className = 'plan-card';
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = `plan-option${selected ? ' is-selected' : ''}`;
+    option.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    option.addEventListener('click', () => {
+      state.walletPackageId = item.id;
+      renderWalletPackages(team);
+    });
+
     const title = document.createElement('h4');
     title.textContent = `${formatPoints(item.points)} 积分`;
     const price = document.createElement('div');
@@ -922,32 +941,58 @@ function renderWalletPackages(team) {
       original.textContent = `¥${item.price_fen / 100}`;
       price.append(original);
     }
-    const hint = document.createElement('p');
-    hint.className = 'plan-hint';
-    hint.textContent = `${discounted ? '折后 ' : ''}${Math.round(item.points / (item.payable_fen / 100))} 积分/元`;
-    const button = document.createElement('button');
-    button.className = discounted && isOwner ? 'button button-primary' : 'button';
-    button.type = 'button';
-    button.textContent = isOwner ? '立即充值' : '仅负责人可充值';
-    button.disabled = !isOwner;
-    if (isOwner) button.addEventListener('click', () => void startRechargePurchase(item));
-    card.append(title, price, hint, button);
+    option.append(title, price);
     if (discounted) {
       const ribbon = document.createElement('span');
       ribbon.className = 'plan-ribbon';
       ribbon.textContent = `${(item.payable_fen / item.price_fen * 10).toFixed(1).replace(/\.0$/u, '')} 折`;
-      card.append(ribbon);
+      option.append(ribbon);
     }
-    elements.walletPackages.append(card);
+    if (selected) {
+      const check = document.createElement('span');
+      check.className = 'option-check';
+      check.append(createIcon('check'));
+      option.append(check);
+    }
+    elements.walletPackages.append(option);
   }
+  renderWalletPurchaseBar(team, packages, isOwner);
   refreshIcons();
+}
+
+// 档位只负责选择，充值统一由这里的一个按钮发起
+function renderWalletPurchaseBar(team, packages, isOwner) {
+  const bar = elements.walletPurchaseBar;
+  bar.replaceChildren();
+  const selected = packages.find((item) => item.id === state.walletPackageId);
+  if (!selected) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const summary = document.createElement('div');
+  summary.className = 'purchase-summary';
+  const title = document.createElement('strong');
+  title.textContent = `已选 ${formatPoints(selected.points)} 积分`;
+  const meta = document.createElement('small');
+  meta.textContent = selected.payable_fen < selected.price_fen
+    ? `实付 ${formatYuan(selected.payable_fen)}，原价 ${formatYuan(selected.price_fen)}`
+    : `实付 ${formatYuan(selected.payable_fen)}`;
+  summary.append(title, meta);
+  const submit = document.createElement('button');
+  submit.className = 'button button-primary';
+  submit.type = 'button';
+  submit.textContent = isOwner ? '立即充值' : '仅负责人可充值';
+  submit.disabled = !isOwner;
+  if (isOwner) submit.addEventListener('click', () => void startRechargePurchase(selected));
+  bar.append(summary, submit);
 }
 
 function renderWalletTransactions() {
   const container = elements.walletTransactions;
   container.replaceChildren();
   const rows = state.mart.transactions || [];
-  elements.walletTabCount.textContent = state.mart.transactionTotal ? String(state.mart.transactionTotal) : '';
+  setTabCount(elements.walletTabCount, state.mart.transactionTotal);
   if (!rows.length) {
     renderEmptyState(container, '暂无积分流水');
     return;
@@ -1047,7 +1092,7 @@ async function loadTeamOrders() {
   try {
     const page = await window.pddMonitor.mart.orders({ teamId: team.id, bizType: 1 });
     state.mart.teamOrders = page.orders || [];
-    elements.teamOrderCount.textContent = page.total ? String(page.total) : '';
+    setTabCount(elements.teamOrderCount, page.total);
     renderOrderList(elements.teamOrderList, state.mart.teamOrders, 'membership');
   } catch (error) {
     showNotice(error.message || '购买记录暂时无法加载', true);
@@ -1064,7 +1109,7 @@ async function loadWalletOrders() {
   try {
     const page = await window.pddMonitor.mart.orders({ teamId: team.id, bizType: 2 });
     state.mart.walletOrders = page.orders || [];
-    elements.walletOrderCount.textContent = page.total ? String(page.total) : '';
+    setTabCount(elements.walletOrderCount, page.total);
     renderOrderList(elements.walletOrderList, state.mart.walletOrders, 'recharge');
   } catch (error) {
     showNotice(error.message || '充值记录暂时无法加载', true);
@@ -1289,7 +1334,7 @@ function renderTeamMembers(team) {
   const isOwner = team.role === MEMBER_ROLE_OWNER;
   const members = state.mart.members || [];
   elements.teamMembers.replaceChildren();
-  elements.teamTabCount.textContent = members.length ? String(members.length) : '';
+  setTabCount(elements.teamTabCount, members.length);
   if (!members.length) {
     renderEmptyState(elements.teamMembers, '成员列表暂时无法加载。');
     return;

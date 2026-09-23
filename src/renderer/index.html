@@ -147,9 +147,9 @@
             <button type="button" role="tab" data-wallet-tab="ledger">积分流水<span class="tab-count" id="wallet-tab-count"></span></button>
             <button type="button" role="tab" data-wallet-tab="orders">充值记录<span class="tab-count" id="wallet-order-count"></span></button>
           </div>
-          <section class="finance-card" data-wallet-panel="recharge">
-            <div class="finance-card-header"><div><h3>充值档位</h3><p>1 元到账 100 积分，大额档位实付更优惠，到账积分不因折扣减少。</p></div></div>
-            <div class="plan-grid plan-grid-5" id="wallet-package-list"></div>
+          <section class="finance-card is-plain" data-wallet-panel="recharge">
+            <div class="plan-grid plan-grid-5 option-grid" id="wallet-package-list"></div>
+            <div class="purchase-bar" id="wallet-purchase-bar" hidden></div>
           </section>
           <section class="finance-card" data-wallet-panel="ledger" hidden>
             <div class="finance-card-header"><div><h3>积分流水</h3><p>流水只追加不修改，余额以服务端记录为准。</p></div></div>
