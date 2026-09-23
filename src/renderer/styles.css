@@ -329,3 +329,13 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 @media(max-width:1240px){.plan-grid-5{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}
 @media(max-width:1000px){.team-hero{grid-template-columns:1fr}.plan-grid{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.plan-card,.plan-option,.tab-bar button,.team-chip,.member-row,.ledger-row,.order-row{transition:none}.plan-card:hover{transform:none}}
+
+/* 表格化后的流水与订单 */
+.table-empty{padding:26px 12px!important;color:var(--muted);text-align:center;font-size:13px}
+.ledger-delta{color:var(--green);font-weight:650;font-variant-numeric:tabular-nums}
+.ledger-balance{color:var(--muted);font-variant-numeric:tabular-nums}
+.order-no{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.order-amount{font-weight:600;font-variant-numeric:tabular-nums}
+.order-action{text-align:right;white-space:nowrap}
+.order-action .button{min-height:30px;padding:4px 10px;font-size:12px}
+.finance-card.is-plain .pagination{margin-top:12px}

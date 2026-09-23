@@ -15,6 +15,7 @@ const state = {
     teamOrders: [],
     walletOrders: [],
     walletPackageId: null,
+    pages: { ledger: 1, walletOrders: 1, teamOrders: 1 },
     preferencesLoaded: false
   },
   purchase: { kind: null, order: null, attempt: null },
@@ -105,7 +106,14 @@ const elements = {
   platformWechatRefresh: document.querySelector('#platform-wechat-refresh'),
   walletSummary: document.querySelector('#wallet-summary-card'),
   walletPackages: document.querySelector('#wallet-package-list'),
-  walletTransactions: document.querySelector('#wallet-transactions-list'),
+  walletTransactions: document.querySelector('#wallet-transactions-body'),
+  walletLedgerPagination: document.querySelector('#wallet-ledger-pagination'),
+  walletOrderBody: document.querySelector('#wallet-order-body'),
+  walletOrderPagination: document.querySelector('#wallet-order-pagination'),
+  teamOrderBody: document.querySelector('#team-order-body'),
+  teamOrderPagination: document.querySelector('#team-order-pagination'),
+  walletTabRecharge: document.querySelector('#wallet-tab-recharge'),
+  walletTabOrders: document.querySelector('#wallet-tab-orders'),
   teamSummary: document.querySelector('#team-summary-card'),
   teamSwitcher: document.querySelector('#team-switcher'),
   walletSwitcher: document.querySelector('#wallet-switcher'),
@@ -118,7 +126,6 @@ const elements = {
   walletPurchaseBar: document.querySelector('#wallet-purchase-bar'),
   walletTabCount: document.querySelector('#wallet-tab-count'),
   teamMembers: document.querySelector('#team-members-list'),
-  teamOrderList: document.querySelector('#team-order-list'),
   teamOrderCount: document.querySelector('#team-order-count'),
   walletOrderList: document.querySelector('#wallet-order-list'),
   walletOrderCount: document.querySelector('#wallet-order-count'),
@@ -826,10 +833,20 @@ async function selectTeam(teamId) {
   await Promise.all([loadTeamData(), loadWalletData()]);
 }
 
+// 成员只能看自己的积分流水，充值档位与充值记录只对负责人开放
+function applyWalletRole(team) {
+  const isOwner = team.role === MEMBER_ROLE_OWNER;
+  elements.walletTabRecharge.hidden = !isOwner;
+  elements.walletTabOrders.hidden = !isOwner;
+  elements.walletTabs.hidden = !isOwner;
+  if (!isOwner && state.walletTab !== 'ledger') setWalletTab('ledger');
+}
+
 async function loadWalletData() {
   elements.walletSummary.replaceChildren();
   elements.walletPackages.replaceChildren();
   elements.walletTransactions.replaceChildren();
+  elements.walletLedgerPagination.replaceChildren();
   if (!isMartLinked()) {
     renderSignedOutState(elements.walletSummary);
     return;
@@ -841,16 +858,22 @@ async function loadWalletData() {
     renderEmptyState(elements.walletSummary, '当前账号还没有团队，暂时无法使用团队积分。');
     return;
   }
+  applyWalletRole(team);
+  const page = state.mart.pages.ledger;
   try {
     const [wallet, packages, transactions] = await Promise.all([
       window.pddMonitor.mart.wallet(team.id),
       window.pddMonitor.mart.walletPackages(),
-      window.pddMonitor.mart.walletTransactions({ teamId: team.id, limit: 20 })
+      window.pddMonitor.mart.walletTransactions({
+        teamId: team.id,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE
+      })
     ]);
     state.mart.wallet = wallet.wallet;
     state.mart.packages = packages.packages || [];
     state.mart.transactions = transactions.transactions || [];
-    state.mart.transactionTotal = transactions.total || state.mart.transactions.length;
+    state.mart.transactionTotal = transactions.total || 0;
     renderWalletSummary(team);
     renderWalletPackages(team);
     renderWalletTransactions();
@@ -863,8 +886,6 @@ async function loadWalletData() {
 function renderWalletSummary(team) {
   elements.walletSummary.replaceChildren();
   const wallet = state.mart.wallet || { balance_points: 0 };
-  const isOwner = team.role === MEMBER_ROLE_OWNER;
-
   const head = document.createElement('div');
   head.className = 'wallet-hero-head';
   const label = document.createElement('span');
@@ -881,20 +902,7 @@ function renderWalletSummary(team) {
   unit.textContent = '积分';
   value.append(unit);
 
-  const foot = document.createElement('div');
-  foot.className = 'wallet-hero-foot';
-  if (isOwner) {
-    const recharge = document.createElement('button');
-    recharge.className = 'button';
-    recharge.type = 'button';
-    recharge.textContent = '去充值';
-    recharge.addEventListener('click', () => setWalletTab('recharge'));
-    foot.append(recharge);
-  } else {
-    foot.hidden = true;
-  }
-
-  elements.walletSummary.append(head, value, foot);
+  elements.walletSummary.append(head, value);
   refreshIcons();
 }
 
@@ -988,45 +996,79 @@ function renderWalletPurchaseBar(team, packages, isOwner) {
   bar.append(summary, submit);
 }
 
-function renderWalletTransactions() {
-  const container = elements.walletTransactions;
+const PAGE_SIZE = 10;
+
+function tableEmptyRow(colspan, text) {
+  const row = document.createElement('tr');
+  const cell = document.createElement('td');
+  cell.colSpan = colspan;
+  cell.className = 'table-empty';
+  cell.textContent = text;
+  row.append(cell);
+  return row;
+}
+
+function renderPager(container, { total, page, onChange }) {
   container.replaceChildren();
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  container.hidden = total <= PAGE_SIZE;
+  if (container.hidden) return;
+  const summary = document.createElement('span');
+  summary.className = 'pagination-summary';
+  summary.textContent = `共 ${total} 条`;
+  const controls = document.createElement('div');
+  controls.className = 'pagination-controls';
+  const prev = document.createElement('button');
+  prev.className = 'button';
+  prev.type = 'button';
+  prev.textContent = '上一页';
+  prev.disabled = page <= 1;
+  prev.addEventListener('click', () => onChange(page - 1));
+  const current = document.createElement('span');
+  current.className = 'pagination-current';
+  current.textContent = `第 ${page} / ${totalPages} 页`;
+  const next = document.createElement('button');
+  next.className = 'button';
+  next.type = 'button';
+  next.textContent = '下一页';
+  next.disabled = page >= totalPages;
+  next.addEventListener('click', () => onChange(page + 1));
+  controls.append(prev, current, next);
+  container.append(summary, controls);
+}
+
+function renderWalletTransactions() {
+  const body = elements.walletTransactions;
+  body.replaceChildren();
   const rows = state.mart.transactions || [];
-  setTabCount(elements.walletTabCount, state.mart.transactionTotal);
   if (!rows.length) {
-    renderEmptyState(container, '暂无积分流水');
+    body.append(tableEmptyRow(4, '还没有你在该团队的积分记录'));
     return;
   }
   for (const row of rows) {
-    const item = document.createElement('article');
-    item.className = 'ledger-row';
-    const icon = document.createElement('span');
-    icon.className = 'ledger-icon';
-    icon.append(createIcon('arrow-down-left'));
-    const main = document.createElement('div');
-    main.className = 'ledger-main';
-    const title = document.createElement('strong');
-    title.textContent = row.memo || '积分变动';
-    const meta = document.createElement('small');
-    meta.textContent = formatDate(row.created_at, '时间待同步');
-    main.append(title, meta);
-    const value = document.createElement('div');
-    value.className = 'ledger-value';
-    const delta = document.createElement('strong');
+    const tr = document.createElement('tr');
+    const time = document.createElement('td');
+    time.className = 'time';
+    time.textContent = formatDate(row.created_at, '时间待同步');
+    const memo = document.createElement('td');
+    memo.textContent = row.memo || '积分变动';
+    const delta = document.createElement('td');
+    delta.className = 'ledger-delta';
     delta.textContent = `${row.points > 0 ? '+' : ''}${formatPoints(row.points)}`;
-    const after = document.createElement('small');
-    after.textContent = `余额 ${formatPoints(row.balance_after)}`;
-    value.append(delta, after);
-    item.append(icon, main, value);
-    container.append(item);
+    const balance = document.createElement('td');
+    balance.className = 'ledger-balance';
+    balance.textContent = formatPoints(row.balance_after);
+    tr.append(time, memo, delta, balance);
+    body.append(tr);
   }
-  refreshIcons();
-}
-
-// 订单快照里只有档位代码，展示时映射成档位名称
-function planLabel(code) {
-  const plan = (state.mart.membership?.plans || []).find((item) => item.code === code);
-  return plan ? plan.name : (code || '一个月');
+  renderPager(elements.walletLedgerPagination, {
+    total: state.mart.transactionTotal,
+    page: state.mart.pages.ledger,
+    onChange: (next) => {
+      state.mart.pages.ledger = next;
+      void loadWalletData();
+    }
+  });
 }
 
 const ORDER_STATUS_CHIPS = {
@@ -1037,50 +1079,47 @@ const ORDER_STATUS_CHIPS = {
   5: ['支付失败', 'status-lost']
 };
 
-function renderOrderList(container, orders, kind) {
-  container.replaceChildren();
+function renderOrderTable(body, orders, kind) {
+  body.replaceChildren();
   if (!orders.length) {
-    renderEmptyState(container, kind === 'membership' ? '还没有会员购买记录' : '还没有充值记录');
+    body.append(tableEmptyRow(6, kind === 'membership' ? '还没有会员购买记录' : '还没有充值记录'));
     return;
   }
   for (const order of orders) {
     const snapshot = order.quote_snapshot || {};
-    const row = document.createElement('article');
-    row.className = 'order-row';
-    const icon = document.createElement('span');
-    icon.className = `order-icon${kind === 'recharge' ? ' is-recharge' : ''}`;
-    icon.append(createIcon(kind === 'recharge' ? 'coins' : 'crown'));
-    const main = document.createElement('div');
-    main.className = 'order-main';
-    const title = document.createElement('strong');
-    title.textContent = kind === 'recharge'
+    const tr = document.createElement('tr');
+    const no = document.createElement('td');
+    no.className = 'order-no';
+    no.textContent = order.order_no;
+    const subject = document.createElement('td');
+    subject.textContent = kind === 'recharge'
       ? `${formatPoints(snapshot.points || 0)} 积分`
       : `会员 · ${planLabel(snapshot.plan_code)}`;
-    const meta = document.createElement('small');
-    meta.textContent = `${order.order_no} · ${formatDate(order.created_at, '时间待同步')}`;
-    main.append(title, meta);
-    const side = document.createElement('div');
-    side.className = 'order-side';
-    const amount = document.createElement('span');
+    const amount = document.createElement('td');
     amount.className = 'order-amount';
     amount.textContent = formatYuan(order.amount_fen);
+    const status = document.createElement('td');
     const [label, chipClass] = ORDER_STATUS_CHIPS[order.status] || ['处理中', 'status-info'];
     const chip = document.createElement('span');
     chip.className = `status ${chipClass}`;
     chip.textContent = label;
-    side.append(amount, chip);
+    status.append(chip);
+    const time = document.createElement('td');
+    time.className = 'time';
+    time.textContent = formatDate(order.created_at, '时间待同步');
+    const action = document.createElement('td');
+    action.className = 'order-action';
     if (order.status === 1) {
       const resume = document.createElement('button');
       resume.className = 'button';
       resume.type = 'button';
       resume.textContent = '继续支付';
       resume.addEventListener('click', () => openPurchase(kind, order));
-      side.append(resume);
+      action.append(resume);
     }
-    row.append(icon, main, side);
-    container.append(row);
+    tr.append(no, subject, amount, status, time, action);
+    body.append(tr);
   }
-  refreshIcons();
 }
 
 async function loadTeamOrders() {
@@ -1088,15 +1127,30 @@ async function loadTeamOrders() {
   if (!state.mart.team) await loadTeamData();
   const team = state.mart.team;
   if (!team) return;
-  elements.teamOrderList.replaceChildren();
+  elements.teamOrderBody.replaceChildren();
+  elements.teamOrderPagination.replaceChildren();
+  const page = state.mart.pages.teamOrders;
   try {
-    const page = await window.pddMonitor.mart.orders({ teamId: team.id, bizType: 1 });
-    state.mart.teamOrders = page.orders || [];
-    setTabCount(elements.teamOrderCount, page.total);
-    renderOrderList(elements.teamOrderList, state.mart.teamOrders, 'membership');
+    const result = await window.pddMonitor.mart.orders({
+      teamId: team.id,
+      bizType: 1,
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE
+    });
+    state.mart.teamOrders = result.orders || [];
+    setTabCount(elements.teamOrderCount, result.total);
+    renderOrderTable(elements.teamOrderBody, state.mart.teamOrders, 'membership');
+    renderPager(elements.teamOrderPagination, {
+      total: result.total,
+      page,
+      onChange: (next) => {
+        state.mart.pages.teamOrders = next;
+        void loadTeamOrders();
+      }
+    });
   } catch (error) {
     showNotice(error.message || '购买记录暂时无法加载', true);
-    renderEmptyState(elements.teamOrderList, '购买记录暂时无法加载。', '重新加载', () => void loadTeamOrders());
+    elements.teamOrderBody.append(tableEmptyRow(6, '购买记录暂时无法加载'));
   }
 }
 
@@ -1105,15 +1159,30 @@ async function loadWalletOrders() {
   if (!state.mart.team) await loadTeamData();
   const team = state.mart.team;
   if (!team) return;
-  elements.walletOrderList.replaceChildren();
+  elements.walletOrderBody.replaceChildren();
+  elements.walletOrderPagination.replaceChildren();
+  const page = state.mart.pages.walletOrders;
   try {
-    const page = await window.pddMonitor.mart.orders({ teamId: team.id, bizType: 2 });
-    state.mart.walletOrders = page.orders || [];
-    setTabCount(elements.walletOrderCount, page.total);
-    renderOrderList(elements.walletOrderList, state.mart.walletOrders, 'recharge');
+    const result = await window.pddMonitor.mart.orders({
+      teamId: team.id,
+      bizType: 2,
+      limit: PAGE_SIZE,
+      offset: (page - 1) * PAGE_SIZE
+    });
+    state.mart.walletOrders = result.orders || [];
+    setTabCount(elements.walletOrderCount, result.total);
+    renderOrderTable(elements.walletOrderBody, state.mart.walletOrders, 'recharge');
+    renderPager(elements.walletOrderPagination, {
+      total: result.total,
+      page,
+      onChange: (next) => {
+        state.mart.pages.walletOrders = next;
+        void loadWalletOrders();
+      }
+    });
   } catch (error) {
     showNotice(error.message || '充值记录暂时无法加载', true);
-    renderEmptyState(elements.walletOrderList, '充值记录暂时无法加载。', '重新加载', () => void loadWalletOrders());
+    elements.walletOrderBody.append(tableEmptyRow(6, '充值记录暂时无法加载'));
   }
 }
 
