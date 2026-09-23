@@ -2303,7 +2303,6 @@ async function finishPlatformSignIn(profile, security = null) {
   setPlatformShell('signed_in');
   await Promise.all([loadAccounts(), refreshMartState()]);
   showView('accounts');
-  showNotice('已登录 Elunvi，当前电脑上的店铺数据已准备就绪');
 }
 
 async function beginWechatLogin() {
