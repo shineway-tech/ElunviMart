@@ -3,6 +3,7 @@
   "productName": "Elunvi Mart",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@11.19.0",
   "description": "拼多多商家百亿补贴状态监控客户端",
   "main": "src/main/main.js",
   "scripts": {
@@ -31,7 +32,9 @@
       "target": [
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "Elunvi-Mart-${version}-portable.${ext}"
@@ -41,6 +44,7 @@
     "lucide": "^1.47.0"
   },
   "devDependencies": {
-    "electron": "^37.2.6"
+    "electron": "^37.2.6",
+    "electron-builder": "26.15.3"
   }
 }
