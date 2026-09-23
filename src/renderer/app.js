@@ -127,7 +127,7 @@ const elements = {
   walletTabs: document.querySelector('#wallet-tabs'),
   walletPurchaseBar: document.querySelector('#wallet-purchase-bar'),
   walletTabCount: document.querySelector('#wallet-tab-count'),
-  teamMembers: document.querySelector('#team-members-list'),
+  teamMembers: document.querySelector('#team-members-body'),
   teamOrderCount: document.querySelector('#team-order-count'),
   walletOrderList: document.querySelector('#wallet-order-list'),
   walletOrderCount: document.querySelector('#wallet-order-count'),
@@ -1073,6 +1073,12 @@ function renderWalletTransactions() {
   });
 }
 
+// 订单快照里只有档位代码，展示时映射成档位名称
+function planLabel(code) {
+  const plan = (state.mart.membership?.plans || []).find((item) => item.code === code);
+  return plan ? plan.name : (code || '一个月');
+}
+
 const ORDER_STATUS_CHIPS = {
   1: ['待支付', 'status-warning'],
   2: ['已支付', 'status-info'],
@@ -1436,26 +1442,41 @@ function renderTeamPurchaseBar(plans, current) {
 function renderTeamMembers(team) {
   const isOwner = team.role === MEMBER_ROLE_OWNER;
   const members = state.mart.members || [];
-  elements.teamMembers.replaceChildren();
+  const body = elements.teamMembers;
+  body.replaceChildren();
   setTabCount(elements.teamTabCount, members.length);
   if (!members.length) {
-    renderEmptyState(elements.teamMembers, '成员列表暂时无法加载。');
+    body.append(tableEmptyRow(4, '成员列表暂时无法加载'));
     return;
   }
   for (const member of members) {
-    const row = document.createElement('div');
-    row.className = 'member-row';
+    const tr = document.createElement('tr');
+    const userCell = document.createElement('td');
+    const cell = document.createElement('div');
+    cell.className = 'account-cell';
     const avatar = document.createElement('span');
     avatar.className = `member-avatar${member.role === MEMBER_ROLE_OWNER ? ' is-owner' : ''}`;
     avatar.textContent = (member.display_name || '成').trim().slice(0, 1);
-    const main = document.createElement('div');
-    main.className = 'member-main';
-    const name = document.createElement('strong');
+    const info = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'primary-text';
     name.textContent = member.display_name || '未命名成员';
-    const meta = document.createElement('small');
-    meta.textContent = `${member.role === MEMBER_ROLE_OWNER ? '负责人' : '成员'} · 加入于 ${formatDate(member.joined_at, '待确认')}`;
-    main.append(name, meta);
-    row.append(avatar, main);
+    info.append(name);
+    cell.append(avatar, info);
+    userCell.append(cell);
+
+    const roleCell = document.createElement('td');
+    const chip = document.createElement('span');
+    chip.className = `chip ${member.role === MEMBER_ROLE_OWNER ? 'chip-owner' : 'chip-member'}`;
+    chip.textContent = member.role === MEMBER_ROLE_OWNER ? '负责人' : '成员';
+    roleCell.append(chip);
+
+    const timeCell = document.createElement('td');
+    timeCell.className = 'time';
+    timeCell.textContent = formatDate(member.joined_at, '待确认');
+
+    const actionCell = document.createElement('td');
+    actionCell.className = 'order-action';
     if (isOwner && member.role !== MEMBER_ROLE_OWNER) {
       const remove = document.createElement('button');
       remove.className = 'icon-button';
@@ -1464,9 +1485,10 @@ function renderTeamMembers(team) {
       remove.setAttribute('aria-label', '移除成员');
       remove.append(createIcon('user-minus'));
       remove.addEventListener('click', () => void removeTeamMember(member));
-      row.append(remove);
+      actionCell.append(remove);
     }
-    elements.teamMembers.append(row);
+    tr.append(userCell, roleCell, timeCell, actionCell);
+    body.append(tr);
   }
   refreshIcons();
 }

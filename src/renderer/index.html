@@ -119,11 +119,13 @@
             <button type="button" role="tab" data-team-tab="plans" id="team-tab-plans">会员档位</button>
             <button type="button" role="tab" data-team-tab="orders">购买记录<span class="tab-count" id="team-order-count" hidden></span></button>
           </div>
-          <section class="finance-card" data-team-panel="members">
-            <div class="finance-card-header">
-              <div><h3>团队成员</h3><p>负责人可以邀请和移除成员；成员随时可以退出。</p></div>
+          <section class="finance-card is-plain" data-team-panel="members">
+            <div class="table-frame">
+              <table>
+                <thead><tr><th>成员</th><th>角色</th><th>加入时间</th><th></th></tr></thead>
+                <tbody id="team-members-body"></tbody>
+              </table>
             </div>
-            <div class="member-list" id="team-members-list"></div>
           </section>
           <section class="finance-card is-plain" id="team-plan-card" data-team-panel="plans" hidden>
             <div class="plan-grid option-grid" id="team-plan-list"></div>

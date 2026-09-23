@@ -104,5 +104,9 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /window\.pddMonitor\.mart\.membershipQuote/);
   assert.match(renderer, /window\.pddMonitor\.mart\.acceptInvitation/);
   assert.match(renderer, /window\.pddMonitor\.mart\.walletTransactions/);
+  // 渲染用的辅助函数必须存在，别再被重构顺手删掉
+  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole']) {
+    assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
+  }
   assert.doesNotMatch(renderer, /window\.pddMonitor\.platform\.(team|wallet|createCheckout|packages)/);
 });
