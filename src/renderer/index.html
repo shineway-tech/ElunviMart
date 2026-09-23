@@ -201,14 +201,14 @@
     </section>
   </div>
 
-  <div class="modal-backdrop" id="remove-account-modal" hidden>
-    <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="remove-account-title" aria-describedby="remove-account-description">
-      <div class="modal-header"><h2 id="remove-account-title">移除商家账号？</h2><button class="icon-button" type="button" data-close-remove-modal aria-label="关闭"><i data-lucide="x"></i></button></div>
+  <div class="modal-backdrop" id="confirm-modal" hidden>
+    <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-description">
+      <div class="modal-header"><h2 id="confirm-modal-title"></h2><button class="icon-button" type="button" data-close-confirm-modal aria-label="关闭"><i data-lucide="x"></i></button></div>
       <div class="confirm-content">
-        <span class="confirm-icon"><i data-lucide="trash-2"></i></span>
-        <p id="remove-account-description">移除后，该账号的本地商品缓存和登录会话也会一并清除。</p>
+        <span class="confirm-icon" id="confirm-modal-icon"><i data-lucide="triangle-alert"></i></span>
+        <p id="confirm-modal-description"></p>
       </div>
-      <div class="modal-actions"><button class="button" type="button" data-close-remove-modal>取消</button><button class="button button-danger" type="button" id="confirm-remove-account"><i data-lucide="trash-2"></i><span>移除账号</span></button></div>
+      <div class="modal-actions"><button class="button" type="button" data-close-confirm-modal>取消</button><button class="button button-danger" type="button" id="confirm-modal-submit"><span class="button-icon" id="confirm-modal-submit-icon"></span><span id="confirm-modal-submit-label">确定</span></button></div>
     </section>
   </div>
 

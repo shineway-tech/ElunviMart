@@ -34,7 +34,7 @@ const state = {
   syncInProgress: false,
   loginAccountId: null,
   loginMode: 'create',
-  pendingRemoval: null,
+  pendingConfirm: null,
   teamActionMode: null,
   platformAuthMode: 'login',
   platformAuthBindingKind: null,
@@ -81,9 +81,13 @@ const elements = {
   loginErrorDetail: document.querySelector('#login-error-detail'),
   startLogin: document.querySelector('#start-login'),
   completeLogin: document.querySelector('#complete-login'),
-  removeAccountModal: document.querySelector('#remove-account-modal'),
-  removeAccountDescription: document.querySelector('#remove-account-description'),
-  confirmRemoveAccount: document.querySelector('#confirm-remove-account'),
+  confirmModal: document.querySelector('#confirm-modal'),
+  confirmTitle: document.querySelector('#confirm-modal-title'),
+  confirmDescription: document.querySelector('#confirm-modal-description'),
+  confirmIcon: document.querySelector('#confirm-modal-icon'),
+  confirmSubmit: document.querySelector('#confirm-modal-submit'),
+  confirmSubmitLabel: document.querySelector('#confirm-modal-submit-label'),
+  confirmSubmitIcon: document.querySelector('#confirm-modal-submit-icon'),
   platformSignin: document.querySelector('#platform-signin'),
   platformAccount: document.querySelector('#platform-account'),
   platformAccountAvatar: document.querySelector('#platform-account-avatar'),
@@ -179,6 +183,11 @@ function createIcon(name) {
 
 function refreshIcons() {
   window.lucide?.createIcons({ attrs: { 'aria-hidden': 'true' } });
+}
+
+function setIcon(container, name) {
+  container.replaceChildren(createIcon(name));
+  refreshIcons();
 }
 
 function togglePasswordVisibility(button) {
@@ -1518,7 +1527,14 @@ function renderTeamMembers(team) {
 async function removeTeamMember(member) {
   const team = state.mart.team;
   if (!team) return;
-  if (!window.confirm(`移除「${member.display_name || '该成员'}」后，对方立即失去团队权限。确定移除吗？`)) return;
+  const name = member.display_name || '该成员';
+  const ok = await confirmAction({
+    title: '移除团队成员？',
+    description: `移除「${name}」后，对方立即失去团队权限。`,
+    confirmLabel: '移除成员',
+    icon: 'user-minus'
+  });
+  if (!ok) return;
   try {
     await window.pddMonitor.mart.removeMember({ teamId: team.id, memberId: member.id });
     await loadTeamData();
@@ -1529,7 +1545,13 @@ async function removeTeamMember(member) {
 }
 
 async function leaveCurrentTeam(team) {
-  if (!window.confirm(`退出「${team.name || '该团队'}」后将失去团队资源和会员权益。确定退出吗？`)) return;
+  const ok = await confirmAction({
+    title: '退出团队？',
+    description: `退出「${team.name || '该团队'}」后将失去团队资源和会员权益。`,
+    confirmLabel: '退出团队',
+    icon: 'log-out'
+  });
+  if (!ok) return;
   try {
     await window.pddMonitor.mart.leaveTeam(team.id);
     state.mart.team = null;
@@ -1803,7 +1825,13 @@ async function closePurchaseOrder() {
 }
 
 async function logoutPlatform() {
-  if (!window.confirm('退出 Elunvi 账号后，监控任务会暂停。确定退出吗？')) return;
+  const ok = await confirmAction({
+    title: '退出 Elunvi 账号？',
+    description: '退出后监控任务会暂停，重新登录才能继续同步。',
+    confirmLabel: '退出登录',
+    icon: 'log-out'
+  });
+  if (!ok) return;
   await window.pddMonitor.platform.logout();
   state.accounts = [];
   state.platformAuthBindingKind = null;
@@ -1981,37 +2009,49 @@ function renderAccounts() {
     renderAccountAvatar(row.querySelector('.account-avatar'), account.avatarUrl);
     row.querySelector('[data-account-action="view"]').addEventListener('click', () => openAccount(account));
     row.querySelector('[data-account-action="login"]').addEventListener('click', () => openLoginModal(account));
-    row.querySelector('[data-account-action="remove"]').addEventListener('click', () => openRemoveAccountModal(account));
+    row.querySelector('[data-account-action="remove"]').addEventListener('click', () => void requestRemoveAccount(account));
     elements.accountsBody.append(row);
   }
   refreshIcons();
 }
 
-function openRemoveAccountModal(account) {
-  state.pendingRemoval = account;
-  elements.removeAccountDescription.textContent = `移除“${account.displayName}”后，该账号的本地商品缓存和登录会话也会一并清除。此操作无法撤销。`;
-  elements.removeAccountModal.hidden = false;
-  elements.confirmRemoveAccount.focus();
+// 主题内的确认弹窗，替代系统原生 confirm；返回用户是否确认
+function confirmAction({ title, description, confirmLabel, icon = 'triangle-alert' }) {
+  return new Promise((resolve) => {
+    state.pendingConfirm = resolve;
+    elements.confirmTitle.textContent = title;
+    elements.confirmDescription.textContent = description;
+    elements.confirmSubmitLabel.textContent = confirmLabel;
+    setIcon(elements.confirmIcon, icon);
+    setIcon(elements.confirmSubmitIcon, icon);
+    elements.modal.hidden = true;
+    elements.confirmModal.hidden = false;
+    elements.confirmSubmit.focus();
+  });
 }
 
-function closeRemoveAccountModal() {
-  state.pendingRemoval = null;
-  elements.removeAccountModal.hidden = true;
+function closeConfirmModal(confirmed = false) {
+  const resolve = state.pendingConfirm;
+  state.pendingConfirm = null;
+  elements.confirmModal.hidden = true;
+  if (resolve) resolve(confirmed);
 }
 
-async function removeAccount() {
-  const account = state.pendingRemoval;
-  if (!account) return;
+async function requestRemoveAccount(account) {
+  const name = account.displayName || '该账号';
+  const ok = await confirmAction({
+    title: '移除商家账号？',
+    description: `移除「${name}」后，该账号的本地商品缓存和登录会话也会一并清除。此操作无法撤销。`,
+    confirmLabel: '移除账号',
+    icon: 'trash-2'
+  });
+  if (!ok) return;
   try {
-    elements.confirmRemoveAccount.disabled = true;
     await window.pddMonitor.accounts.remove(account.id);
-    closeRemoveAccountModal();
     await loadAccounts();
     showNotice('商家账号已移除');
   } catch (error) {
     showNotice(friendlyError(error), true);
-  } finally {
-    elements.confirmRemoveAccount.disabled = false;
   }
 }
 
@@ -2557,9 +2597,9 @@ elements.teamActionCancel.addEventListener('click', closeTeamAction);
 elements.teamActionClose.addEventListener('click', closeTeamAction);
 elements.teamActionModal.addEventListener('click', (event) => { if (event.target === elements.teamActionModal) closeTeamAction(); });
 document.querySelectorAll('[data-close-modal]').forEach((button) => button.addEventListener('click', () => { elements.modal.hidden = true; }));
-document.querySelectorAll('[data-close-remove-modal]').forEach((button) => button.addEventListener('click', closeRemoveAccountModal));
-elements.removeAccountModal.addEventListener('click', (event) => { if (event.target === elements.removeAccountModal) closeRemoveAccountModal(); });
-elements.confirmRemoveAccount.addEventListener('click', removeAccount);
+document.querySelectorAll('[data-close-confirm-modal]').forEach((button) => button.addEventListener('click', () => closeConfirmModal(false)));
+elements.confirmModal.addEventListener('click', (event) => { if (event.target === elements.confirmModal) closeConfirmModal(false); });
+elements.confirmSubmit.addEventListener('click', () => closeConfirmModal(true));
 elements.startLogin.addEventListener('click', beginLogin);
 elements.completeLogin.addEventListener('click', completeLogin);
 elements.pageBack.addEventListener('click', () => { showView('accounts'); loadAccounts(); });
@@ -2598,7 +2638,7 @@ elements.paymentCloseOrder.addEventListener('click', () => void closePurchaseOrd
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  if (!elements.removeAccountModal.hidden) closeRemoveAccountModal();
+  if (!elements.confirmModal.hidden) closeConfirmModal(false);
   else if (!elements.platformLoginModal.hidden) closePlatformAuthModal();
 });
 
