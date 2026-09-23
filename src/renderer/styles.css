@@ -365,7 +365,7 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .button-link:hover{color:var(--accent);background:transparent;text-decoration:underline;text-underline-offset:3px}
 .button-link.is-primary{color:var(--accent)}
 .button-link.is-primary:hover{color:#c92b21}
-.button-link:disabled{cursor:not-allowed;color:#b0b4ba}
+.button-link:disabled,.button-link:disabled:hover{color:#b0b4ba;text-decoration:none;cursor:not-allowed}
 
 /* 指标用满（成员席位/店铺额度）时数值转为强调色 */
 .hero-metric strong.is-full{color:var(--accent)}
