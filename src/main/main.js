@@ -389,16 +389,56 @@ function enforceManualSyncCooldown(accountId) {
   manualSyncAtByAccount.set(accountId, Date.now());
 }
 
-// 平台登录成功后建立 Mart 会话；Mart 不可用不影响本地监控功能，失败只记录并通知渲染层
+function parseAlipayUrl(payUrl) {
+  const value = String(payUrl || '');
+  let parsed;
+  try { parsed = new URL(value); } catch { throw new Error('支付地址无效'); }
+  const isAlipay = parsed.protocol === 'https:' && (parsed.hostname === 'alipay.com' || parsed.hostname.endsWith('.alipay.com'));
+  if (!isAlipay) throw new Error('不支持打开该支付地址');
+  return parsed;
+}
+
+let payWindow = null;
+
+// 支付宝 qr_pay_mode=4 返回的是纯二维码页面，放进独立窗口让用户直接扫码
+function openPayWindow(payUrl) {
+  const parsed = parseAlipayUrl(payUrl);
+  if (payWindow && !payWindow.isDestroyed()) {
+    payWindow.loadURL(parsed.toString());
+    payWindow.show();
+    payWindow.focus();
+    return true;
+  }
+  payWindow = new BrowserWindow({
+    width: 380,
+    height: 470,
+    resizable: true,
+    minimizable: false,
+    maximizable: false,
+    title: `${APP_NAME} - 支付宝扫码支付`,
+    icon: appIconPath(),
+    backgroundColor: '#ffffff',
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+  });
+  payWindow.loadURL(parsed.toString());
+  payWindow.on('closed', () => {
+    payWindow = null;
+    // 关闭扫码窗口后让渲染层查一次单，支付完成即可直接到账
+    sendToRenderer('mart:payWindowClosed');
+  });
+  return true;
+}
+
+// 平台 access token 临近过期时先借 PlatformClient 的 401 重试刷新，保证换取的凭据不会立刻过期
 async function ensureFreshPlatformToken() {
   const tokens = await platformSession.tokens();
   const expiresAt = tokens?.accessExpiresAt ? Date.parse(tokens.accessExpiresAt) : 0;
   if (!expiresAt || expiresAt - Date.now() < 60_000) {
-    // 借 PlatformClient 的 401 重试刷新令牌，保证换取的凭据不会立刻过期
     await platformService.getProfile();
   }
 }
 
+// 平台登录成功后建立 Mart 会话；Mart 不可用不影响本地监控功能，失败只记录并通知渲染层
 async function linkMartSession() {
   if (!martService) return null;
   try {
@@ -527,13 +567,11 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:closeOrder', (_event, orderId) => martService.closeOrder(orderId));
   ipcMain.handle('mart:syncOrder', (_event, orderId) => martService.syncOrder(orderId));
   ipcMain.handle('mart:simulatePayment', (_event, orderId) => martService.simulatePayment(orderId));
+  // 支付宝 qr_pay_mode=4 返回的就是一张二维码页面，放进独立窗口扫码即可
+  ipcMain.handle('mart:openPayWindow', (_event, payUrl) => openPayWindow(payUrl));
   // 只在默认浏览器里打开支付宝收银台，其他地址一律拒绝
   ipcMain.handle('mart:openPayUrl', async (_event, payUrl) => {
-    const value = String(payUrl || '');
-    let parsed;
-    try { parsed = new URL(value); } catch { throw new Error('支付地址无效'); }
-    const isAlipay = parsed.protocol === 'https:' && (parsed.hostname === 'alipay.com' || parsed.hostname.endsWith('.alipay.com'));
-    if (!isAlipay) throw new Error('不支持打开该支付地址');
+    const parsed = parseAlipayUrl(payUrl);
     await shell.openExternal(parsed.toString());
     return true;
   });

@@ -1165,16 +1165,33 @@ function renderPaymentOrder() {
     const open = document.createElement('button');
     open.className = 'button button-primary';
     open.type = 'button';
-    open.textContent = '打开支付宝收银台';
+    open.textContent = '打开支付宝扫码窗口';
     open.addEventListener('click', async () => {
       try {
+        await window.pddMonitor.mart.openPayWindow(attempt.payment_params.pay_url);
+        showNotice('请用支付宝扫码支付，完成后关闭窗口即可自动确认');
+      } catch (error) {
+        showNotice(error.message || '无法打开支付窗口', true);
+      }
+    });
+    const browser = document.createElement('button');
+    browser.className = 'button';
+    browser.type = 'button';
+    browser.textContent = '在浏览器打开';
+    browser.addEventListener('click', async () => {
+      try {
         await window.pddMonitor.mart.openPayUrl(attempt.payment_params.pay_url);
-        showNotice('已打开收银台，支付完成后点「查询支付状态」');
       } catch (error) {
         showNotice(error.message || '无法打开支付页面', true);
       }
     });
-    detail.append(open);
+    const actions = document.createElement('div');
+    actions.className = 'payment-channel-actions';
+    actions.append(open, browser);
+    const hint = document.createElement('p');
+    hint.className = 'empty-copy';
+    hint.textContent = '扫码完成支付后，窗口关闭会自动查询支付状态。';
+    detail.append(actions, hint);
   }
   if (order.status === 4) {
     const done = document.createElement('p');
@@ -1983,6 +2000,9 @@ document.addEventListener('keydown', (event) => {
 });
 
 window.pddMonitor.onAccountsChanged(() => loadAccounts());
+window.pddMonitor.onPayWindowClosed(() => {
+  if (state.purchase.order) void refreshPaymentOrder(false, { sync: true });
+});
 window.pddMonitor.onPlatformChanged((payload) => {
   if (payload?.status === 'signed_in') {
     state.platform.status = 'signed_in';

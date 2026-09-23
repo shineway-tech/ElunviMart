@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     paymentAttempt: (input) => ipcRenderer.invoke('mart:paymentAttempt', input),
     closeOrder: (orderId) => ipcRenderer.invoke('mart:closeOrder', orderId),
     syncOrder: (orderId) => ipcRenderer.invoke('mart:syncOrder', orderId),
+    openPayWindow: (payUrl) => ipcRenderer.invoke('mart:openPayWindow', payUrl),
     openPayUrl: (payUrl) => ipcRenderer.invoke('mart:openPayUrl', payUrl),
     simulatePayment: (orderId) => ipcRenderer.invoke('mart:simulatePayment', orderId)
   },
@@ -63,5 +64,6 @@ contextBridge.exposeInMainWorld('pddMonitor', {
   },
   onAccountsChanged: (callback) => ipcRenderer.on('accounts:changed', callback),
   onPlatformChanged: (callback) => ipcRenderer.on('platform:changed', (_event, payload) => callback(payload)),
-  onMartChanged: (callback) => ipcRenderer.on('mart:changed', (_event, payload) => callback(payload))
+  onMartChanged: (callback) => ipcRenderer.on('mart:changed', (_event, payload) => callback(payload)),
+  onPayWindowClosed: (callback) => ipcRenderer.on('mart:payWindowClosed', () => callback())
 });
