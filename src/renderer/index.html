@@ -112,25 +112,35 @@
         </section>
 
         <section class="view platform-view" id="wallet-view" hidden>
-          <div class="section-header"><div><h2>钱包</h2><p>充值和流水均以 Platform 服务端状态为准。</p></div><button class="button" type="button" id="wallet-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
-          <div class="finance-grid" id="wallet-context-list"></div>
+          <div class="section-header"><div><h2>积分钱包</h2><p>团队积分由负责人充值，成员可查看余额和流水。</p></div><button class="button" type="button" id="wallet-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
+          <div class="finance-card" id="wallet-summary-card"></div>
+          <section class="finance-card">
+            <div class="finance-card-header"><div><h3>充值档位</h3><p>1 元到账 100 积分，大额档位实付更优惠。</p></div></div>
+            <div class="payment-package-list" id="wallet-package-list"></div>
+          </section>
           <section class="finance-card" id="wallet-transactions-card">
-            <div class="finance-card-header"><div><h3>个人钱包流水</h3><p>只展示当前 Elunvi 用户的 Mart 记录。</p></div></div>
+            <div class="finance-card-header"><div><h3>积分流水</h3><p>流水只追加不修改，余额以服务端记录为准。</p></div></div>
             <div class="finance-list" id="wallet-transactions-list"></div>
           </section>
         </section>
 
         <section class="view platform-view" id="team-view" hidden>
-          <div class="section-header"><div><h2>我的团队</h2><p id="team-description">团队成员和团队钱包由 Platform 管理。</p></div><button class="button" type="button" id="team-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
+          <div class="section-header"><div><h2>我的团队</h2><p id="team-description">团队成员和会员由 Mart 服务管理。</p></div><button class="button" type="button" id="team-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
           <div class="team-summary finance-card" id="team-summary-card"></div>
+          <section class="finance-card">
+            <div class="finance-card-header"><div><h3>会员档位</h3><p>按团队购买、按月计费，成员进入团队即占用一个席位。</p></div></div>
+            <div class="payment-package-list" id="team-plan-list"></div>
+          </section>
           <section class="finance-card"><div class="finance-card-header"><div><h3>团队成员</h3><p>成员关系只影响团队权限，本机店铺和监控数据不会共享。</p></div></div><div class="team-members" id="team-members-list"></div></section>
-          <section class="finance-card"><div class="finance-card-header"><div><h3>团队流水</h3><p>负责人可查看充值和团队消费，成员只查看自己的可见记录。</p></div><div class="finance-tabs"><button type="button" class="is-active" data-team-history="usage">消费</button><button type="button" data-team-history="topup">充值</button></div></div><div class="finance-list" id="team-history-list"></div></section>
         </section>
 
         <section class="view platform-view" id="payment-view" hidden>
-          <div class="section-header"><div><h2>充值</h2><p>先选择付款身份，再创建支付订单。</p></div></div>
-          <div class="payment-layout"><section class="finance-card"><div class="finance-card-header"><div><h3>付款身份</h3><p>订单创建后会冻结付款钱包。</p></div></div><div id="payment-context-options" class="payment-context-options"></div></section><section class="finance-card"><div class="finance-card-header"><div><h3>充值套餐</h3><p>选择套餐后继续支付。</p></div></div><div id="payment-package-list" class="payment-package-list"></div></section></div>
-          <section class="finance-card payment-status-card" id="payment-status-card" hidden><div class="finance-card-header"><div><h3>支付订单</h3><p id="payment-status-copy"></p></div></div><div id="payment-order-detail"></div><div class="modal-actions"><button class="button" type="button" id="payment-close-order">关闭订单</button><button class="button button-primary" type="button" id="payment-refresh-order">查询支付状态</button></div></section>
+          <div class="section-header"><div><h2>支付订单</h2><p>支付结果以服务端回调为准，订单 10 分钟未支付会自动关闭。</p></div></div>
+          <section class="finance-card payment-status-card" id="payment-status-card" hidden>
+            <div class="finance-card-header"><div><h3>订单信息</h3><p id="payment-status-copy"></p></div></div>
+            <div id="payment-order-detail"></div>
+            <div class="modal-actions"><button class="button" type="button" id="payment-close-order">关闭订单</button><button class="button" type="button" id="payment-refresh-order">查询支付状态</button><button class="button button-accent-outline" type="button" id="payment-simulate" hidden>模拟支付成功（本地调试）</button></div>
+          </section>
         </section>
       </div>
     </main>
@@ -226,6 +236,7 @@
         <label class="field-label" id="team-name-field">团队名称<input class="input" id="team-action-name" type="text" maxlength="80" placeholder="例如：运营团队"></label>
         <label class="field-label" id="team-email-field" hidden>成员邮箱<input class="input" id="team-action-email" type="email" autocomplete="email" placeholder="member@example.com"></label>
         <label class="field-label" id="team-display-field" hidden>成员名称<input class="input" id="team-action-display" type="text" maxlength="80" placeholder="成员姓名"></label>
+        <label class="field-label" id="team-code-field" hidden>邀请码<input class="input" id="team-action-code" type="text" inputmode="numeric" maxlength="6" placeholder="请输入 6 位邀请码"></label>
         <div class="login-error" id="team-action-error" role="alert" hidden><i data-lucide="circle-alert"></i><div><strong>操作失败</strong><p id="team-action-error-text"></p></div></div>
         <div class="modal-actions"><button class="button" type="button" id="team-action-cancel">取消</button><button class="button button-primary" type="submit" id="team-action-submit">继续</button></div>
       </form>

@@ -35,7 +35,7 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.match(renderer, /toastTimer/);
   assert.match(renderer, /setTimeout\(\(\) => \{ elements\.toast\.hidden = true;/);
   assert.match(renderer, /document\.querySelectorAll\('\[data-view\]'\)/);
-  assert.match(renderer, /teamData\?\.teams\?\.team\?\.role === 'owner'/);
+  assert.match(renderer, /team\.role === MEMBER_ROLE_OWNER/);
   assert.match(renderer, /团队信息暂时无法加载/);
   assert.doesNotMatch(renderer, /renderTeam\(null\)/);
   assert.match(html, /id="wallet-view"/);
@@ -81,4 +81,28 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.doesNotMatch(html, /\.\.\/\.\.\/node_modules\/lucide/);
   assert.doesNotMatch(html, /id="platform-login-close"/);
   assert.doesNotMatch(html, /id="platform-auth-tabs"/);
+});
+
+test('teams, wallet and payment surfaces are driven by the mart client', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/renderer/index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '../src/renderer/preload.js'), 'utf8');
+
+  assert.match(html, /id="team-plan-list"/);
+  assert.match(html, /id="wallet-package-list"/);
+  assert.match(html, /id="wallet-summary-card"/);
+  assert.match(html, /id="payment-simulate"/);
+  assert.match(html, /id="team-code-field"[\s\S]*id="team-action-code"/);
+
+  assert.match(preload, /invoke\('mart:inviteMember'/);
+  assert.match(preload, /invoke\('mart:acceptInvitation'/);
+  assert.match(preload, /invoke\('mart:membershipQuote'/);
+  assert.match(preload, /invoke\('mart:rechargeOrder'/);
+  assert.match(preload, /invoke\('mart:simulatePayment'/);
+  assert.doesNotMatch(preload, /platform:createCheckout|platform:teamMembers|platform:billingContexts/);
+
+  assert.match(renderer, /window\.pddMonitor\.mart\.membershipQuote/);
+  assert.match(renderer, /window\.pddMonitor\.mart\.acceptInvitation/);
+  assert.match(renderer, /window\.pddMonitor\.mart\.walletTransactions/);
+  assert.doesNotMatch(renderer, /window\.pddMonitor\.platform\.(team|wallet|createCheckout|packages)/);
 });

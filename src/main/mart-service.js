@@ -66,6 +66,126 @@ class MartService {
     }
     return { ok: true };
   }
+
+  async listTeams() {
+    const { data } = await this.client.request('/v1/teams');
+    return data;
+  }
+
+  async listMembers(teamId) {
+    const { data } = await this.client.request(`/v1/teams/${encodeURIComponent(teamId)}/members`);
+    return data;
+  }
+
+  async inviteMember({ teamId, email }) {
+    const { data } = await this.client.request(`/v1/teams/${encodeURIComponent(teamId)}/invitations`, {
+      method: 'POST',
+      body: { email }
+    });
+    return data;
+  }
+
+  async removeMember({ teamId, memberId }) {
+    const { data } = await this.client.request(
+      `/v1/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(memberId)}`,
+      { method: 'DELETE' }
+    );
+    return data;
+  }
+
+  async leaveTeam(teamId) {
+    const { data } = await this.client.request(`/v1/teams/${encodeURIComponent(teamId)}/leave`, {
+      method: 'POST'
+    });
+    return data;
+  }
+
+  async acceptInvitation(code) {
+    const { data } = await this.client.request('/v1/invitations/accept', {
+      method: 'POST',
+      body: { code }
+    });
+    return data;
+  }
+
+  async membership(teamId) {
+    const { data } = await this.client.request(`/v1/membership?team_id=${encodeURIComponent(teamId)}`);
+    return data;
+  }
+
+  async quoteMembership({ teamId, planId }) {
+    const { data } = await this.client.request('/v1/membership/quote', {
+      method: 'POST',
+      body: { team_id: teamId, plan_id: planId }
+    });
+    return data;
+  }
+
+  async createMembershipOrder({ teamId, quoteId, idempotencyKey = '' }) {
+    const { data } = await this.client.request('/v1/membership/orders', {
+      method: 'POST',
+      body: { team_id: teamId, quote_id: quoteId, idempotency_key: idempotencyKey }
+    });
+    return data.order;
+  }
+
+  async wallet(teamId) {
+    const { data } = await this.client.request(`/v1/wallet?team_id=${encodeURIComponent(teamId)}`);
+    return data;
+  }
+
+  async walletPackages() {
+    const { data } = await this.client.request('/v1/wallet/packages');
+    return data;
+  }
+
+  async walletTransactions({ teamId, limit = 20, offset = 0 }) {
+    const { data } = await this.client.request(
+      `/v1/wallet/transactions?team_id=${encodeURIComponent(teamId)}&limit=${encodeURIComponent(limit)}&offset=${encodeURIComponent(offset)}`
+    );
+    return data;
+  }
+
+  async createRechargeOrder({ teamId, packageId, idempotencyKey = '' }) {
+    const { data } = await this.client.request('/v1/wallet/recharge-orders', {
+      method: 'POST',
+      body: { team_id: teamId, package_id: packageId, idempotency_key: idempotencyKey }
+    });
+    return data.order;
+  }
+
+  async order(orderId) {
+    const { data } = await this.client.request(`/v1/orders/${encodeURIComponent(orderId)}`);
+    return data.order;
+  }
+
+  async createPaymentAttempt({ orderId, channel = 'mock' }) {
+    const { data } = await this.client.request(
+      `/v1/orders/${encodeURIComponent(orderId)}/payment-attempts`,
+      { method: 'POST', body: { channel } }
+    );
+    return data;
+  }
+
+  async closeOrder(orderId) {
+    const { data } = await this.client.request(
+      `/v1/orders/${encodeURIComponent(orderId)}/close`,
+      { method: 'POST' }
+    );
+    return data.order;
+  }
+
+  // 本地调试用：以模拟渠道身份回调，替代真实渠道的服务端通知
+  async simulatePayment(orderId) {
+    const order = await this.order(orderId);
+    if (!order?.channel_order_no) throw new Error('订单还没有支付参数，请先发起支付');
+    const { data } = await this.client.request('/v1/payment-callbacks/mock', {
+      method: 'POST',
+      auth: false,
+      body: { channel_order_no: order.channel_order_no, paid: true }
+    });
+    return data;
+  }
 }
 
 module.exports = { MartService };

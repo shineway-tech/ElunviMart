@@ -1,7 +1,7 @@
 const path = require('node:path');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage } = require('electron');
 const { SqliteStore, DEFAULT_DATA } = require('./store');
 const { PlatformClient } = require('./platform-client');
 const { PlatformSession, SafeStorageTokenStore } = require('./platform-session');
@@ -507,32 +507,25 @@ function registerIpc(adapter) {
   });
   ipcMain.handle('platform:profile', () => platformService.getProfile());
   ipcMain.handle('platform:security', () => platformService.getSecurity());
-  ipcMain.handle('platform:team', async () => ({
-    accountState: await platformService.getTeamAccountState(),
-    teams: await platformService.getTeams()
-  }));
-  ipcMain.handle('platform:teamMembers', (_event, teamId) => platformService.getTeamMembers(String(teamId)));
-  ipcMain.handle('platform:createTeam', (_event, name) => platformService.createTeam(String(name || '')));
-  ipcMain.handle('platform:addTeamMember', (_event, input) => platformService.addTeamMember(input || {}));
-  ipcMain.handle('platform:respondTeamRequest', (_event, input) => platformService.respondToTeamRequest(String(input.requestId), input.action));
-  ipcMain.handle('platform:billingContexts', () => platformService.getBillingContexts());
-  ipcMain.handle('platform:wallet', (_event, walletOwnerId) => platformService.getWallet(String(walletOwnerId)));
-  ipcMain.handle('platform:walletTransactions', (_event, cursor) => platformService.getWalletTransactions(cursor ? String(cursor) : null));
-  ipcMain.handle('platform:teamHistory', (_event, { teamId, kind, cursor }) => platformService.getTeamHistory(String(teamId), kind, cursor ? String(cursor) : null));
-  ipcMain.handle('platform:packages', (_event, amountFen) => platformService.listPaymentPackages(amountFen ? String(amountFen) : null));
-  ipcMain.handle('platform:createCheckout', (_event, input) => platformService.createCheckout(input));
-  ipcMain.handle('platform:createPaymentAttempt', (_event, input) => platformService.createPaymentAttempt(String(input.checkoutId), input.channel));
-  ipcMain.handle('platform:getCheckout', (_event, input) => platformService.getCheckout(String(input.checkoutId), input.paymentContext || null));
-  ipcMain.handle('platform:closeCheckout', (_event, checkoutId) => platformService.closeCheckout(String(checkoutId)));
-  ipcMain.handle('platform:openPayment', async (_event, paymentUrl) => {
-    const value = String(paymentUrl || '');
-    let parsed;
-    try { parsed = new URL(value); } catch { throw new Error('支付入口地址无效'); }
-    const safe = parsed.protocol === 'weixin:' || parsed.protocol === 'elunvi-pay:' || (parsed.protocol === 'https:' && (parsed.hostname === 'alipay.com' || parsed.hostname.endsWith('.alipay.com')));
-    if (!safe) throw new Error('支付入口地址不受支持');
-    await shell.openExternal(parsed.toString());
-    return true;
-  });
+
+  // 团队、会员、积分和订单都是 Mart 自己的能力，不再经过 Platform
+  ipcMain.handle('mart:teams', () => martService.listTeams());
+  ipcMain.handle('mart:teamMembers', (_event, teamId) => martService.listMembers(teamId));
+  ipcMain.handle('mart:inviteMember', (_event, input) => martService.inviteMember(input || {}));
+  ipcMain.handle('mart:removeMember', (_event, input) => martService.removeMember(input || {}));
+  ipcMain.handle('mart:leaveTeam', (_event, teamId) => martService.leaveTeam(teamId));
+  ipcMain.handle('mart:acceptInvitation', (_event, code) => martService.acceptInvitation(String(code || '')));
+  ipcMain.handle('mart:membership', (_event, teamId) => martService.membership(teamId));
+  ipcMain.handle('mart:membershipQuote', (_event, input) => martService.quoteMembership(input || {}));
+  ipcMain.handle('mart:membershipOrder', (_event, input) => martService.createMembershipOrder(input || {}));
+  ipcMain.handle('mart:wallet', (_event, teamId) => martService.wallet(teamId));
+  ipcMain.handle('mart:walletPackages', () => martService.walletPackages());
+  ipcMain.handle('mart:walletTransactions', (_event, input) => martService.walletTransactions(input || {}));
+  ipcMain.handle('mart:rechargeOrder', (_event, input) => martService.createRechargeOrder(input || {}));
+  ipcMain.handle('mart:order', (_event, orderId) => martService.order(orderId));
+  ipcMain.handle('mart:paymentAttempt', (_event, input) => martService.createPaymentAttempt(input || {}));
+  ipcMain.handle('mart:closeOrder', (_event, orderId) => martService.closeOrder(orderId));
+  ipcMain.handle('mart:simulatePayment', (_event, orderId) => martService.simulatePayment(orderId));
 
   ipcMain.handle('accounts:list', () => requireSignedInStore().getAccounts().map((account) => ({
     ...account,

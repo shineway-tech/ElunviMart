@@ -1,5 +1,18 @@
 const state = {
-  platform: { status: 'loading', profile: null, security: null, team: null, billing: null, accountEmail: null },
+  platform: { status: 'loading', profile: null, security: null, accountEmail: null },
+  mart: {
+    linked: false,
+    user: null,
+    teams: [],
+    team: null,
+    membership: null,
+    members: [],
+    wallet: null,
+    packages: [],
+    transactions: []
+  },
+  purchase: { kind: null, order: null, attempt: null },
+  orderPollTimer: null,
   accounts: [],
   currentAccount: null,
   products: [],
@@ -11,11 +24,6 @@ const state = {
   loginAccountId: null,
   loginMode: 'create',
   pendingRemoval: null,
-  paymentContext: null,
-  paymentOrder: null,
-  paymentAttempt: null,
-  paymentTimer: null,
-  teamHistoryKind: 'usage',
   teamActionMode: null,
   platformAuthMode: 'login',
   platformAuthBindingKind: null,
@@ -87,18 +95,18 @@ const elements = {
   platformWechatCountdown: document.querySelector('#platform-wechat-countdown'),
   platformWechatBack: document.querySelector('#platform-wechat-back'),
   platformWechatRefresh: document.querySelector('#platform-wechat-refresh'),
-  walletContexts: document.querySelector('#wallet-context-list'),
+  walletSummary: document.querySelector('#wallet-summary-card'),
+  walletPackages: document.querySelector('#wallet-package-list'),
   walletTransactions: document.querySelector('#wallet-transactions-list'),
   teamSummary: document.querySelector('#team-summary-card'),
+  teamPlans: document.querySelector('#team-plan-list'),
   teamMembers: document.querySelector('#team-members-list'),
-  teamHistory: document.querySelector('#team-history-list'),
-  paymentContexts: document.querySelector('#payment-context-options'),
-  paymentPackages: document.querySelector('#payment-package-list'),
   paymentStatusCard: document.querySelector('#payment-status-card'),
   paymentStatusCopy: document.querySelector('#payment-status-copy'),
   paymentOrderDetail: document.querySelector('#payment-order-detail'),
   paymentCloseOrder: document.querySelector('#payment-close-order'),
   paymentRefreshOrder: document.querySelector('#payment-refresh-order'),
+  paymentSimulate: document.querySelector('#payment-simulate'),
   teamActionModal: document.querySelector('#team-action-modal'),
   teamActionForm: document.querySelector('#team-action-form'),
   teamActionTitle: document.querySelector('#team-action-title'),
@@ -106,9 +114,11 @@ const elements = {
   teamActionName: document.querySelector('#team-action-name'),
   teamActionEmail: document.querySelector('#team-action-email'),
   teamActionDisplay: document.querySelector('#team-action-display'),
+  teamActionCode: document.querySelector('#team-action-code'),
   teamNameField: document.querySelector('#team-name-field'),
   teamEmailField: document.querySelector('#team-email-field'),
   teamDisplayField: document.querySelector('#team-display-field'),
+  teamCodeField: document.querySelector('#team-code-field'),
   teamActionError: document.querySelector('#team-action-error'),
   teamActionErrorText: document.querySelector('#team-action-error-text'),
   teamActionCancel: document.querySelector('#team-action-cancel'),
@@ -281,24 +291,9 @@ function isPlatformSignedIn() {
   return state.platform.status === 'signed_in' && Boolean(state.platform.profile);
 }
 
-function formatMicroPoints(value) {
-  try {
-    const points = BigInt(String(value ?? '0'));
-    const whole = points / 1000000n;
-    const fraction = String(points % 1000000n).padStart(6, '0').replace(/0+$/u, '');
-    return fraction ? `${whole}.${fraction}` : String(whole);
-  } catch {
-    return '—';
-  }
-}
-
 function renderPlatformAvatar(profile) {
   renderPlatformAvatarInto(elements.platformAccountAvatar, profile);
   renderPlatformAvatarInto(elements.platformAccountMenuAvatar, profile);
-}
-
-function billingContextName(context, wallet) {
-  return context?.kind === 'team' ? (wallet?.displayName || '团队钱包') : '个人钱包';
 }
 
 function setPlatformShell(status) {
@@ -698,84 +693,140 @@ async function requestPlatformCode(mode = state.platformAuthMode) {
   }
 }
 
-function renderWalletContexts() {
-  const contexts = state.platform.billing?.contexts || [];
-  elements.walletContexts.replaceChildren();
-  elements.paymentContexts.replaceChildren();
-  for (const wallet of contexts) {
-    const context = wallet.billingContext;
-    const name = billingContextName(context, wallet);
-    const card = document.createElement('article');
-    card.className = `wallet-card${state.paymentContext && JSON.stringify(state.paymentContext) === JSON.stringify(context) ? ' is-selected' : ''}`;
-    const title = document.createElement('div');
-    title.className = 'wallet-card-title';
-    title.append(createIcon(context?.kind === 'team' ? 'users' : 'user-round'));
-    const titleText = document.createElement('div');
-    const heading = document.createElement('strong');
-    heading.textContent = name;
-    const meta = document.createElement('small');
-    meta.textContent = wallet.status === 'active' ? (wallet.role === 'owner' ? '负责人 · 可充值' : '可用支付身份') : '当前不可用';
-    titleText.append(heading, meta);
-    title.append(titleText);
-    const balance = document.createElement('strong');
-    balance.className = 'wallet-balance';
-    balance.textContent = formatMicroPoints(wallet.availableMicroPoints);
-    const unit = document.createElement('small');
-    unit.textContent = '点可用余额';
-    const actions = document.createElement('div');
-    actions.className = 'wallet-card-actions';
-    const choose = document.createElement('button');
-    choose.className = 'button';
-    choose.type = 'button';
-    choose.textContent = state.paymentContext && JSON.stringify(state.paymentContext) === JSON.stringify(context) ? '当前付款身份' : '选择付款身份';
-    choose.disabled = wallet.status !== 'active' || !wallet.canSpend;
-    choose.addEventListener('click', () => {
-      state.paymentContext = context;
-      renderWalletContexts();
-      showView('payment');
-    });
-    actions.append(choose);
-    if (wallet.canRecharge && wallet.status === 'active') {
-      const recharge = document.createElement('button');
-      recharge.className = 'button button-primary';
-      recharge.type = 'button';
-      recharge.textContent = '充值';
-      recharge.addEventListener('click', () => {
-        state.paymentContext = context;
-        renderWalletContexts();
-        showView('payment');
-      });
-      actions.append(recharge);
-    }
-    card.append(title, balance, unit, actions);
-    elements.walletContexts.append(card);
+function isMartLinked() {
+  return state.mart.linked === true;
+}
 
-    const option = document.createElement('button');
-    option.className = `payment-context-option${state.paymentContext && JSON.stringify(state.paymentContext) === JSON.stringify(context) ? ' is-selected' : ''}`;
-    option.type = 'button';
-    option.disabled = wallet.status !== 'active' || !wallet.canSpend;
-    option.textContent = `${name} · ${formatMicroPoints(wallet.availableMicroPoints)} 点`;
-    option.addEventListener('click', () => { state.paymentContext = context; renderWalletContexts(); });
-    elements.paymentContexts.append(option);
+function formatPoints(value) {
+  return Number(value || 0).toLocaleString('zh-CN');
+}
+
+function formatYuan(fen) {
+  return `¥${(Number(fen || 0) / 100).toFixed(2)}`;
+}
+
+const ORDER_STATUS_LABELS = { 1: '待支付', 2: '已支付', 3: '已关闭', 4: '已完成', 5: '支付失败' };
+
+const MEMBER_ROLE_OWNER = 1;
+
+function renderEmptyState(container, copy, actionLabel = '', onAction = null) {
+  const text = document.createElement('p');
+  text.className = 'empty-copy';
+  text.textContent = copy;
+  container.append(text);
+  if (actionLabel && onAction) {
+    const button = document.createElement('button');
+    button.className = 'button button-primary';
+    button.type = 'button';
+    button.textContent = actionLabel;
+    button.addEventListener('click', onAction);
+    container.append(button);
   }
-  if (!contexts.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-copy';
-    empty.textContent = '暂时没有可用的钱包信息，请刷新重试。';
-    elements.walletContexts.append(empty);
-    elements.paymentContexts.append(empty.cloneNode(true));
+}
+
+function renderSignedOutState(container, copy = '登录 Elunvi 账号后即可使用。') {
+  renderEmptyState(container, copy, '去登录', () => showPlatformLogin());
+}
+
+async function loadWalletData() {
+  elements.walletSummary.replaceChildren();
+  elements.walletPackages.replaceChildren();
+  elements.walletTransactions.replaceChildren();
+  if (!isMartLinked()) {
+    renderSignedOutState(elements.walletSummary);
+    return;
   }
+  if (!state.mart.team) await loadTeamData();
+  const team = state.mart.team;
+  if (!team) {
+    renderEmptyState(elements.walletSummary, '当前账号还没有团队，暂时无法使用团队积分。');
+    return;
+  }
+  try {
+    const [wallet, packages, transactions] = await Promise.all([
+      window.pddMonitor.mart.wallet(team.id),
+      window.pddMonitor.mart.walletPackages(),
+      window.pddMonitor.mart.walletTransactions({ teamId: team.id, limit: 20 })
+    ]);
+    state.mart.wallet = wallet.wallet;
+    state.mart.packages = packages.packages || [];
+    state.mart.transactions = transactions.transactions || [];
+    renderWalletSummary(team);
+    renderWalletPackages(team);
+    renderWalletTransactions();
+  } catch (error) {
+    showNotice(error.message || '积分信息暂时无法加载', true);
+    renderEmptyState(elements.walletSummary, '积分信息暂时无法加载，请稍后重试。', '重新加载', () => void loadWalletData());
+  }
+}
+
+function renderWalletSummary(team) {
+  elements.walletSummary.replaceChildren();
+  const wallet = state.mart.wallet || { balance_points: 0 };
+  const heading = document.createElement('h3');
+  heading.textContent = team.name || '我的团队';
+  const value = document.createElement('strong');
+  value.className = 'wallet-balance-value';
+  value.textContent = formatPoints(wallet.balance_points);
+  const unit = document.createElement('span');
+  unit.className = 'wallet-balance-unit';
+  unit.textContent = '积分可用余额';
+  const meta = document.createElement('p');
+  meta.className = 'empty-copy';
+  meta.textContent = team.role === MEMBER_ROLE_OWNER
+    ? '负责人和成员共享该账户，充值 1 元到账 100 积分。'
+    : '团队积分由负责人充值，成员可直接查看余额和流水。';
+  elements.walletSummary.append(heading, value, unit, meta);
   refreshIcons();
 }
 
-function renderTransactions(container, page, emptyText = '暂无流水') {
+function renderWalletPackages(team) {
+  elements.walletPackages.replaceChildren();
+  const isOwner = team.role === MEMBER_ROLE_OWNER;
+  const packages = state.mart.packages || [];
+  if (!packages.length) {
+    renderEmptyState(elements.walletPackages, '暂无可购买的充值档位。');
+    return;
+  }
+  for (const item of packages) {
+    const card = document.createElement('article');
+    card.className = 'payment-package';
+    const title = document.createElement('strong');
+    title.textContent = `${formatPoints(item.points)} 积分`;
+    const price = document.createElement('span');
+    price.className = 'payment-package-price';
+    price.textContent = formatYuan(item.payable_fen);
+    if (item.payable_fen < item.price_fen) {
+      const original = document.createElement('small');
+      original.className = 'payment-package-original';
+      original.textContent = formatYuan(item.price_fen);
+      price.append(' ', original);
+    }
+    const actions = document.createElement('div');
+    const recharge = document.createElement('button');
+    recharge.className = 'button button-primary';
+    recharge.type = 'button';
+    recharge.textContent = '充值';
+    recharge.disabled = !isOwner;
+    if (isOwner) recharge.addEventListener('click', () => void startRechargePurchase(item));
+    actions.append(recharge);
+    card.append(title, price, actions);
+    elements.walletPackages.append(card);
+  }
+  if (!isOwner) {
+    const hint = document.createElement('p');
+    hint.className = 'empty-copy';
+    hint.textContent = '只有团队负责人可以充值。';
+    elements.walletPackages.append(hint);
+  }
+}
+
+function renderWalletTransactions() {
+  const container = elements.walletTransactions;
   container.replaceChildren();
-  const rows = page?.items || [];
+  const rows = state.mart.transactions || [];
   if (!rows.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-copy';
-    empty.textContent = emptyText;
-    container.append(empty);
+    renderEmptyState(container, '暂无积分流水');
     return;
   }
   for (const row of rows) {
@@ -783,29 +834,191 @@ function renderTransactions(container, page, emptyText = '暂无流水') {
     item.className = 'finance-row';
     const left = document.createElement('div');
     const title = document.createElement('strong');
-    title.textContent = row.order_no || row.orderNo || row.event_type || row.business_type || '钱包流水';
+    title.textContent = row.memo || '积分变动';
     const meta = document.createElement('small');
-    meta.textContent = row.created_at || row.createdAt || row.settled_at || '时间待同步';
+    meta.textContent = formatDate(row.created_at, '时间待同步');
     left.append(title, meta);
     const right = document.createElement('div');
     right.className = 'finance-row-value';
-    const amount = row.amount_fen != null ? `¥${(Number(row.amount_fen) / 100).toFixed(2)}` : `${formatMicroPoints(row.charged_micro_points || row.amount_micro_points || row.available_delta_micro_points)} 点`;
-    right.textContent = amount;
+    const delta = document.createElement('strong');
+    delta.textContent = `${row.points > 0 ? '+' : ''}${formatPoints(row.points)}`;
+    const after = document.createElement('small');
+    after.textContent = `余额 ${formatPoints(row.balance_after)}`;
+    right.append(delta, after);
     item.append(left, right);
     container.append(item);
   }
 }
 
-async function loadWalletData() {
+async function loadTeamData() {
+  elements.teamSummary.replaceChildren();
+  elements.teamPlans.replaceChildren();
+  elements.teamMembers.replaceChildren();
+  if (!isMartLinked()) {
+    renderSignedOutState(elements.teamSummary, '登录 Elunvi 账号后即可管理团队。');
+    return;
+  }
   try {
-    state.platform.billing = await window.pddMonitor.platform.billingContexts();
-    renderWalletContexts();
-    const transactions = await window.pddMonitor.platform.walletTransactions();
-    renderTransactions(elements.walletTransactions, transactions);
+    const teams = await window.pddMonitor.mart.teams();
+    state.mart.teams = teams.teams || [];
+    state.mart.team = teams.default_team || state.mart.teams[0] || null;
+    const team = state.mart.team;
+    if (!team) {
+      renderEmptyState(elements.teamSummary, '当前账号还没有团队。');
+      return;
+    }
+    const [membership, members] = await Promise.all([
+      window.pddMonitor.mart.membership(team.id),
+      window.pddMonitor.mart.teamMembers(team.id).catch(() => null)
+    ]);
+    state.mart.membership = membership;
+    state.mart.members = members?.members || [];
+    renderTeamSummary(team, membership);
+    renderTeamPlans(team, membership);
+    renderTeamMembers(team);
   } catch (error) {
-    showNotice(error.message || '钱包信息暂时无法加载', true);
-    renderWalletContexts();
-    renderTransactions(elements.walletTransactions, null, '钱包流水暂时无法加载');
+    showNotice(error.message || '团队信息暂时无法加载', true);
+    renderEmptyState(elements.teamSummary, '团队信息暂时无法加载，请稍后重试。', '重新加载', () => void loadTeamData());
+  }
+}
+
+function renderTeamSummary(team, membership) {
+  elements.teamSummary.replaceChildren();
+  const isOwner = team.role === MEMBER_ROLE_OWNER;
+  const heading = document.createElement('h3');
+  heading.textContent = team.name || '我的团队';
+  const meta = document.createElement('p');
+  meta.textContent = isOwner ? '你是该团队的负责人' : '你是该团队的成员';
+  elements.teamSummary.append(heading, meta);
+
+  const subscription = membership?.subscription || null;
+  const quota = membership?.quota || {};
+  const planLine = document.createElement('p');
+  planLine.className = 'team-plan-line';
+  planLine.textContent = subscription?.active
+    ? `当前会员：${subscription.plan?.name || '已开通'} · 到期 ${formatDate(subscription.expires_at, '待确认')}`
+    : '当前没有生效的会员，成员仅限负责人自己';
+  const quotaLine = document.createElement('p');
+  quotaLine.className = 'empty-copy';
+  quotaLine.textContent = `成员 ${quota.used_members ?? 1}/${quota.max_members ?? 1} · 可管理店铺 ${quota.max_shops ?? 0} 家`;
+  elements.teamSummary.append(planLine, quotaLine);
+
+  const actions = document.createElement('div');
+  actions.className = 'team-summary-actions';
+  if (isOwner) {
+    const invite = document.createElement('button');
+    invite.className = 'button button-primary';
+    invite.type = 'button';
+    invite.textContent = '邀请成员';
+    invite.addEventListener('click', () => openTeamAction('invite'));
+    actions.append(invite);
+  } else {
+    const leave = document.createElement('button');
+    leave.className = 'button';
+    leave.type = 'button';
+    leave.textContent = '退出团队';
+    leave.addEventListener('click', () => void leaveCurrentTeam(team));
+    actions.append(leave);
+  }
+  const join = document.createElement('button');
+  join.className = 'button';
+  join.type = 'button';
+  join.textContent = '输入邀请码加入团队';
+  join.addEventListener('click', () => openTeamAction('join'));
+  actions.append(join);
+  elements.teamSummary.append(actions);
+  refreshIcons();
+}
+
+function renderTeamPlans(team, membership) {
+  elements.teamPlans.replaceChildren();
+  const isOwner = team.role === MEMBER_ROLE_OWNER;
+  const current = membership?.subscription?.active ? membership.subscription.plan : null;
+  if (!isOwner) {
+    renderEmptyState(elements.teamPlans, '会员由团队负责人购买和管理。');
+    return;
+  }
+  for (const plan of membership?.plans || []) {
+    const card = document.createElement('article');
+    card.className = 'payment-package';
+    const title = document.createElement('strong');
+    title.textContent = plan.name;
+    const price = document.createElement('span');
+    price.className = 'payment-package-price';
+    price.textContent = `${formatYuan(plan.price_fen)}/月`;
+    const limits = document.createElement('small');
+    limits.textContent = `${plan.max_members} 个成员 · 每个成员可管理 ${plan.max_shops} 家店铺`;
+    const actions = document.createElement('div');
+    const button = document.createElement('button');
+    button.className = 'button button-primary';
+    button.type = 'button';
+    let label = '购买';
+    if (current) {
+      if (plan.id === current.id) label = '续期一个月';
+      else if (plan.sort_order > current.sort_order) label = '升级（补差价）';
+      else {
+        label = '到期后可购买';
+        button.disabled = true;
+      }
+    }
+    button.textContent = label;
+    if (!button.disabled) button.addEventListener('click', () => void startMembershipPurchase(plan));
+    actions.append(button);
+    card.append(title, price, limits, actions);
+    elements.teamPlans.append(card);
+  }
+}
+
+function renderTeamMembers(team) {
+  const isOwner = team.role === MEMBER_ROLE_OWNER;
+  const members = state.mart.members || [];
+  elements.teamMembers.replaceChildren();
+  if (!members.length) {
+    renderEmptyState(elements.teamMembers, '成员列表暂时无法加载。');
+    return;
+  }
+  for (const member of members) {
+    const row = document.createElement('div');
+    row.className = 'team-member-row';
+    const name = document.createElement('strong');
+    name.textContent = member.display_name || '未命名成员';
+    const meta = document.createElement('small');
+    meta.textContent = `${member.role === MEMBER_ROLE_OWNER ? '负责人' : '成员'} · 加入于 ${formatDate(member.joined_at, '待确认')}`;
+    row.append(name, meta);
+    if (isOwner && member.role !== MEMBER_ROLE_OWNER) {
+      const remove = document.createElement('button');
+      remove.className = 'button';
+      remove.type = 'button';
+      remove.textContent = '移除';
+      remove.addEventListener('click', () => void removeTeamMember(member));
+      row.append(remove);
+    }
+    elements.teamMembers.append(row);
+  }
+}
+
+async function removeTeamMember(member) {
+  const team = state.mart.team;
+  if (!team) return;
+  if (!window.confirm(`移除「${member.display_name || '该成员'}」后，对方立即失去团队权限。确定移除吗？`)) return;
+  try {
+    await window.pddMonitor.mart.removeMember({ teamId: team.id, memberId: member.id });
+    await loadTeamData();
+    showNotice('成员已移除');
+  } catch (error) {
+    showNotice(error.message || '移除成员失败', true);
+  }
+}
+
+async function leaveCurrentTeam(team) {
+  if (!window.confirm(`退出「${team.name || '该团队'}」后将失去团队资源和会员权益。确定退出吗？`)) return;
+  try {
+    await window.pddMonitor.mart.leaveTeam(team.id);
+    state.mart.team = null;
+    await loadTeamData();
+    showNotice('已退出团队');
+  } catch (error) {
+    showNotice(error.message || '退出团队失败', true);
   }
 }
 
@@ -813,15 +1026,18 @@ function openTeamAction(mode) {
   state.teamActionMode = mode;
   elements.teamActionError.hidden = true;
   elements.teamActionForm.reset();
-  const creating = mode === 'create';
-  elements.teamActionTitle.textContent = creating ? '创建团队' : '添加团队成员';
-  elements.teamActionDescription.textContent = creating ? '创建后你会成为团队负责人。店铺和监控数据仍然保存在各自电脑。' : '可以添加已有 Elunvi 用户，成员接受后才会加入团队。';
-  elements.teamNameField.hidden = !creating;
-  elements.teamEmailField.hidden = creating;
-  elements.teamDisplayField.hidden = creating;
-  elements.teamActionSubmit.textContent = creating ? '创建团队' : '发送邀请';
+  const invite = mode === 'invite';
+  elements.teamActionTitle.textContent = invite ? '邀请成员' : '加入团队';
+  elements.teamActionDescription.textContent = invite
+    ? '邀请码会发送到成员邮箱，成员登录后输入邀请码即可加入。'
+    : '输入负责人发给你的 6 位邀请码，即可加入对应团队。';
+  elements.teamNameField.hidden = true;
+  elements.teamEmailField.hidden = !invite;
+  elements.teamDisplayField.hidden = true;
+  elements.teamCodeField.hidden = invite;
+  elements.teamActionSubmit.textContent = invite ? '发送邀请' : '加入团队';
   elements.teamActionModal.hidden = false;
-  (creating ? elements.teamActionName : elements.teamActionEmail).focus();
+  (invite ? elements.teamActionEmail : elements.teamActionCode).focus();
 }
 
 function closeTeamAction() {
@@ -836,20 +1052,20 @@ async function submitTeamAction(event) {
   elements.teamActionSubmit.disabled = true;
   elements.teamActionError.hidden = true;
   try {
-    if (mode === 'create') {
-      await window.pddMonitor.platform.createTeam(elements.teamActionName.value.trim());
+    if (mode === 'invite') {
+      const team = state.mart.team;
+      if (!team) throw new Error('当前没有可操作的团队');
+      const email = elements.teamActionEmail.value.trim();
+      await window.pddMonitor.mart.inviteMember({ teamId: team.id, email });
+      closeTeamAction();
+      showNotice(`邀请码已发送到 ${email}`);
     } else {
-      const teamId = state.platform.team?.teams?.team?.id;
-      if (!teamId) throw new Error('当前没有可操作的团队');
-      await window.pddMonitor.platform.addTeamMember({
-        teamId,
-        mode: 'existing',
-        email: elements.teamActionEmail.value.trim()
-      });
+      const code = elements.teamActionCode.value.trim();
+      const result = await window.pddMonitor.mart.acceptInvitation(code);
+      closeTeamAction();
+      await Promise.all([loadTeamData(), loadWalletData()]);
+      showNotice(`已加入「${result.team?.name || '团队'}」`);
     }
-    closeTeamAction();
-    await loadTeamData();
-    showNotice(mode === 'create' ? '团队已创建' : '成员邀请已发送');
   } catch (error) {
     elements.teamActionErrorText.textContent = error.message || '操作没有完成，请稍后重试';
     elements.teamActionError.hidden = false;
@@ -858,225 +1074,163 @@ async function submitTeamAction(event) {
   }
 }
 
-function renderTeam(teamData) {
-  state.platform.team = teamData;
-  const snapshot = teamData?.teams || {};
-  const team = snapshot.team || null;
-  const topupTab = document.querySelector('[data-team-history="topup"]');
-  if (topupTab) {
-    topupTab.hidden = team?.role !== 'owner';
-    if (team?.role !== 'owner' && state.teamHistoryKind === 'topup') state.teamHistoryKind = 'usage';
-  }
-  elements.teamSummary.replaceChildren();
-  elements.teamMembers.replaceChildren();
-  if (teamData?.loadError) {
-    const copy = document.createElement('p');
-    copy.className = 'empty-copy';
-    copy.textContent = '团队信息暂时无法加载，请稍后重试。';
-    const action = document.createElement('button');
-    action.className = 'button button-primary';
-    action.type = 'button';
-    action.textContent = '重新加载';
-    action.addEventListener('click', () => void loadTeamData());
-    elements.teamSummary.append(copy, action);
-    elements.teamHistory.replaceChildren();
-    return;
-  }
-  if (!team) {
-    const copy = document.createElement('p');
-    copy.className = 'empty-copy';
-    copy.textContent = '当前账号还没有团队，可以继续以个人身份使用 Mart。';
-    const action = document.createElement('button');
-    action.className = 'button button-primary';
-    action.type = 'button';
-    action.textContent = '创建团队';
-    action.addEventListener('click', () => openTeamAction('create'));
-    elements.teamSummary.append(copy, action);
-    elements.teamHistory.replaceChildren();
-    return;
-  }
-  const heading = document.createElement('h3');
-  heading.textContent = team.name || '我的团队';
-  const meta = document.createElement('p');
-  meta.textContent = `${team.role === 'owner' ? '负责人' : '成员'} · ${team.status === 'active' ? '正常' : '已暂停'}`;
-  const action = document.createElement('button');
-  action.className = 'button button-primary';
-  action.type = 'button';
-  action.textContent = team.role === 'owner' ? '添加成员' : '刷新成员';
-  action.addEventListener('click', () => team.role === 'owner' ? openTeamAction('add') : void loadTeamData());
-  elements.teamSummary.append(heading, meta, action);
-  const pendingRequests = (snapshot.requests || []).filter((request) => request.status === 'pending');
-  for (const request of pendingRequests) {
-    const invite = document.createElement('div');
-    invite.className = 'team-invite';
-    const inviteCopy = document.createElement('span');
-    inviteCopy.textContent = `收到来自 ${request.owner_display_name || request.owner_masked_email || '团队负责人'} 的「${request.team_name}」邀请`;
-    const inviteActions = document.createElement('span');
-    inviteActions.className = 'team-invite-actions';
-    for (const decision of ['accept', 'reject']) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = decision === 'accept' ? 'button button-primary' : 'button';
-      button.textContent = decision === 'accept' ? '接受' : '拒绝';
-      button.addEventListener('click', async () => {
-        button.disabled = true;
-        try {
-          await window.pddMonitor.platform.respondTeamRequest({ requestId: request.id, action: decision });
-          await loadTeamData();
-          showNotice(decision === 'accept' ? '已加入团队' : '已拒绝团队邀请');
-        } catch (error) {
-          showNotice(error.message || '团队邀请状态暂时无法更新', true);
-          button.disabled = false;
-        }
-      });
-      inviteActions.append(button);
-    }
-    invite.append(inviteCopy, inviteActions);
-    elements.teamSummary.append(invite);
-  }
-  const members = teamData.members?.members || [];
-  const memberRequests = (teamData.members?.requests || []).filter((request) => request.status === 'pending');
-  if (!members.length && !memberRequests.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-copy';
-    empty.textContent = team.role === 'owner' ? '成员信息暂时无法加载。' : '当前为团队成员，成员列表由负责人管理。';
-    elements.teamMembers.append(empty);
-  } else {
-    for (const member of members) {
-      const row = document.createElement('div');
-      row.className = 'team-member-row';
-      const name = document.createElement('strong');
-      name.textContent = member.display_name || member.masked_email || '未命名成员';
-      const status = document.createElement('small');
-      status.textContent = `${member.role === 'owner' ? '负责人' : '成员'} · ${member.status}`;
-      row.append(name, status);
-      elements.teamMembers.append(row);
-    }
-    for (const request of memberRequests) {
-      const row = document.createElement('div');
-      row.className = 'team-member-row';
-      const name = document.createElement('strong');
-      name.textContent = request.recipient_display_name || request.recipient_masked_email || '待确认成员';
-      const status = document.createElement('small');
-      status.textContent = '邀请待接受';
-      row.append(name, status);
-      elements.teamMembers.append(row);
-    }
-  }
-  refreshIcons();
-}
-
-async function loadTeamData() {
+async function startMembershipPurchase(plan) {
+  const team = state.mart.team;
+  if (!team) return;
   try {
-    const teamData = await window.pddMonitor.platform.team();
-    if (teamData?.teams?.team?.role === 'owner') {
-      teamData.members = await window.pddMonitor.platform.teamMembers(teamData.teams.team.id);
-    } else {
-      teamData.members = { members: [], requests: teamData?.teams?.requests || [] };
-    }
-    renderTeam(teamData);
-    const teamId = teamData?.teams?.team?.id;
-    if (teamId) {
-      const history = await window.pddMonitor.platform.teamHistory({ teamId, kind: state.teamHistoryKind });
-      renderTransactions(elements.teamHistory, history, '暂无团队流水');
-    }
+    const quote = await window.pddMonitor.mart.membershipQuote({ teamId: team.id, planId: plan.id });
+    const order = await window.pddMonitor.mart.membershipOrder({ teamId: team.id, quoteId: quote.id });
+    openPurchase('membership', order, plan);
   } catch (error) {
-    showNotice(error.message || '团队信息暂时无法加载', true);
-    renderTeam({ teams: { team: null, requests: [] }, members: { members: [], requests: [] }, loadError: true });
+    showNotice(error.message || '创建会员订单失败', true);
   }
 }
 
-async function loadPaymentPackages() {
+async function startRechargePurchase(pkg) {
+  const team = state.mart.team;
+  if (!team) return;
   try {
-    const packages = await window.pddMonitor.platform.packages();
-    elements.paymentPackages.replaceChildren();
-    for (const item of packages || []) {
-      const card = document.createElement('article');
-      card.className = 'payment-package';
-      const title = document.createElement('strong');
-      title.textContent = item.package_code || item.packageCode || '充值套餐';
-      const points = document.createElement('span');
-      points.textContent = `${formatMicroPoints(item.total_micro_points || item.totalMicroPoints || item.paid_micro_points || item.paidMicroPoints)} 点`;
-      const price = document.createElement('small');
-      price.textContent = `¥${(Number(item.amount_fen || item.amountFen || 0) / 100).toFixed(2)}`;
-      const actions = document.createElement('div');
-      for (const channel of ['wechat', 'alipay']) {
-        const button = document.createElement('button');
-        button.className = 'button button-primary';
-        button.type = 'button';
-        button.textContent = channel === 'wechat' ? '微信支付' : '支付宝';
-        button.addEventListener('click', () => startPayment(item.package_code || item.packageCode, channel));
-        actions.append(button);
-      }
-      card.append(title, points, price, actions);
-      elements.paymentPackages.append(card);
-    }
-    if (!(packages || []).length) {
-      const empty = document.createElement('p');
-      empty.className = 'empty-copy';
-      empty.textContent = '暂无可购买套餐。';
-      elements.paymentPackages.append(empty);
-    }
+    const order = await window.pddMonitor.mart.rechargeOrder({ teamId: team.id, packageId: pkg.id });
+    openPurchase('recharge', order, pkg);
   } catch (error) {
-    elements.paymentPackages.textContent = error.message || '充值套餐暂时无法加载';
+    showNotice(error.message || '创建充值订单失败', true);
   }
 }
 
-async function startPayment(packageCode, channel) {
-  if (!state.paymentContext) {
-    showNotice('请先选择个人或团队付款身份', true);
-    return;
-  }
-  try {
-    const checkout = await window.pddMonitor.platform.createCheckout({
-      packageCode,
-      billingContext: state.paymentContext,
-      idempotencyKey: crypto.randomUUID()
-    });
-    state.paymentOrder = checkout;
-    state.paymentAttempt = await window.pddMonitor.platform.createPaymentAttempt({ checkoutId: checkout.checkoutId, channel });
-    renderPaymentOrder();
-    if (state.paymentTimer) window.clearInterval(state.paymentTimer);
-    state.paymentTimer = window.setInterval(() => { void refreshPaymentOrder(false); }, 3000);
-  } catch (error) {
-    showNotice(error.message || '支付订单创建失败', true);
-  }
+function openPurchase(kind, order, subject) {
+  state.purchase = { kind, order, attempt: null, subject };
+  showView('payment');
+  renderPaymentOrder();
+}
+
+function purchaseSubject() {
+  const { kind, order, subject } = state.purchase;
+  if (kind === 'membership') return `${subject?.name || '会员'} · 一个月`;
+  if (kind === 'recharge') return `${formatPoints(order?.quote_snapshot?.points || subject?.points || 0)} 积分`;
+  return 'Mart 订单';
 }
 
 function renderPaymentOrder() {
-  const order = state.paymentOrder;
-  const attempt = state.paymentAttempt;
+  const { order, attempt } = state.purchase;
   elements.paymentStatusCard.hidden = !order;
   if (!order) return;
-  elements.paymentStatusCopy.textContent = `订单 ${order.orderNo || order.checkoutId} · ${order.status || 'pending'}`;
-  elements.paymentOrderDetail.replaceChildren();
-  const copy = document.createElement('p');
-  copy.textContent = attempt?.qrPayload ? `请使用${attempt.channel === 'wechat' ? '微信' : '支付宝'}打开支付入口。` : '已创建支付订单，等待支付状态更新。';
-  elements.paymentOrderDetail.append(copy);
-  if (attempt?.qrPayload) {
-    const open = document.createElement('button');
-    open.type = 'button';
-    open.className = 'button button-primary';
-    open.textContent = attempt.channel === 'wechat' ? '打开微信支付' : '打开支付宝';
-    open.addEventListener('click', async () => {
-      try { await window.pddMonitor.platform.openPayment(attempt.qrPayload); } catch (error) { showNotice(error.message, true); }
-    });
-    elements.paymentOrderDetail.append(open);
+  elements.paymentStatusCopy.textContent = `订单 ${order.order_no} · ${ORDER_STATUS_LABELS[order.status] || '处理中'}`;
+
+  const detail = elements.paymentOrderDetail;
+  detail.replaceChildren();
+  const rows = [
+    ['商品', purchaseSubject()],
+    ['应付金额', formatYuan(order.amount_fen)],
+    ['订单状态', ORDER_STATUS_LABELS[order.status] || '处理中'],
+    ['支付方式', order.channel ? (order.channel === 'mock' ? '本地模拟支付' : order.channel) : '未发起'],
+    ['有效至', formatDate(order.expire_at, '待确认')]
+  ];
+  if (order.paid_at) rows.push(['支付时间', formatDate(order.paid_at, '待确认')]);
+  for (const [label, value] of rows) {
+    const row = document.createElement('div');
+    row.className = 'finance-row';
+    const left = document.createElement('div');
+    const name = document.createElement('strong');
+    name.textContent = label;
+    left.append(name);
+    const right = document.createElement('div');
+    right.className = 'finance-row-value';
+    right.textContent = value;
+    row.append(left, right);
+    detail.append(row);
+  }
+
+  elements.paymentSimulate.hidden = !(order.status === 1 && attempt);
+  elements.paymentRefreshOrder.hidden = !(order.status === 1 || order.status === 2);
+  elements.paymentCloseOrder.hidden = order.status !== 1;
+
+  if (order.status === 1 && !attempt) {
+    const start = document.createElement('button');
+    start.className = 'button button-primary';
+    start.type = 'button';
+    start.textContent = '发起支付';
+    start.addEventListener('click', () => void beginPayment());
+    detail.append(start);
+  }
+  if (order.status === 4) {
+    const done = document.createElement('p');
+    done.className = 'empty-copy';
+    done.textContent = state.purchase.kind === 'membership'
+      ? '会员已生效，可返回团队页查看新的档位和配额。'
+      : '积分已到账，可返回钱包页查看余额和流水。';
+    detail.append(done);
+  }
+}
+
+async function beginPayment() {
+  const order = state.purchase.order;
+  if (!order) return;
+  try {
+    const result = await window.pddMonitor.mart.paymentAttempt({ orderId: order.id, channel: 'mock' });
+    state.purchase.attempt = result.attempt;
+    state.purchase.order = result.order;
+    renderPaymentOrder();
+    startOrderPolling();
+  } catch (error) {
+    showNotice(error.message || '发起支付失败', true);
+  }
+}
+
+function startOrderPolling() {
+  stopOrderPolling();
+  state.orderPollTimer = window.setInterval(() => void refreshPaymentOrder(false), 3000);
+}
+
+function stopOrderPolling() {
+  if (state.orderPollTimer) {
+    window.clearInterval(state.orderPollTimer);
+    state.orderPollTimer = null;
   }
 }
 
 async function refreshPaymentOrder(showFeedback = true) {
-  if (!state.paymentOrder) return;
+  const order = state.purchase.order;
+  if (!order) return;
   try {
-    state.paymentOrder = await window.pddMonitor.platform.getCheckout({ checkoutId: state.paymentOrder.checkoutId, paymentContext: state.paymentContext });
+    const fresh = await window.pddMonitor.mart.order(order.id);
+    state.purchase.order = fresh;
     renderPaymentOrder();
-    if (state.paymentOrder.status === 'paid') {
-      if (state.paymentTimer) window.clearInterval(state.paymentTimer);
-      await loadWalletData();
-      if (showFeedback) showNotice('支付成功，钱包余额已刷新');
+    if (fresh.status === 4) {
+      stopOrderPolling();
+      await Promise.all([loadTeamData(), loadWalletData()]);
+      showNotice(state.purchase.kind === 'membership' ? '会员已生效' : '充值已到账');
+    } else if (showFeedback) {
+      showNotice(`订单状态：${ORDER_STATUS_LABELS[fresh.status] || '处理中'}`);
     }
   } catch (error) {
-    if (showFeedback) showNotice(error.message || '支付状态暂时无法确认', true);
+    if (showFeedback) showNotice(error.message || '订单状态暂时无法确认', true);
+  }
+}
+
+async function simulatePayment() {
+  const order = state.purchase.order;
+  if (!order) return;
+  elements.paymentSimulate.disabled = true;
+  try {
+    await window.pddMonitor.mart.simulatePayment(order.id);
+    await refreshPaymentOrder(false);
+  } catch (error) {
+    showNotice(error.message || '模拟支付失败', true);
+  } finally {
+    elements.paymentSimulate.disabled = false;
+  }
+}
+
+async function closePurchaseOrder() {
+  const order = state.purchase.order;
+  if (!order) return;
+  try {
+    await window.pddMonitor.mart.closeOrder(order.id);
+    stopOrderPolling();
+    await refreshPaymentOrder(false);
+    showNotice('订单已关闭');
+  } catch (error) {
+    showNotice(error.message || '关闭订单失败', true);
   }
 }
 
@@ -1092,6 +1246,18 @@ async function logoutPlatform() {
   showPlatformLogin();
 }
 
+async function refreshMartState() {
+  try {
+    const result = await window.pddMonitor.mart.state();
+    state.mart.linked = Boolean(result?.linked);
+    state.mart.user = result?.user || null;
+  } catch {
+    state.mart.linked = false;
+    state.mart.user = null;
+  }
+  return state.mart.linked;
+}
+
 async function loadPlatformState() {
   try {
     const result = await window.pddMonitor.platform.state();
@@ -1101,7 +1267,7 @@ async function loadPlatformState() {
       state.platform.security = result.security || null;
       state.platform.accountEmail = result.accountEmail || null;
       setPlatformShell('signed_in');
-      await loadAccounts();
+      await Promise.all([loadAccounts(), refreshMartState()]);
       return;
     }
     if (result.status === 'binding_required') {
@@ -1217,9 +1383,7 @@ function showView(name) {
     elements.title.textContent = '我的团队';
     void loadTeamData();
   } else if (name === 'payment') {
-    elements.title.textContent = '充值';
-    void loadWalletData();
-    void loadPaymentPackages();
+    elements.title.textContent = '支付订单';
   }
   hideNotice();
 }
@@ -1594,7 +1758,7 @@ async function finishPlatformSignIn(profile, security = null) {
   state.platform.security = security || state.platform.security;
   elements.platformLoginModal.hidden = true;
   setPlatformShell('signed_in');
-  await loadAccounts();
+  await Promise.all([loadAccounts(), refreshMartState()]);
   showView('accounts');
   showNotice('已登录 Elunvi，当前电脑上的店铺数据已准备就绪');
 }
@@ -1781,30 +1945,9 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
 });
 document.querySelector('#wallet-refresh').addEventListener('click', () => void loadWalletData());
 document.querySelector('#team-refresh').addEventListener('click', () => void loadTeamData());
-document.querySelectorAll('[data-team-history]').forEach((button) => button.addEventListener('click', async () => {
-  state.teamHistoryKind = button.dataset.teamHistory;
-  document.querySelectorAll('[data-team-history]').forEach((item) => item.classList.toggle('is-active', item === button));
-  const teamId = state.platform.team?.teams?.team?.id;
-  if (!teamId) return;
-  try {
-    const page = await window.pddMonitor.platform.teamHistory({ teamId, kind: state.teamHistoryKind });
-    renderTransactions(elements.teamHistory, page, '暂无团队流水');
-  } catch (error) {
-    showNotice(error.message || '团队流水暂时无法加载', true);
-  }
-}));
 elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true));
-elements.paymentCloseOrder.addEventListener('click', async () => {
-  if (!state.paymentOrder) return;
-  try {
-    state.paymentOrder = await window.pddMonitor.platform.closeCheckout(state.paymentOrder.checkoutId);
-    if (state.paymentTimer) window.clearInterval(state.paymentTimer);
-    renderPaymentOrder();
-    showNotice('支付订单已关闭');
-  } catch (error) {
-    showNotice(error.message || '订单暂时无法关闭', true);
-  }
-});
+elements.paymentSimulate.addEventListener('click', () => void simulatePayment());
+elements.paymentCloseOrder.addEventListener('click', () => void closePurchaseOrder());
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
@@ -1823,10 +1966,17 @@ window.pddMonitor.onPlatformChanged((payload) => {
     return;
   }
   if (payload?.status === 'signed_out') {
-    state.platform = { status: 'signed_out', profile: null, security: null, team: null, billing: null, accountEmail: null };
+    state.platform = { status: 'signed_out', profile: null, security: null, accountEmail: null };
+    state.mart = { linked: false, user: null, teams: [], team: null, membership: null, members: [], wallet: null, packages: [], transactions: [] };
     setPlatformShell('signed_out');
     showPlatformLogin();
   }
+});
+window.pddMonitor.onMartChanged((payload) => {
+  state.mart.linked = Boolean(payload?.linked);
+  state.mart.user = payload?.user || null;
+  if (!state.mart.linked) return;
+  if (!elements.teamSummary || elements.teamSummary.closest('.view')?.hidden === false) void loadTeamData();
 });
 
 refreshIcons();
