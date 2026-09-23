@@ -909,9 +909,9 @@ async function loadWalletData() {
     renderEmptyState(elements.walletSummary, '当前账号还没有团队，暂时无法使用团队积分。');
     return;
   }
-  applyWalletRole(team);
-  const page = state.mart.pages.ledger;
   try {
+    applyWalletRole(team);
+    const page = state.mart.pages.ledger;
     const [wallet, packages, transactions] = await Promise.all([
       window.pddMonitor.mart.wallet(team.id),
       window.pddMonitor.mart.walletPackages(),
@@ -1187,8 +1187,8 @@ async function loadTeamOrders() {
   if (!team) return;
   elements.teamOrderBody.replaceChildren();
   elements.teamOrderPagination.replaceChildren();
-  const page = state.mart.pages.teamOrders;
   try {
+    const page = state.mart.pages.teamOrders;
     const result = await window.pddMonitor.mart.orders({
       teamId: team.id,
       bizType: 1,
@@ -1219,8 +1219,8 @@ async function loadWalletOrders() {
   if (!team) return;
   elements.walletOrderBody.replaceChildren();
   elements.walletOrderPagination.replaceChildren();
-  const page = state.mart.pages.walletOrders;
   try {
+    const page = state.mart.pages.walletOrders;
     const result = await window.pddMonitor.mart.orders({
       teamId: team.id,
       bizType: 2,
@@ -2704,7 +2704,21 @@ window.pddMonitor.onPlatformChanged((payload) => {
   }
   if (payload?.status === 'signed_out') {
     state.platform = { status: 'signed_out', profile: null, security: null, accountEmail: null };
-    state.mart = { linked: false, user: null, teams: [], team: null, teamId: null, membership: null, members: [], wallet: null, packages: [], transactions: [], transactionTotal: 0, preferencesLoaded: false };
+    state.mart = {
+      linked: false,
+      user: null,
+      teams: [],
+      team: null,
+      teamId: null,
+      membership: null,
+      members: [],
+      wallet: null,
+      packages: [],
+      transactions: [],
+      transactionTotal: 0,
+      pages: { ledger: 1, walletOrders: 1, teamOrders: 1 },
+      preferencesLoaded: false
+    };
     setPlatformShell('signed_out');
     showPlatformLogin();
   }
