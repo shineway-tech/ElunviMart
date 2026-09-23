@@ -364,7 +364,7 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-avatar-initial{font-size:15px;font-weight:600;line-height:1}
 
 /* 侧边栏：分割线以上的团队/积分行，右侧带切换团队按钮（无边框） */
-.platform-account-summary{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:0 8px}
+.platform-account-summary{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:0 8px 0 31px}
 .platform-account-summary .summary-rows{display:grid;gap:7px;flex:1;min-width:0}
 .platform-account-summary .summary-row{display:flex;align-items:center;gap:7px;min-width:0;color:#aab3c0;font-size:11px}
 .platform-account-summary .summary-row svg{width:13px;height:13px;flex:0 0 auto;color:#7f8896}
