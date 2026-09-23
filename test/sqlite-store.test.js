@@ -75,3 +75,20 @@ test('sync backoff survives reopening and is removed with the account', () => {
     assert.equal(store.getSyncState('a'), null);
   } finally { store.close(); fs.rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('SqliteStore keeps ui preferences and overwrites them in place', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-monitor-prefs-'));
+  const file = path.join(directory, 'monitor.db');
+  const store = new SqliteStore(file);
+
+  assert.equal(store.getPreference('ui.selectedTeamId'), null);
+  store.setPreference('ui.selectedTeamId', '12');
+  assert.equal(store.getPreference('ui.selectedTeamId'), '12');
+  store.setPreference('ui.selectedTeamId', '34');
+  assert.equal(store.getPreference('ui.selectedTeamId'), '34', '同一个键只保留最新值');
+
+  store.close();
+  const reopened = new SqliteStore(file);
+  assert.equal(reopened.getPreference('ui.selectedTeamId'), '34', '重启后仍然记得');
+  reopened.close();
+});

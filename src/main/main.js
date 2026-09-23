@@ -389,6 +389,13 @@ function enforceManualSyncCooldown(accountId) {
   manualSyncAtByAccount.set(accountId, Date.now());
 }
 
+// 界面偏好只允许 ui. 前缀，避免渲染层往本地库写任意键
+function requireUiPreferenceKey(key) {
+  const value = String(key || '');
+  if (!value.startsWith('ui.')) throw new Error('不支持的界面配置项');
+  return value;
+}
+
 function parseAlipayUrl(payUrl) {
   const value = String(payUrl || '');
   let parsed;
@@ -573,6 +580,12 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:openPayUrl', async (_event, payUrl) => {
     const parsed = parseAlipayUrl(payUrl);
     await shell.openExternal(parsed.toString());
+    return true;
+  });
+  // 界面偏好（例如上次选中的团队）：随登录账号保存在各自的本地库里
+  ipcMain.handle('preferences:get', (_event, key) => requireSignedInStore().getPreference(requireUiPreferenceKey(key)));
+  ipcMain.handle('preferences:set', (_event, { key, value }) => {
+    requireSignedInStore().setPreference(requireUiPreferenceKey(key), value);
     return true;
   });
 

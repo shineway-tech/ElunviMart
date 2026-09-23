@@ -11,7 +11,8 @@ const state = {
     wallet: null,
     packages: [],
     transactions: [],
-    transactionTotal: 0
+    transactionTotal: 0,
+    preferencesLoaded: false
   },
   purchase: { kind: null, order: null, attempt: null },
   orderPollTimer: null,
@@ -807,6 +808,7 @@ async function selectTeam(teamId) {
   if (String(teamId) === String(state.mart.teamId)) return;
   state.mart.teamId = teamId;
   state.purchase = { kind: null, order: null, attempt: null };
+  try { await window.pddMonitor.preferences.set('ui.selectedTeamId', String(teamId)); } catch {}
   await Promise.all([loadTeamData(), loadWalletData()]);
 }
 
@@ -960,6 +962,13 @@ async function loadTeamData() {
   try {
     const teams = await window.pddMonitor.mart.teams();
     state.mart.teams = teams.teams || [];
+    if (!state.mart.preferencesLoaded) {
+      state.mart.preferencesLoaded = true;
+      try {
+        const saved = await window.pddMonitor.preferences.get('ui.selectedTeamId');
+        if (!state.mart.teamId && saved) state.mart.teamId = saved;
+      } catch {}
+    }
     const selected = state.mart.teamId
       ? state.mart.teams.find((item) => String(item.id) === String(state.mart.teamId))
       : null;
@@ -2200,7 +2209,7 @@ window.pddMonitor.onPlatformChanged((payload) => {
   }
   if (payload?.status === 'signed_out') {
     state.platform = { status: 'signed_out', profile: null, security: null, accountEmail: null };
-    state.mart = { linked: false, user: null, teams: [], team: null, membership: null, members: [], wallet: null, packages: [], transactions: [] };
+    state.mart = { linked: false, user: null, teams: [], team: null, teamId: null, membership: null, members: [], wallet: null, packages: [], transactions: [], transactionTotal: 0, preferencesLoaded: false };
     setPlatformShell('signed_out');
     showPlatformLogin();
   }

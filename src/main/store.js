@@ -74,6 +74,7 @@ class SqliteStore {
         failures INTEGER NOT NULL DEFAULT 0, next_allowed_at INTEGER NOT NULL DEFAULT 0
       );
       CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY CHECK (id = 1), data_json TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
     `);
     this.ensureSettings();
     if (legacyJsonPath) this.migrateLegacyJson(legacyJsonPath);
@@ -164,6 +165,20 @@ class SqliteStore {
   getSettings() {
     const row = this.database.prepare('SELECT data_json FROM settings WHERE id = 1').get();
     return mergeSettings(row ? JSON.parse(row.data_json) : {});
+  }
+
+  // 轻量界面偏好（例如上次选中的团队），每个平台账号一个库，天然按用户隔离
+  getPreference(key) {
+    const row = this.database.prepare('SELECT value FROM preferences WHERE key = ?').get(String(key));
+    return row ? row.value : null;
+  }
+
+  setPreference(key, value) {
+    this.database.prepare(`
+      INSERT INTO preferences (key, value, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    `).run(String(key), String(value ?? ''), new Date().toISOString());
+    return true;
   }
 
   setSettings(settings) {

@@ -62,6 +62,10 @@ contextBridge.exposeInMainWorld('pddMonitor', {
   notifications: {
     test: (kind, config) => ipcRenderer.invoke('notifications:test', { kind, config })
   },
+  preferences: {
+    get: (key) => ipcRenderer.invoke('preferences:get', key),
+    set: (key, value) => ipcRenderer.invoke('preferences:set', { key, value })
+  },
   onAccountsChanged: (callback) => ipcRenderer.on('accounts:changed', callback),
   onPlatformChanged: (callback) => ipcRenderer.on('platform:changed', (_event, payload) => callback(payload)),
   onMartChanged: (callback) => ipcRenderer.on('mart:changed', (_event, payload) => callback(payload)),
