@@ -219,23 +219,31 @@ function renderAccountAvatar(container, avatarUrl) {
   }
 }
 
-function renderPlatformAvatarInto(container, profile) {
+function renderPlatformAvatarInto(container, profile, fallbackName = '') {
   if (!container) return;
   container.replaceChildren();
+  const initial = String(fallbackName || '').trim().slice(0, 1).toUpperCase();
+  const renderInitial = () => {
+    if (initial) {
+      const letter = document.createElement('span');
+      letter.className = 'platform-avatar-initial';
+      letter.textContent = initial;
+      container.append(letter);
+      return;
+    }
+    container.append(createIcon('user-round'));
+    refreshIcons();
+  };
   if (profile?.avatarUrl) {
     const image = document.createElement('img');
     image.src = profile.avatarUrl.replace(/^http:/, 'https:');
     image.alt = '';
     image.referrerPolicy = 'no-referrer';
-    image.addEventListener('error', () => {
-      container.replaceChildren(createIcon('user-round'));
-      refreshIcons();
-    }, { once: true });
+    image.addEventListener('error', renderInitial, { once: true });
     container.append(image);
   } else {
-    container.append(createIcon('user-round'));
+    renderInitial();
   }
-  refreshIcons();
 }
 
 const LOCAL_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -346,9 +354,31 @@ function isPlatformSignedIn() {
   return state.platform.status === 'signed_in' && Boolean(state.platform.profile);
 }
 
-function renderPlatformAvatar(profile) {
-  renderPlatformAvatarInto(elements.platformAccountAvatar, profile);
-  renderPlatformAvatarInto(elements.platformAccountMenuAvatar, profile);
+const PLACEHOLDER_DISPLAY_NAMES = new Set(['elunvi user', 'elunvi 用户']);
+
+function hasRealDisplayName(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized !== '' && !PLACEHOLDER_DISPLAY_NAMES.has(normalized);
+}
+
+// 邮箱注册的用户平台侧没有昵称，用邮箱 @ 前那截顶上（脱敏邮箱不带 @ 前的真实字符，不用）
+function emailLocalPart(email) {
+  const value = String(email || '').trim();
+  const at = value.indexOf('@');
+  if (at <= 0) return '';
+  const local = value.slice(0, at);
+  return local.includes('*') ? '' : local;
+}
+
+function platformDisplayName(profile, email) {
+  const name = String(profile?.displayName || '').trim();
+  if (hasRealDisplayName(name)) return name;
+  return emailLocalPart(email) || name || 'Elunvi 用户';
+}
+
+function renderPlatformAvatar(profile, displayName) {
+  renderPlatformAvatarInto(elements.platformAccountAvatar, profile, displayName);
+  renderPlatformAvatarInto(elements.platformAccountMenuAvatar, profile, displayName);
 }
 
 function setPlatformShell(status) {
@@ -360,13 +390,14 @@ function setPlatformShell(status) {
   elements.addAccount.disabled = !signedIn;
   if (signedIn) {
     const profile = state.platform.profile || {};
-    const email = state.platform.security?.maskedEmail || state.platform.accountEmail || 'Elunvi 用户';
-    const displayName = profile.displayName || email;
-    renderPlatformAvatar(profile);
+    const accountEmail = state.platform.accountEmail || '';
+    const email = state.platform.security?.maskedEmail || accountEmail || 'Elunvi 用户';
+    const displayName = platformDisplayName(profile, accountEmail);
+    renderPlatformAvatar(profile, displayName);
     elements.platformAccountMenuEmail.textContent = email;
     elements.platformAccountMenuName.textContent = displayName;
-    elements.platformAccountName.textContent = profile.avatarUrl ? displayName : email;
-    elements.platformAccountMeta.textContent = profile.avatarUrl ? email : (profile.displayName || 'Elunvi 用户');
+    elements.platformAccountName.textContent = displayName;
+    elements.platformAccountMeta.textContent = email;
   } else {
     closePlatformAccountMenu();
     renderPlatformAvatar(null);

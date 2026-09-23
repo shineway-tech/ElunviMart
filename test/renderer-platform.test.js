@@ -108,6 +108,10 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
   }
+  // 邮箱注册用户没有昵称：不显示平台占位昵称，用邮箱 @ 前那截，头像退回首字
+  assert.match(renderer, /PLACEHOLDER_DISPLAY_NAMES/);
+  assert.match(renderer, /platformDisplayName\(profile, accountEmail\)/);
+  assert.match(renderer, /platform-avatar-initial/);
   // 破坏性操作走主题内的确认弹窗，不用系统原生 confirm
   assert.match(html, /id="confirm-modal"/);
   assert.match(html, /id="confirm-modal-submit"/);

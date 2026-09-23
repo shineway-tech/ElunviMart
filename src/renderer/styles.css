@@ -360,6 +360,9 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 /* 按钮内可动态替换的图标占位 */
 .button-icon{display:grid;place-items:center}
 
+/* 没有头像时显示昵称首字（与大列表的成员头像一致） */
+.platform-avatar-initial{font-size:15px;font-weight:600;line-height:1}
+
 /* 概览卡内的次级操作：纯文字链接，悬停出现下划线 */
 .button-link{min-height:0;padding:1px 0;border:0;border-radius:0;color:var(--muted);background:transparent;font-size:13px}
 .button-link:hover{color:var(--accent);background:transparent;text-decoration:underline;text-underline-offset:3px}
