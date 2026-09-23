@@ -5,6 +5,7 @@ const state = {
     user: null,
     teams: [],
     team: null,
+    teamId: null,
     membership: null,
     members: [],
     wallet: null,
@@ -102,6 +103,8 @@ const elements = {
   walletPackages: document.querySelector('#wallet-package-list'),
   walletTransactions: document.querySelector('#wallet-transactions-list'),
   teamSummary: document.querySelector('#team-summary-card'),
+  teamSwitcher: document.querySelector('#team-switcher'),
+  walletSwitcher: document.querySelector('#wallet-switcher'),
   teamPlans: document.querySelector('#team-plan-list'),
   teamPlanCard: document.querySelector('#team-plan-card'),
   teamTabs: document.querySelector('#team-tabs'),
@@ -774,6 +777,39 @@ function setWalletTab(tab) {
   });
 }
 
+// 一个用户可以加入多个团队，切换只影响当前查看和操作的团队
+function renderTeamSwitcher() {
+  const teams = state.mart.teams || [];
+  for (const container of [elements.teamSwitcher, elements.walletSwitcher]) {
+    if (!container) continue;
+    container.replaceChildren();
+    if (teams.length < 2) {
+      container.hidden = true;
+      continue;
+    }
+    container.hidden = false;
+    for (const item of teams) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = `team-chip${String(item.id) === String(state.mart.teamId) ? ' is-active' : ''}`;
+      chip.append(document.createTextNode(item.name || '未命名团队'));
+      const role = document.createElement('span');
+      role.className = 'chip-role';
+      role.textContent = item.role === MEMBER_ROLE_OWNER ? '我的团队' : '成员';
+      chip.append(role);
+      chip.addEventListener('click', () => void selectTeam(item.id));
+      container.append(chip);
+    }
+  }
+}
+
+async function selectTeam(teamId) {
+  if (String(teamId) === String(state.mart.teamId)) return;
+  state.mart.teamId = teamId;
+  state.purchase = { kind: null, order: null, attempt: null };
+  await Promise.all([loadTeamData(), loadWalletData()]);
+}
+
 async function loadWalletData() {
   elements.walletSummary.replaceChildren();
   elements.walletPackages.replaceChildren();
@@ -783,6 +819,7 @@ async function loadWalletData() {
     return;
   }
   if (!state.mart.team) await loadTeamData();
+  renderTeamSwitcher();
   const team = state.mart.team;
   if (!team) {
     renderEmptyState(elements.walletSummary, '当前账号还没有团队，暂时无法使用团队积分。');
@@ -866,7 +903,7 @@ function renderWalletPackages(team) {
     features.append(unitPrice);
     const discounted = item.payable_fen < item.price_fen;
     const button = document.createElement('button');
-    button.className = discounted ? 'button button-primary' : 'button';
+    button.className = discounted && isOwner ? 'button button-primary' : 'button';
     button.type = 'button';
     button.textContent = isOwner ? '立即充值' : '仅负责人可充值';
     button.disabled = !isOwner;
@@ -923,7 +960,12 @@ async function loadTeamData() {
   try {
     const teams = await window.pddMonitor.mart.teams();
     state.mart.teams = teams.teams || [];
-    state.mart.team = teams.default_team || state.mart.teams[0] || null;
+    const selected = state.mart.teamId
+      ? state.mart.teams.find((item) => String(item.id) === String(state.mart.teamId))
+      : null;
+    state.mart.team = selected || teams.default_team || state.mart.teams[0] || null;
+    state.mart.teamId = state.mart.team ? state.mart.team.id : null;
+    renderTeamSwitcher();
     const team = state.mart.team;
     if (!team) {
       renderEmptyState(elements.teamSummary, '当前账号还没有团队。');
@@ -1156,6 +1198,7 @@ async function leaveCurrentTeam(team) {
   try {
     await window.pddMonitor.mart.leaveTeam(team.id);
     state.mart.team = null;
+    state.mart.teamId = null;
     await loadTeamData();
     showNotice('已退出团队');
   } catch (error) {

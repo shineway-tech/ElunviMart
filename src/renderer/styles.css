@@ -283,3 +283,11 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .tab-bar button.is-active{color:var(--text);background:var(--surface);box-shadow:0 1px 2px rgba(27,38,54,.08)}
 .tab-count{display:inline-flex;align-items:center;padding:1px 7px;border-radius:999px;color:var(--muted);background:var(--soft);font-size:11px}
 .tab-bar button.is-active .tab-count{background:var(--soft)}
+
+.team-switcher{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.team-switcher[hidden]{display:none}
+.team-chip{display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:7px 14px;border:1px solid var(--line);border-radius:10px;color:var(--muted);background:var(--surface);cursor:pointer;font-size:13px}
+.team-chip:hover{color:var(--text);border-color:#d3d8de}
+.team-chip.is-active{border-color:#efb8b2;color:var(--accent);background:var(--accent-soft)}
+.team-chip .chip-role{padding:1px 7px;border-radius:999px;color:var(--muted);background:var(--soft);font-size:11px}
+.team-chip.is-active .chip-role{color:var(--accent);background:#fff}
