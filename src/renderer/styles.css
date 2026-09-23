@@ -228,25 +228,27 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .tab-bar button.is-active{color:var(--accent);font-weight:600}
 .tab-bar button.is-active:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:2px 2px 0 0;background:var(--accent)}
 
-/* 团队概览 */
-.team-hero{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;padding:22px 24px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 1px 2px rgba(32,33,36,.04)}
+/* 团队概览：身份行 + 图标指标砖，操作按钮收到头部右侧 */
+.team-hero{display:grid;gap:18px;padding:20px 22px;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 1px 2px rgba(32,33,36,.04)}
+.team-hero-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .team-identity{display:flex;align-items:center;gap:14px;min-width:0}
-.team-avatar{display:grid;place-items:center;width:52px;height:52px;flex:0 0 auto;border-radius:13px;color:#fff;background:linear-gradient(140deg,#c92b21 0%,var(--accent) 60%,#e2503f 100%);font-size:20px;font-weight:650}
-.team-title-row{display:flex;align-items:center;gap:10px;min-width:0}
-.team-title-row h3{margin:0;font-size:19px;font-weight:650;letter-spacing:-.01em;color:var(--text)}
-.team-meta{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:8px;color:var(--muted);font-size:12px}
+.team-avatar{display:grid;place-items:center;width:48px;height:48px;flex:0 0 auto;border-radius:12px;color:#fff;background:linear-gradient(140deg,#c92b21 0%,var(--accent) 60%,#e2503f 100%);font-size:19px;font-weight:650}
+.team-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.team-title-row h3{margin:0;font-size:18px;font-weight:650;letter-spacing:-.01em;color:var(--text)}
+.team-hero-actions{display:flex;flex-wrap:wrap;gap:8px}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:500}
 .chip-plan{color:var(--accent);background:var(--accent-soft)}
 .chip-owner{color:var(--green);background:var(--green-soft)}
 .chip-member{color:var(--muted);background:var(--soft)}
 .chip-muted{color:var(--muted);background:var(--soft)}
-.team-stats{display:flex;align-items:stretch;gap:0}
-.stat{min-width:104px;padding:2px 22px;border-left:1px solid var(--line)}
-.stat:first-child{border-left:0;padding-left:0}
-.stat span{display:block;color:var(--muted);font-size:12px}
-.stat strong{display:block;margin-top:6px;font-size:24px;font-weight:650;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
-.stat strong i{margin-left:3px;font-size:12px;font-weight:500;font-style:normal;color:var(--muted)}
-.team-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;margin-top:2px;padding-top:16px;border-top:1px dashed var(--line)}
+.team-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.hero-metric{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:var(--soft)}
+.hero-metric .metric-icon{display:grid;place-items:center;width:34px;height:34px;flex:0 0 auto;border-radius:9px;color:var(--accent);background:var(--accent-soft)}
+.hero-metric .metric-icon svg{width:18px;height:18px}
+.hero-metric>div{min-width:0}
+.hero-metric span{display:block;color:var(--muted);font-size:12px}
+.hero-metric strong{display:block;margin-top:4px;font-size:20px;font-weight:650;line-height:1.1;color:var(--text);font-variant-numeric:tabular-nums}
+@media(max-width:1000px){.team-hero-head{align-items:flex-start}.team-metrics{grid-template-columns:1fr}}
 
 /* 会员档位卡 */
 .plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;padding-top:16px}

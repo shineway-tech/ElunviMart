@@ -1252,8 +1252,6 @@ function renderTeamSummary(team, membership) {
   const avatar = document.createElement('span');
   avatar.className = 'team-avatar';
   avatar.textContent = (team.name || '团').trim().slice(0, 1);
-  const body = document.createElement('div');
-  body.style.minWidth = '0';
   const titleRow = document.createElement('div');
   titleRow.className = 'team-title-row';
   const heading = document.createElement('h3');
@@ -1261,43 +1259,20 @@ function renderTeamSummary(team, membership) {
   const planChip = document.createElement('span');
   planChip.className = `chip ${active ? 'chip-plan' : 'chip-muted'}`;
   planChip.textContent = active ? (subscription.plan?.name || '会员已开通') : '未开通会员';
-  titleRow.append(heading, planChip);
-  const meta = document.createElement('div');
-  meta.className = 'team-meta';
   const roleChip = document.createElement('span');
   roleChip.className = `chip ${isOwner ? 'chip-owner' : 'chip-member'}`;
   roleChip.textContent = isOwner ? '负责人' : '成员';
-  meta.append(roleChip, document.createTextNode(active
-    ? '会员按月计费，到期前不能降级'
-    : '开通会员后可以添加成员'));
-  body.append(titleRow, meta);
-  identity.append(avatar, body);
-
-  const stats = document.createElement('div');
-  stats.className = 'team-stats';
-  const statRows = [
-    ['成员席位', `${quota.used_members ?? 1}`, `/ ${quota.max_members ?? 1}`],
-    ['店铺额度', `${quota.max_shops ?? 0}`, '家'],
-    ['会员到期', active ? formatDay(subscription.expires_at) : '—', '']
-  ];
-  for (const [label, value, unit] of statRows) {
-    const stat = document.createElement('div');
-    stat.className = 'stat';
-    const name = document.createElement('span');
-    name.textContent = label;
-    const strong = document.createElement('strong');
-    strong.textContent = value;
-    if (unit) {
-      const note = document.createElement('i');
-      note.textContent = unit;
-      strong.append(note);
-    }
-    stat.append(name, strong);
-    stats.append(stat);
-  }
+  titleRow.append(heading, planChip, roleChip);
+  identity.append(avatar, titleRow);
 
   const actions = document.createElement('div');
-  actions.className = 'team-actions';
+  actions.className = 'team-hero-actions';
+  const join = document.createElement('button');
+  join.className = 'button';
+  join.type = 'button';
+  join.textContent = '输入邀请码加入团队';
+  join.addEventListener('click', () => openTeamAction('join'));
+  actions.append(join);
   if (isOwner) {
     const invite = document.createElement('button');
     invite.className = 'button button-primary';
@@ -1305,14 +1280,7 @@ function renderTeamSummary(team, membership) {
     invite.textContent = '邀请成员';
     invite.addEventListener('click', () => openTeamAction('invite'));
     actions.append(invite);
-  }
-  const join = document.createElement('button');
-  join.className = 'button';
-  join.type = 'button';
-  join.textContent = '输入邀请码加入团队';
-  join.addEventListener('click', () => openTeamAction('join'));
-  actions.append(join);
-  if (!isOwner) {
+  } else {
     const leave = document.createElement('button');
     leave.className = 'button';
     leave.type = 'button';
@@ -1321,7 +1289,34 @@ function renderTeamSummary(team, membership) {
     actions.append(leave);
   }
 
-  elements.teamSummary.append(identity, stats, actions);
+  const head = document.createElement('div');
+  head.className = 'team-hero-head';
+  head.append(identity, actions);
+
+  const metrics = document.createElement('div');
+  metrics.className = 'team-metrics';
+  const tiles = [
+    ['users', '成员席位', `${quota.used_members ?? 1} / ${quota.max_members ?? 1}`],
+    ['store', '店铺额度', `${quota.max_shops ?? 0} 家`],
+    ['calendar-clock', '会员到期', active ? formatDay(subscription.expires_at) : '—']
+  ];
+  for (const [icon, label, value] of tiles) {
+    const tile = document.createElement('div');
+    tile.className = 'hero-metric';
+    const iconTile = document.createElement('span');
+    iconTile.className = 'metric-icon';
+    iconTile.append(createIcon(icon));
+    const body = document.createElement('div');
+    const name = document.createElement('span');
+    name.textContent = label;
+    const strong = document.createElement('strong');
+    strong.textContent = value;
+    body.append(name, strong);
+    tile.append(iconTile, body);
+    metrics.append(tile);
+  }
+
+  elements.teamSummary.append(head, metrics);
   refreshIcons();
 }
 
