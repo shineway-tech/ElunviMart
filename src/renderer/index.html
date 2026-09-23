@@ -117,16 +117,20 @@
             <div class="header-actions"><button class="button" type="button" id="team-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
           </div>
           <div class="team-hero" id="team-summary-card"></div>
-          <section class="finance-card" id="team-plan-card">
-            <div class="finance-card-header"><div><h3>会员档位</h3><p>按团队购买、按月计费；成员进入团队即占用一个席位，不自动续费。</p></div></div>
-            <div class="plan-grid" id="team-plan-list"></div>
-          </section>
-          <section class="finance-card">
+          <div class="tab-bar" id="team-tabs" role="tablist">
+            <button type="button" role="tab" class="is-active" data-team-tab="members">团队成员<span class="tab-count" id="team-tab-count"></span></button>
+            <button type="button" role="tab" data-team-tab="plans" id="team-tab-plans">会员档位</button>
+          </div>
+          <section class="finance-card" data-team-panel="members">
             <div class="finance-card-header">
-              <div><h3>团队成员<span class="count-pill" id="team-member-count"></span></h3><p>负责人可以邀请和移除成员；成员随时可以退出。</p></div>
+              <div><h3>团队成员</h3><p>负责人可以邀请和移除成员；成员随时可以退出。</p></div>
               <div class="header-actions" id="team-member-actions"></div>
             </div>
             <div class="member-list" id="team-members-list"></div>
+          </section>
+          <section class="finance-card" id="team-plan-card" data-team-panel="plans" hidden>
+            <div class="finance-card-header"><div><h3>会员档位</h3><p>按团队购买、按月计费；成员进入团队即占用一个席位，不自动续费。</p></div></div>
+            <div class="plan-grid" id="team-plan-list"></div>
           </section>
         </section>
 
@@ -136,11 +140,15 @@
             <div class="header-actions"><button class="button" type="button" id="wallet-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
           </div>
           <div class="wallet-hero" id="wallet-summary-card"></div>
-          <section class="finance-card">
+          <div class="tab-bar" id="wallet-tabs" role="tablist">
+            <button type="button" role="tab" class="is-active" data-wallet-tab="recharge">充值档位</button>
+            <button type="button" role="tab" data-wallet-tab="ledger">积分流水<span class="tab-count" id="wallet-tab-count"></span></button>
+          </div>
+          <section class="finance-card" data-wallet-panel="recharge">
             <div class="finance-card-header"><div><h3>充值档位</h3><p>1 元到账 100 积分，大额档位实付更优惠，到账积分不因折扣减少。</p></div></div>
             <div class="plan-grid plan-grid-5" id="wallet-package-list"></div>
           </section>
-          <section class="finance-card">
+          <section class="finance-card" data-wallet-panel="ledger" hidden>
             <div class="finance-card-header"><div><h3>积分流水</h3><p>流水只追加不修改，余额以服务端记录为准。</p></div></div>
             <div class="ledger-list" id="wallet-transactions-list"></div>
           </section>

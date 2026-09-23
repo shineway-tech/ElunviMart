@@ -9,10 +9,13 @@ const state = {
     members: [],
     wallet: null,
     packages: [],
-    transactions: []
+    transactions: [],
+    transactionTotal: 0
   },
   purchase: { kind: null, order: null, attempt: null },
   orderPollTimer: null,
+  teamTab: 'members',
+  walletTab: 'recharge',
   accounts: [],
   currentAccount: null,
   products: [],
@@ -101,6 +104,11 @@ const elements = {
   teamSummary: document.querySelector('#team-summary-card'),
   teamPlans: document.querySelector('#team-plan-list'),
   teamPlanCard: document.querySelector('#team-plan-card'),
+  teamTabs: document.querySelector('#team-tabs'),
+  teamTabPlans: document.querySelector('#team-tab-plans'),
+  teamTabCount: document.querySelector('#team-tab-count'),
+  walletTabs: document.querySelector('#wallet-tabs'),
+  walletTabCount: document.querySelector('#wallet-tab-count'),
   teamMembers: document.querySelector('#team-members-list'),
   teamMemberCount: document.querySelector('#team-member-count'),
   teamMemberActions: document.querySelector('#team-member-actions'),
@@ -742,6 +750,30 @@ function renderSignedOutState(container, copy = '登录 Elunvi 账号后即可�
   renderEmptyState(container, copy, '去登录', () => showPlatformLogin());
 }
 
+function setTeamTab(tab) {
+  state.teamTab = tab;
+  document.querySelectorAll('[data-team-tab]').forEach((button) => {
+    const active = button.dataset.teamTab === tab;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-team-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.teamPanel !== tab;
+  });
+}
+
+function setWalletTab(tab) {
+  state.walletTab = tab;
+  document.querySelectorAll('[data-wallet-tab]').forEach((button) => {
+    const active = button.dataset.walletTab === tab;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  document.querySelectorAll('[data-wallet-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.walletPanel !== tab;
+  });
+}
+
 async function loadWalletData() {
   elements.walletSummary.replaceChildren();
   elements.walletPackages.replaceChildren();
@@ -765,6 +797,7 @@ async function loadWalletData() {
     state.mart.wallet = wallet.wallet;
     state.mart.packages = packages.packages || [];
     state.mart.transactions = transactions.transactions || [];
+    state.mart.transactionTotal = transactions.total || state.mart.transactions.length;
     renderWalletSummary(team);
     renderWalletPackages(team);
     renderWalletTransactions();
@@ -848,6 +881,7 @@ function renderWalletTransactions() {
   const container = elements.walletTransactions;
   container.replaceChildren();
   const rows = state.mart.transactions || [];
+  elements.walletTabCount.textContent = state.mart.transactionTotal ? String(state.mart.transactionTotal) : '';
   if (!rows.length) {
     renderEmptyState(container, '暂无积分流水');
     return;
@@ -990,8 +1024,12 @@ function renderTeamPlans(team, membership) {
   elements.teamPlans.replaceChildren();
   const isOwner = team.role === MEMBER_ROLE_OWNER;
   // 成员只需要在概览里看到当前档位，购买入口只对负责人展示
-  elements.teamPlanCard.hidden = !isOwner;
-  if (!isOwner) return;
+  elements.teamTabs.hidden = !isOwner;
+  elements.teamTabPlans.hidden = !isOwner;
+  if (!isOwner) {
+    if (state.teamTab === 'plans') setTeamTab('members');
+    return;
+  }
   const current = membership?.subscription?.active ? membership.subscription.plan : null;
   for (const plan of membership?.plans || []) {
     const card = document.createElement('article');
@@ -1058,7 +1096,7 @@ function renderTeamMembers(team) {
   const members = state.mart.members || [];
   elements.teamMembers.replaceChildren();
   elements.teamMemberActions.replaceChildren();
-  elements.teamMemberCount.textContent = members.length ? `${members.length} 人` : '';
+  elements.teamTabCount.textContent = members.length ? String(members.length) : '';
   if (isOwner) {
     const invite = document.createElement('button');
     invite.className = 'button button-primary';
@@ -2092,6 +2130,8 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
 });
 document.querySelector('#wallet-refresh').addEventListener('click', () => void loadWalletData());
 document.querySelector('#team-refresh').addEventListener('click', () => void loadTeamData());
+document.querySelectorAll('[data-team-tab]').forEach((button) => button.addEventListener('click', () => setTeamTab(button.dataset.teamTab)));
+document.querySelectorAll('[data-wallet-tab]').forEach((button) => button.addEventListener('click', () => setWalletTab(button.dataset.walletTab)));
 elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
 elements.paymentSimulate.addEventListener('click', () => void simulatePayment());
 elements.paymentCloseOrder.addEventListener('click', () => void closePurchaseOrder());
