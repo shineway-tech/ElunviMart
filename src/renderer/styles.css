@@ -215,6 +215,63 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .toast svg{width:17px;height:17px;flex:0 0 auto;color:#16845b}
 @keyframes toast-in{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
 
-.team-summary{display:block}.team-summary .team-summary-actions{display:flex;gap:8px;margin-top:14px}.team-summary .team-plan-line{margin-top:8px;font-size:13px}.wallet-balance-value{display:block;margin-top:10px;font-size:30px;font-weight:650;line-height:1.15;font-variant-numeric:tabular-nums}.wallet-balance-unit{display:block;margin-top:2px;color:var(--muted);font-size:12px}.payment-package-original{text-decoration:line-through}.finance-row .finance-row-value small{display:block;margin-top:3px;color:var(--muted);font-size:11px;font-weight:400}
+/* 团队与钱包：沿用账户详情页的卡片语言（大圆角、轻投影、图标方砖） */
+.header-actions{display:flex;align-items:center;gap:8px}
+.finance-card-header .header-actions{margin-left:auto}
+.count-pill{display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;border-radius:999px;color:var(--muted);background:var(--soft);font-size:11px;font-weight:400;vertical-align:middle}
 
-.payment-channel-actions{display:flex;gap:8px;margin-top:12px}
+.team-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:18px;padding:20px;border:1px solid var(--line);border-radius:15px;background:var(--surface);box-shadow:0 1px 1px rgba(27,38,54,.02)}
+.team-identity{display:flex;align-items:flex-start;gap:14px;min-width:0}
+.team-avatar{display:grid;place-items:center;width:52px;height:52px;flex:0 0 auto;border-radius:14px;color:var(--accent);background:var(--accent-soft);font-size:20px;font-weight:650}
+.team-identity h3{margin:0;font-size:17px;font-weight:650;line-height:1.3}
+.team-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:9px}
+.team-hero-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.hero-metric{padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+.hero-metric span{display:block;color:var(--muted);font-size:12px}
+.hero-metric strong{display:block;margin-top:6px;font-size:19px;font-weight:650;line-height:1.15;font-variant-numeric:tabular-nums}
+.hero-metric small{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+.team-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px}
+
+.plan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;padding-top:14px}
+.plan-card{position:relative;display:grid;align-content:start;gap:11px;padding:18px 18px 16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.plan-card.is-current{border-color:#efb8b2;background:var(--accent-soft)}
+.plan-card.is-muted{background:var(--soft)}
+.plan-badge{position:absolute;top:14px;right:14px;padding:3px 8px;border:1px solid #efb8b2;border-radius:999px;color:var(--accent);background:#fff;font-size:11px}
+.plan-card h4{margin:0;font-size:15px;font-weight:600}
+.plan-price{display:flex;align-items:baseline;gap:2px}
+.plan-price strong{font-size:26px;font-weight:650;line-height:1;font-variant-numeric:tabular-nums}
+.plan-price em{margin-left:2px;color:var(--muted);font-size:12px;font-style:normal}
+.plan-price del{margin-left:8px;color:var(--muted);font-size:12px}
+.plan-points{color:var(--muted);font-size:12px}
+.plan-features{display:grid;gap:7px;margin:0;padding:0;list-style:none;color:var(--muted);font-size:12px}
+.plan-features li{display:flex;align-items:center;gap:7px}
+.plan-features svg{width:14px;height:14px;flex:0 0 auto;color:var(--green)}
+.plan-card .button{justify-content:center;min-height:36px}
+.plan-note{margin:0;color:var(--muted);font-size:11px;line-height:1.5}
+
+.wallet-hero{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:18px;padding:22px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(120deg,#fff 0%,#f6f8ff 100%);box-shadow:0 1px 1px rgba(27,38,54,.02)}
+.wallet-hero-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:14px;color:var(--blue);background:var(--blue-soft)}
+.wallet-balance-value{display:block;font-size:38px;font-weight:650;line-height:1;font-variant-numeric:tabular-nums}
+.wallet-balance-unit{display:block;margin-top:8px;color:var(--muted);font-size:12px}
+.wallet-hero h3{margin:0 0 10px;font-size:14px;font-weight:500;color:var(--muted)}
+
+.member-list,.ledger-list{display:grid;padding-top:6px}
+.member-row,.ledger-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.member-row:last-child,.ledger-row:last-child{border-bottom:0}
+.member-avatar{display:grid;place-items:center;width:36px;height:36px;flex:0 0 auto;border-radius:10px;color:var(--blue);background:var(--blue-soft);font-size:14px;font-weight:600}
+.member-avatar.is-owner{color:var(--accent);background:var(--accent-soft)}
+.member-main,.ledger-main{min-width:0;flex:1}
+.member-main strong,.ledger-main strong{display:block;font-size:13px;font-weight:500}
+.member-main small,.ledger-main small{display:block;margin-top:3px;color:var(--muted);font-size:12px}
+.ledger-icon{display:grid;place-items:center;width:34px;height:34px;flex:0 0 auto;border-radius:10px;color:var(--green);background:var(--green-soft)}
+.ledger-value{text-align:right;font-variant-numeric:tabular-nums}
+.ledger-value strong{display:block;font-size:14px;font-weight:650;color:var(--green)}
+.ledger-value small{display:block;margin-top:3px;color:var(--muted);font-size:11px}
+
+.payment-channel-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+@media(max-width:1000px){.team-hero,.wallet-hero{grid-template-columns:1fr}.plan-grid{grid-template-columns:1fr}}
+
+.team-identity-col{display:grid;align-content:start;gap:16px;min-width:0}
+.team-actions{display:flex;flex-wrap:wrap;gap:8px}
+.plan-grid-5{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media(max-width:1240px){.plan-grid-5{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}

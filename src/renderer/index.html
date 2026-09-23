@@ -111,27 +111,39 @@
           </form>
         </section>
 
-        <section class="view platform-view" id="wallet-view" hidden>
-          <div class="section-header"><div><h2>积分钱包</h2><p>团队积分由负责人充值，成员可查看余额和流水。</p></div><button class="button" type="button" id="wallet-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
-          <div class="finance-card" id="wallet-summary-card"></div>
-          <section class="finance-card">
-            <div class="finance-card-header"><div><h3>充值档位</h3><p>1 元到账 100 积分，大额档位实付更优惠。</p></div></div>
-            <div class="payment-package-list" id="wallet-package-list"></div>
+        <section class="view platform-view" id="team-view" hidden>
+          <div class="section-header">
+            <div><h2>团队概览</h2><p>成员与会员由 Mart 服务管理，本机店铺和监控数据仍各自保存在本地。</p></div>
+            <div class="header-actions"><button class="button" type="button" id="team-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
+          </div>
+          <div class="team-hero" id="team-summary-card"></div>
+          <section class="finance-card" id="team-plan-card">
+            <div class="finance-card-header"><div><h3>会员档位</h3><p>按团队购买、按月计费；成员进入团队即占用一个席位，不自动续费。</p></div></div>
+            <div class="plan-grid" id="team-plan-list"></div>
           </section>
-          <section class="finance-card" id="wallet-transactions-card">
-            <div class="finance-card-header"><div><h3>积分流水</h3><p>流水只追加不修改，余额以服务端记录为准。</p></div></div>
-            <div class="finance-list" id="wallet-transactions-list"></div>
+          <section class="finance-card">
+            <div class="finance-card-header">
+              <div><h3>团队成员<span class="count-pill" id="team-member-count"></span></h3><p>负责人可以邀请和移除成员；成员随时可以退出。</p></div>
+              <div class="header-actions" id="team-member-actions"></div>
+            </div>
+            <div class="member-list" id="team-members-list"></div>
           </section>
         </section>
 
-        <section class="view platform-view" id="team-view" hidden>
-          <div class="section-header"><div><h2>我的团队</h2><p id="team-description">团队成员和会员由 Mart 服务管理。</p></div><button class="button" type="button" id="team-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
-          <div class="team-summary finance-card" id="team-summary-card"></div>
+        <section class="view platform-view" id="wallet-view" hidden>
+          <div class="section-header">
+            <div><h2>账户余额</h2><p>团队积分由负责人充值，成员共享余额与流水。</p></div>
+            <div class="header-actions"><button class="button" type="button" id="wallet-refresh"><i data-lucide="refresh-cw"></i>刷新</button></div>
+          </div>
+          <div class="wallet-hero" id="wallet-summary-card"></div>
           <section class="finance-card">
-            <div class="finance-card-header"><div><h3>会员档位</h3><p>按团队购买、按月计费，成员进入团队即占用一个席位。</p></div></div>
-            <div class="payment-package-list" id="team-plan-list"></div>
+            <div class="finance-card-header"><div><h3>充值档位</h3><p>1 元到账 100 积分，大额档位实付更优惠，到账积分不因折扣减少。</p></div></div>
+            <div class="plan-grid plan-grid-5" id="wallet-package-list"></div>
           </section>
-          <section class="finance-card"><div class="finance-card-header"><div><h3>团队成员</h3><p>成员关系只影响团队权限，本机店铺和监控数据不会共享。</p></div></div><div class="team-members" id="team-members-list"></div></section>
+          <section class="finance-card">
+            <div class="finance-card-header"><div><h3>积分流水</h3><p>流水只追加不修改，余额以服务端记录为准。</p></div></div>
+            <div class="ledger-list" id="wallet-transactions-list"></div>
+          </section>
         </section>
 
         <section class="view platform-view" id="payment-view" hidden>

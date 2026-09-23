@@ -100,7 +100,10 @@ const elements = {
   walletTransactions: document.querySelector('#wallet-transactions-list'),
   teamSummary: document.querySelector('#team-summary-card'),
   teamPlans: document.querySelector('#team-plan-list'),
+  teamPlanCard: document.querySelector('#team-plan-card'),
   teamMembers: document.querySelector('#team-members-list'),
+  teamMemberCount: document.querySelector('#team-member-count'),
+  teamMemberActions: document.querySelector('#team-member-actions'),
   paymentStatusCard: document.querySelector('#payment-status-card'),
   paymentStatusCopy: document.querySelector('#payment-status-copy'),
   paymentOrderDetail: document.querySelector('#payment-order-detail'),
@@ -201,11 +204,22 @@ const LOCAL_DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
   hour12: false, timeZone: LOCAL_TIME_ZONE
 });
 
+const LOCAL_DAY_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric', month: '2-digit', day: '2-digit', timeZone: LOCAL_TIME_ZONE
+});
+
 function formatDate(value, emptyLabel = '尚未同步') {
   if (!value) return emptyLabel;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return emptyLabel;
   return LOCAL_DATE_FORMATTER.format(date);
+}
+
+function formatDay(value, emptyLabel = '待确认') {
+  if (!value) return emptyLabel;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return emptyLabel;
+  return LOCAL_DAY_FORMATTER.format(date);
 }
 
 function formatPrice(value) {
@@ -763,6 +777,10 @@ async function loadWalletData() {
 function renderWalletSummary(team) {
   elements.walletSummary.replaceChildren();
   const wallet = state.mart.wallet || { balance_points: 0 };
+  const icon = document.createElement('span');
+  icon.className = 'wallet-hero-icon';
+  icon.append(createIcon('wallet-cards'));
+  const body = document.createElement('div');
   const heading = document.createElement('h3');
   heading.textContent = team.name || '我的团队';
   const value = document.createElement('strong');
@@ -770,13 +788,11 @@ function renderWalletSummary(team) {
   value.textContent = formatPoints(wallet.balance_points);
   const unit = document.createElement('span');
   unit.className = 'wallet-balance-unit';
-  unit.textContent = '积分可用余额';
-  const meta = document.createElement('p');
-  meta.className = 'empty-copy';
-  meta.textContent = team.role === MEMBER_ROLE_OWNER
-    ? '负责人和成员共享该账户，充值 1 元到账 100 积分。'
-    : '团队积分由负责人充值，成员可直接查看余额和流水。';
-  elements.walletSummary.append(heading, value, unit, meta);
+  unit.textContent = team.role === MEMBER_ROLE_OWNER
+    ? '积分可用余额 · 1 元到账 100 积分，只有负责人可以充值'
+    : '积分可用余额 · 由团队负责人充值，成员可查看余额和流水';
+  body.append(heading, value, unit);
+  elements.walletSummary.append(icon, body);
   refreshIcons();
 }
 
@@ -790,35 +806,42 @@ function renderWalletPackages(team) {
   }
   for (const item of packages) {
     const card = document.createElement('article');
-    card.className = 'payment-package';
-    const title = document.createElement('strong');
+    card.className = 'plan-card';
+    const title = document.createElement('h4');
     title.textContent = `${formatPoints(item.points)} 积分`;
-    const price = document.createElement('span');
-    price.className = 'payment-package-price';
-    price.textContent = formatYuan(item.payable_fen);
+    const price = document.createElement('div');
+    price.className = 'plan-price';
+    const amount = document.createElement('strong');
+    amount.textContent = formatYuan(item.payable_fen);
+    price.append(amount);
     if (item.payable_fen < item.price_fen) {
-      const original = document.createElement('small');
-      original.className = 'payment-package-original';
+      const original = document.createElement('del');
       original.textContent = formatYuan(item.price_fen);
-      price.append(' ', original);
+      price.append(original);
+      const badge = document.createElement('span');
+      badge.className = 'plan-badge';
+      badge.textContent = `${(item.payable_fen / item.price_fen * 10).toFixed(1).replace(/\.0$/u, '')} 折`;
+      card.append(badge);
     }
-    const actions = document.createElement('div');
-    const recharge = document.createElement('button');
-    recharge.className = 'button button-primary';
-    recharge.type = 'button';
-    recharge.textContent = '充值';
-    recharge.disabled = !isOwner;
-    if (isOwner) recharge.addEventListener('click', () => void startRechargePurchase(item));
-    actions.append(recharge);
-    card.append(title, price, actions);
+    const features = document.createElement('ul');
+    features.className = 'plan-features';
+    const unitPrice = document.createElement('li');
+    unitPrice.append(
+      createIcon('tag'),
+      document.createTextNode(`${item.payable_fen < item.price_fen ? '折后' : ''}${Math.round(item.points / (item.payable_fen / 100))} 积分/元`)
+    );
+    features.append(unitPrice);
+    const discounted = item.payable_fen < item.price_fen;
+    const button = document.createElement('button');
+    button.className = discounted ? 'button button-primary' : 'button';
+    button.type = 'button';
+    button.textContent = isOwner ? '立即充值' : '仅负责人可充值';
+    button.disabled = !isOwner;
+    if (isOwner) button.addEventListener('click', () => void startRechargePurchase(item));
+    card.append(title, price, features, button);
     elements.walletPackages.append(card);
   }
-  if (!isOwner) {
-    const hint = document.createElement('p');
-    hint.className = 'empty-copy';
-    hint.textContent = '只有团队负责人可以充值。';
-    elements.walletPackages.append(hint);
-  }
+  refreshIcons();
 }
 
 function renderWalletTransactions() {
@@ -831,23 +854,28 @@ function renderWalletTransactions() {
   }
   for (const row of rows) {
     const item = document.createElement('article');
-    item.className = 'finance-row';
-    const left = document.createElement('div');
+    item.className = 'ledger-row';
+    const icon = document.createElement('span');
+    icon.className = 'ledger-icon';
+    icon.append(createIcon('arrow-down-left'));
+    const main = document.createElement('div');
+    main.className = 'ledger-main';
     const title = document.createElement('strong');
     title.textContent = row.memo || '积分变动';
     const meta = document.createElement('small');
     meta.textContent = formatDate(row.created_at, '时间待同步');
-    left.append(title, meta);
-    const right = document.createElement('div');
-    right.className = 'finance-row-value';
+    main.append(title, meta);
+    const value = document.createElement('div');
+    value.className = 'ledger-value';
     const delta = document.createElement('strong');
     delta.textContent = `${row.points > 0 ? '+' : ''}${formatPoints(row.points)}`;
     const after = document.createElement('small');
     after.textContent = `余额 ${formatPoints(row.balance_after)}`;
-    right.append(delta, after);
-    item.append(left, right);
+    value.append(delta, after);
+    item.append(icon, main, value);
     container.append(item);
   }
+  refreshIcons();
 }
 
 async function loadTeamData() {
@@ -885,34 +913,42 @@ async function loadTeamData() {
 function renderTeamSummary(team, membership) {
   elements.teamSummary.replaceChildren();
   const isOwner = team.role === MEMBER_ROLE_OWNER;
+  const subscription = membership?.subscription || null;
+  const active = Boolean(subscription?.active);
+  const quota = membership?.quota || {};
+
+  const identity = document.createElement('div');
+  identity.className = 'team-identity';
+  const avatar = document.createElement('span');
+  avatar.className = 'team-avatar';
+  avatar.textContent = (team.name || '团').trim().slice(0, 1);
+  const identityBody = document.createElement('div');
   const heading = document.createElement('h3');
   heading.textContent = team.name || '我的团队';
-  const meta = document.createElement('p');
-  meta.textContent = isOwner ? '你是该团队的负责人' : '你是该团队的成员';
-  elements.teamSummary.append(heading, meta);
-
-  const subscription = membership?.subscription || null;
-  const quota = membership?.quota || {};
-  const planLine = document.createElement('p');
-  planLine.className = 'team-plan-line';
-  planLine.textContent = subscription?.active
-    ? `当前会员：${subscription.plan?.name || '已开通'} · 到期 ${formatDate(subscription.expires_at, '待确认')}`
-    : '当前没有生效的会员，成员仅限负责人自己';
-  const quotaLine = document.createElement('p');
-  quotaLine.className = 'empty-copy';
-  quotaLine.textContent = `成员 ${quota.used_members ?? 1}/${quota.max_members ?? 1} · 可管理店铺 ${quota.max_shops ?? 0} 家`;
-  elements.teamSummary.append(planLine, quotaLine);
+  const meta = document.createElement('div');
+  meta.className = 'team-meta';
+  const rolePill = document.createElement('span');
+  rolePill.className = `status ${isOwner ? 'status-active' : 'status-info'}`;
+  rolePill.textContent = isOwner ? '负责人' : '成员';
+  meta.append(rolePill);
+  if (active) {
+    const planPill = document.createElement('span');
+    planPill.className = 'status status-warning';
+    planPill.textContent = `${subscription.plan?.name || '会员'} · 至 ${formatDay(subscription.expires_at)}`;
+    meta.append(planPill);
+  }
+  identityBody.append(heading, meta);
+  identity.append(avatar, identityBody);
 
   const actions = document.createElement('div');
-  actions.className = 'team-summary-actions';
-  if (isOwner) {
-    const invite = document.createElement('button');
-    invite.className = 'button button-primary';
-    invite.type = 'button';
-    invite.textContent = '邀请成员';
-    invite.addEventListener('click', () => openTeamAction('invite'));
-    actions.append(invite);
-  } else {
+  actions.className = 'team-actions';
+  const join = document.createElement('button');
+  join.className = 'button';
+  join.type = 'button';
+  join.textContent = '输入邀请码加入团队';
+  join.addEventListener('click', () => openTeamAction('join'));
+  actions.append(join);
+  if (!isOwner) {
     const leave = document.createElement('button');
     leave.className = 'button';
     leave.type = 'button';
@@ -920,81 +956,148 @@ function renderTeamSummary(team, membership) {
     leave.addEventListener('click', () => void leaveCurrentTeam(team));
     actions.append(leave);
   }
-  const join = document.createElement('button');
-  join.className = 'button';
-  join.type = 'button';
-  join.textContent = '输入邀请码加入团队';
-  join.addEventListener('click', () => openTeamAction('join'));
-  actions.append(join);
-  elements.teamSummary.append(actions);
+  const identityColumn = document.createElement('div');
+  identityColumn.className = 'team-identity-col';
+  identityColumn.append(identity, actions);
+
+  const metrics = document.createElement('div');
+  metrics.className = 'team-hero-metrics';
+  const tiles = [
+    ['会员档位', active ? (subscription.plan?.name || '已开通') : '未开通', active ? '按团队按月计费' : '开通后可添加成员', ''],
+    ['到期时间', active ? formatDay(subscription.expires_at) : '—', active ? '到期后重新购买' : '不自动续费', ''],
+    ['成员席位', `${quota.used_members ?? 1} / ${quota.max_members ?? 1}`, '负责人也占一个席位', ''],
+    ['店铺额度', `${quota.max_shops ?? 0} 家`, '每个成员可管理的店铺数', '']
+  ];
+  for (const [label, value, note, fontSize] of tiles) {
+    const tile = document.createElement('div');
+    tile.className = 'hero-metric';
+    const name = document.createElement('span');
+    name.textContent = label;
+    const strong = document.createElement('strong');
+    strong.textContent = value;
+    if (fontSize) strong.style.fontSize = fontSize;
+    const small = document.createElement('small');
+    small.textContent = note;
+    tile.append(name, strong, small);
+    metrics.append(tile);
+  }
+
+  elements.teamSummary.append(identityColumn, metrics);
   refreshIcons();
 }
 
 function renderTeamPlans(team, membership) {
   elements.teamPlans.replaceChildren();
   const isOwner = team.role === MEMBER_ROLE_OWNER;
+  // 成员只需要在概览里看到当前档位，购买入口只对负责人展示
+  elements.teamPlanCard.hidden = !isOwner;
+  if (!isOwner) return;
   const current = membership?.subscription?.active ? membership.subscription.plan : null;
-  if (!isOwner) {
-    renderEmptyState(elements.teamPlans, '会员由团队负责人购买和管理。');
-    return;
-  }
   for (const plan of membership?.plans || []) {
     const card = document.createElement('article');
-    card.className = 'payment-package';
-    const title = document.createElement('strong');
+    card.className = 'plan-card';
+    const isCurrent = Boolean(current) && plan.id === current.id;
+    if (isCurrent) card.classList.add('is-current');
+    if (current && plan.sort_order < current.sort_order) card.classList.add('is-muted');
+
+    const title = document.createElement('h4');
     title.textContent = plan.name;
-    const price = document.createElement('span');
-    price.className = 'payment-package-price';
-    price.textContent = `${formatYuan(plan.price_fen)}/月`;
-    const limits = document.createElement('small');
-    limits.textContent = `${plan.max_members} 个成员 · 每个成员可管理 ${plan.max_shops} 家店铺`;
-    const actions = document.createElement('div');
+    const price = document.createElement('div');
+    price.className = 'plan-price';
+    const amount = document.createElement('strong');
+    amount.textContent = formatYuan(plan.price_fen);
+    const per = document.createElement('em');
+    per.textContent = '/月';
+    price.append(amount, per);
+
+    const features = document.createElement('ul');
+    features.className = 'plan-features';
+    for (const text of [
+      `最多 ${plan.max_members} 个成员席位`,
+      `每个成员可管理 ${plan.max_shops} 家店铺`,
+      '不自动续费，到期后可换档'
+    ]) {
+      const li = document.createElement('li');
+      li.append(createIcon('check'), document.createTextNode(text));
+      features.append(li);
+    }
+
     const button = document.createElement('button');
-    button.className = 'button button-primary';
     button.type = 'button';
-    let label = '购买';
-    if (current) {
-      if (plan.id === current.id) label = '续期一个月';
-      else if (plan.sort_order > current.sort_order) label = '升级（补差价）';
-      else {
-        label = '到期后可购买';
-        button.disabled = true;
-      }
+    let label = '购买一个月';
+    if (!current) {
+      button.className = 'button button-primary';
+    } else if (isCurrent) {
+      label = '续期一个月';
+      button.className = 'button button-primary';
+    } else if (plan.sort_order > current.sort_order) {
+      label = '升级并补差价';
+      button.className = 'button button-accent-outline';
+    } else {
+      label = '到期后可购买';
+      button.className = 'button';
+      button.disabled = true;
     }
     button.textContent = label;
     if (!button.disabled) button.addEventListener('click', () => void startMembershipPurchase(plan));
-    actions.append(button);
-    card.append(title, price, limits, actions);
+
+    card.append(title, price, features, button);
+    if (isCurrent) {
+      const badge = document.createElement('span');
+      badge.className = 'plan-badge';
+      badge.textContent = '当前档位';
+      card.append(badge);
+    }
     elements.teamPlans.append(card);
   }
+  refreshIcons();
 }
 
 function renderTeamMembers(team) {
   const isOwner = team.role === MEMBER_ROLE_OWNER;
   const members = state.mart.members || [];
   elements.teamMembers.replaceChildren();
+  elements.teamMemberActions.replaceChildren();
+  elements.teamMemberCount.textContent = members.length ? `${members.length} 人` : '';
+  if (isOwner) {
+    const invite = document.createElement('button');
+    invite.className = 'button button-primary';
+    invite.type = 'button';
+    invite.textContent = '邀请成员';
+    invite.addEventListener('click', () => openTeamAction('invite'));
+    elements.teamMemberActions.append(invite);
+  }
   if (!members.length) {
     renderEmptyState(elements.teamMembers, '成员列表暂时无法加载。');
     return;
   }
   for (const member of members) {
     const row = document.createElement('div');
-    row.className = 'team-member-row';
+    row.className = 'member-row';
+    const avatar = document.createElement('span');
+    avatar.className = `member-avatar${member.role === MEMBER_ROLE_OWNER ? ' is-owner' : ''}`;
+    avatar.textContent = (member.display_name || '成').trim().slice(0, 1);
+    const main = document.createElement('div');
+    main.className = 'member-main';
     const name = document.createElement('strong');
     name.textContent = member.display_name || '未命名成员';
     const meta = document.createElement('small');
     meta.textContent = `${member.role === MEMBER_ROLE_OWNER ? '负责人' : '成员'} · 加入于 ${formatDate(member.joined_at, '待确认')}`;
-    row.append(name, meta);
+    main.append(name, meta);
+    row.append(avatar, main);
     if (isOwner && member.role !== MEMBER_ROLE_OWNER) {
       const remove = document.createElement('button');
-      remove.className = 'button';
+      remove.className = 'icon-button';
       remove.type = 'button';
-      remove.textContent = '移除';
+      remove.title = '移除成员';
+      remove.setAttribute('aria-label', '移除成员');
+      remove.append(createIcon('user-minus'));
       remove.addEventListener('click', () => void removeTeamMember(member));
       row.append(remove);
     }
     elements.teamMembers.append(row);
   }
+  refreshIcons();
 }
 
 async function removeTeamMember(member) {
