@@ -15,6 +15,7 @@ const state = {
     teamOrders: [],
     walletOrders: [],
     walletPackageId: null,
+    teamPlanId: null,
     pages: { ledger: 1, walletOrders: 1, teamOrders: 1 },
     preferencesLoaded: false
   },
@@ -111,6 +112,7 @@ const elements = {
   walletOrderBody: document.querySelector('#wallet-order-body'),
   walletOrderPagination: document.querySelector('#wallet-order-pagination'),
   teamOrderBody: document.querySelector('#team-order-body'),
+  teamPurchaseBar: document.querySelector('#team-purchase-bar'),
   teamOrderPagination: document.querySelector('#team-order-pagination'),
   walletTabRecharge: document.querySelector('#wallet-tab-recharge'),
   walletTabOrders: document.querySelector('#wallet-tab-orders'),
@@ -1325,13 +1327,29 @@ function renderTeamPlans(team, membership) {
     if (state.teamTab === 'plans') setTeamTab('members');
     return;
   }
+  const plans = membership?.plans || [];
   const current = membership?.subscription?.active ? membership.subscription.plan : null;
-  for (const plan of membership?.plans || []) {
+  if (!plans.length) {
+    elements.teamPurchaseBar.hidden = true;
+    renderEmptyState(elements.teamPlans, '暂时没有可购买的会员档位。');
+    return;
+  }
+  // 默认选中当前档位（多半是要续期），没有订阅时从最低档开始
+  if (!plans.some((item) => item.id === state.mart.teamPlanId)) {
+    state.mart.teamPlanId = current ? current.id : plans[0].id;
+  }
+  for (const plan of plans) {
+    const selected = plan.id === state.mart.teamPlanId;
     const isCurrent = Boolean(current) && plan.id === current.id;
-    const isUpgrade = Boolean(current) && plan.sort_order > current.sort_order;
     const isDowngrade = Boolean(current) && plan.sort_order < current.sort_order;
-    const card = document.createElement('article');
-    card.className = `plan-card${isCurrent ? ' is-current' : ''}${isDowngrade ? ' is-muted' : ''}`;
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = `plan-option${selected ? ' is-selected' : ''}${isDowngrade ? ' is-muted' : ''}`;
+    option.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    option.addEventListener('click', () => {
+      state.mart.teamPlanId = plan.id;
+      renderTeamPlans(team, membership);
+    });
 
     const title = document.createElement('h4');
     title.textContent = plan.name;
@@ -1351,52 +1369,68 @@ function renderTeamPlans(team, membership) {
     features.className = 'plan-features';
     for (const text of [
       `最多 ${plan.max_members} 个成员席位`,
-      `每个成员可管理 ${plan.max_shops} 家店铺`,
-      '不自动续费，到期后可换档'
+      `每个成员可管理 ${plan.max_shops} 家店铺`
     ]) {
       const li = document.createElement('li');
       li.append(createIcon('check'), document.createTextNode(text));
       features.append(li);
     }
-    const hint = document.createElement('p');
-    hint.className = 'plan-hint';
-    hint.textContent = isCurrent
-      ? '当前档位，续期从到期日顺延一个月'
-      : isUpgrade
-        ? '按剩余时间补差价，到期时间不变'
-        : isDowngrade
-          ? '会员到期后可以重新购买'
-          : '支付成功后立即生效，有效期一个月';
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    let label = '购买一个月';
-    if (!current) {
-      button.className = 'button button-primary';
-    } else if (isCurrent) {
-      label = '续期一个月';
-      button.className = 'button button-primary';
-    } else if (isUpgrade) {
-      label = '升级并补差价';
-      button.className = 'button button-accent-outline';
-    } else {
-      label = '到期后可购买';
-      button.className = 'button';
-      button.disabled = true;
-    }
-    button.textContent = label;
-    if (!button.disabled) button.addEventListener('click', () => void startMembershipPurchase(plan));
-
-    card.append(title, price, features, hint, button);
+    option.append(title, price, features);
     if (isCurrent) {
       const ribbon = document.createElement('span');
       ribbon.className = 'plan-ribbon';
       ribbon.textContent = '当前档位';
-      card.append(ribbon);
+      option.append(ribbon);
     }
-    elements.teamPlans.append(card);
+    if (selected) {
+      const check = document.createElement('span');
+      check.className = 'option-check';
+      check.append(createIcon('check'));
+      option.append(check);
+    }
+    elements.teamPlans.append(option);
   }
+  renderTeamPurchaseBar(plans, current);
   refreshIcons();
+}
+
+// 选中的档位汇总在底部固定栏里，购买只由这里的一个按钮发起
+function renderTeamPurchaseBar(plans, current) {
+  const bar = elements.teamPurchaseBar;
+  bar.replaceChildren();
+  const plan = plans.find((item) => item.id === state.mart.teamPlanId);
+  if (!plan) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const isCurrent = Boolean(current) && plan.id === current.id;
+  const isUpgrade = Boolean(current) && plan.sort_order > current.sort_order;
+  const isDowngrade = Boolean(current) && plan.sort_order < current.sort_order;
+
+  const summary = document.createElement('div');
+  summary.className = 'purchase-summary';
+  const title = document.createElement('strong');
+  title.textContent = `已选 ${plan.name} · ${formatYuan(plan.price_fen)}/月`;
+  const meta = document.createElement('small');
+  meta.textContent = isCurrent
+    ? '当前档位，续期从到期日顺延一个月'
+    : isUpgrade
+      ? '按剩余时间补差价，到期时间不变'
+      : isDowngrade
+        ? '会员到期后才能重新购买该档位'
+        : '支付成功后立即生效，有效期一个月';
+  summary.append(title, meta);
+
+  const submit = document.createElement('button');
+  submit.className = 'button button-primary';
+  submit.type = 'button';
+  submit.disabled = isDowngrade;
+  submit.textContent = isDowngrade
+    ? '到期后可购买'
+    : isCurrent ? '续期一个月' : isUpgrade ? '升级并补差价' : '购买一个月';
+  if (!isDowngrade) submit.addEventListener('click', () => void startMembershipPurchase(plan));
+  bar.append(summary, submit);
 }
 
 function renderTeamMembers(team) {

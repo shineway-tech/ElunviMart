@@ -341,3 +341,6 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .order-action{text-align:right;white-space:nowrap}
 .order-action .button{min-height:30px;padding:4px 10px;font-size:12px}
 .finance-card.is-plain .pagination{margin-top:12px}
+
+.plan-option.is-muted{background:var(--soft)}
+#team-view{padding-bottom:88px}
