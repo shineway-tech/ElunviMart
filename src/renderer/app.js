@@ -73,6 +73,7 @@ const elements = {
   platformAccountChangePassword: document.querySelector('#platform-account-change-password'),
   platformAccountLogout: document.querySelector('#platform-account-logout'),
   platformLoginModal: document.querySelector('#platform-login-modal'),
+  platformAuthClose: document.querySelector('#platform-auth-close'),
   platformLoginForm: document.querySelector('#platform-login-form'),
   platformAuthCopy: document.querySelector('#platform-auth-copy'),
   platformAuthForms: document.querySelector('.platform-auth-forms'),
@@ -336,6 +337,21 @@ function togglePlatformAccountMenu() {
   const open = elements.platformAccountMenu.hidden;
   elements.platformAccountMenu.hidden = !open;
   elements.platformAccount.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+function closePlatformAuthModal() {
+  if (elements.platformLoginModal.hidden) return;
+  if (state.platformAuthMode === 'wechat') {
+    clearWechatPollTimer();
+    window.pddMonitor.platform.wechatCancel().catch(() => {});
+  } else {
+    const fields = authFields();
+    if (fields.code) fields.code.value = '';
+    if (fields.password) fields.password.value = '';
+    if (fields.confirm) fields.confirm.value = '';
+    clearAuthErrors(state.platformAuthMode);
+  }
+  elements.platformLoginModal.hidden = true;
 }
 
 function openPasswordChange() {
@@ -1694,6 +1710,10 @@ document.querySelector('#platform-reset-request-code').addEventListener('click',
 document.querySelectorAll('[data-action="add-account"]').forEach((button) => button.addEventListener('click', () => openLoginModal()));
 elements.addAccount.addEventListener('click', () => openLoginModal());
 elements.platformSignin.addEventListener('click', () => showPlatformLogin());
+elements.platformAuthClose.addEventListener('click', closePlatformAuthModal);
+elements.platformLoginModal.addEventListener('click', (event) => {
+  if (event.target === elements.platformLoginModal) closePlatformAuthModal();
+});
 elements.platformAccount.addEventListener('click', (event) => {
   event.stopPropagation();
   togglePlatformAccountMenu();
@@ -1787,7 +1807,9 @@ elements.paymentCloseOrder.addEventListener('click', async () => {
 });
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && !elements.removeAccountModal.hidden) closeRemoveAccountModal();
+  if (event.key !== 'Escape') return;
+  if (!elements.removeAccountModal.hidden) closeRemoveAccountModal();
+  else if (!elements.platformLoginModal.hidden) closePlatformAuthModal();
 });
 
 window.pddMonitor.onAccountsChanged(() => loadAccounts());
