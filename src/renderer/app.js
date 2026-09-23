@@ -1268,9 +1268,9 @@ function renderTeamSummary(team, membership) {
   const actions = document.createElement('div');
   actions.className = 'team-hero-actions';
   const join = document.createElement('button');
-  join.className = 'button';
+  join.className = 'button button-ghost';
   join.type = 'button';
-  join.textContent = '输入邀请码加入团队';
+  join.textContent = '加入其他团队';
   join.addEventListener('click', () => openTeamAction('join'));
   actions.append(join);
   if (isOwner) {
