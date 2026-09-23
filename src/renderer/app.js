@@ -879,6 +879,7 @@ async function loadWalletData() {
     renderWalletSummary(team);
     renderWalletPackages(team);
     renderWalletTransactions();
+    if (state.walletTab === 'orders') void loadWalletOrders();
   } catch (error) {
     showNotice(error.message || '积分信息暂时无法加载', true);
     renderEmptyState(elements.walletSummary, '积分信息暂时无法加载，请稍后重试。', '重新加载', () => void loadWalletData());
@@ -1232,6 +1233,7 @@ async function loadTeamData() {
     renderTeamSummary(team, membership);
     renderTeamPlans(team, membership);
     renderTeamMembers(team);
+    if (state.teamTab === 'orders') void loadTeamOrders();
   } catch (error) {
     showNotice(error.message || '团队信息暂时无法加载', true);
     renderEmptyState(elements.teamSummary, '团队信息暂时无法加载，请稍后重试。', '重新加载', () => void loadTeamData());
@@ -1737,12 +1739,15 @@ async function refreshPaymentOrder(showFeedback = true, { sync = false } = {}) {
       : await window.pddMonitor.mart.order(order.id);
     state.purchase.order = fresh;
     renderPaymentOrder();
-    if (fresh.status === 4) {
+    if (fresh.status !== 1) {
+      // 关单、履约或失败都会改变记录列表里的状态，这里同步刷新一次
       stopOrderPolling();
-      await Promise.all([loadTeamData(), loadWalletData()]);
       if (state.purchase.kind === 'membership') void loadTeamOrders(); else void loadWalletOrders();
+    }
+    if (fresh.status === 4) {
+      await Promise.all([loadTeamData(), loadWalletData()]);
       showNotice(state.purchase.kind === 'membership' ? '会员已生效' : '充值已到账');
-    } else if (showFeedback) {
+    } else if (fresh.status !== 1 || showFeedback) {
       showNotice(`订单状态：${ORDER_STATUS_LABELS[fresh.status] || '处理中'}`);
     }
   } catch (error) {
