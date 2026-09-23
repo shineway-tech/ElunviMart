@@ -878,7 +878,11 @@ function renderTeamSwitcher() {
 
 async function selectTeam(teamId) {
   if (String(teamId) === String(state.mart.teamId)) return;
+  const next = (state.mart.teams || []).find((item) => String(item.id) === String(teamId));
   state.mart.teamId = teamId;
+  // 当前团队对象要立刻跟上：下面两个加载是并行的，只改 teamId 的话
+  // 钱包/记录页会拿到上一个团队的数据（角色、余额、流水全对不上）
+  state.mart.team = next || null;
   state.purchase = { kind: null, order: null, attempt: null };
   try { await window.pddMonitor.preferences.set('ui.selectedTeamId', String(teamId)); } catch {}
   await Promise.all([loadTeamData(), loadWalletData()]);

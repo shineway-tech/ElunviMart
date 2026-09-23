@@ -108,6 +108,8 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
   }
+  // 切团队要同时同步 teamId 和当前团队对象，否则并行加载会读到上一个团队
+  assert.match(renderer, /state\.mart\.team = next \|\| null;/);
   // Mart 会话接上时，正开着的团队/钱包页要自己重载
   assert.match(renderer, /function handleMartChanged\(payload\)/);
   assert.match(renderer, /if \(isViewVisible\('wallet'\)\) void loadWalletData\(\)/);
