@@ -269,14 +269,14 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .plan-card .button{justify-content:center;min-height:38px;border-radius:9px}
 
 /* 积分余额卡：红色渐变，和品牌一致 */
-.wallet-hero{position:relative;overflow:hidden;padding:24px 26px;border-radius:12px;background:linear-gradient(135deg,#a8231b 0%,var(--accent) 52%,#e2503f 100%);color:#fff;box-shadow:0 14px 34px -18px rgba(168,35,27,.55)}
+.wallet-hero{position:relative;overflow:hidden;padding:18px 22px 16px;border-radius:12px;background:linear-gradient(135deg,#a8231b 0%,var(--accent) 52%,#e2503f 100%);color:#fff;box-shadow:0 14px 34px -18px rgba(168,35,27,.55)}
 .wallet-hero:after{content:"";position:absolute;right:-60px;top:-70px;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 68%)}
 .wallet-hero-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .wallet-hero-head span:first-child{font-size:12px;letter-spacing:.08em;color:rgba(255,255,255,.82)}
 .wallet-team-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border:1px solid rgba(255,255,255,.3);border-radius:999px;font-size:11px;color:#fff}
-.wallet-balance-value{display:flex;align-items:baseline;gap:8px;margin-top:14px;font-size:42px;font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.wallet-balance-value{display:flex;align-items:baseline;gap:8px;margin-top:8px;font-size:38px;font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .wallet-balance-value i{font-size:13px;font-weight:500;font-style:normal;color:rgba(255,255,255,.82)}
-.wallet-hero-foot{display:flex;align-items:center;justify-content:flex-end;gap:16px;margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.24)}
+.wallet-hero-foot{display:flex;align-items:center;justify-content:flex-end;gap:16px;margin-top:12px}
 .wallet-hero-foot[hidden]{display:none}
 .wallet-hero .button{min-height:34px;border-color:rgba(255,255,255,.42);color:#fff;background:rgba(255,255,255,.16)}
 .wallet-hero .button:hover{border-color:#fff;background:rgba(255,255,255,.26)}
