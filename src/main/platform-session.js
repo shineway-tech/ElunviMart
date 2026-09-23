@@ -52,9 +52,10 @@ class SafeStorageTokenStore {
 }
 
 class PlatformSession {
-  constructor({ tokenStore }) {
+  constructor({ tokenStore, label = 'Platform' }) {
     if (!tokenStore) throw new Error('tokenStore is required');
     this.tokenStore = tokenStore;
+    this.label = label;
     this.refreshPromise = null;
   }
 
@@ -71,7 +72,7 @@ class PlatformSession {
   async save(tokens) {
     const current = await this.tokens();
     const normalized = copyTokens({ ...current, ...tokens });
-    if (!normalized?.accessToken || !normalized?.refreshToken) throw new Error('Platform 会话响应无效');
+    if (!normalized?.accessToken || !normalized?.refreshToken) throw new Error(`${this.label} 会话响应无效`);
     await this.tokenStore.save(normalized);
     return normalized;
   }
@@ -93,7 +94,7 @@ class PlatformSession {
     if (this.refreshPromise) return this.refreshPromise;
     this.refreshPromise = (async () => {
       const current = await this.tokens();
-      if (!current?.refreshToken) throw new Error('Platform 会话已失效，请重新登录');
+      if (!current?.refreshToken) throw new Error(`${this.label} 会话已失效，请重新登录`);
       const next = await refreshFn(current.refreshToken);
       return this.save(next);
     })().finally(() => { this.refreshPromise = null; });

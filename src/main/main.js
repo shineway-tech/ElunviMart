@@ -7,6 +7,9 @@ const { PlatformClient } = require('./platform-client');
 const { PlatformSession, SafeStorageTokenStore } = require('./platform-session');
 const { PlatformService } = require('./platform-service');
 const { platformConfigFor } = require('./platform-config');
+const { MartClient } = require('./mart-client');
+const { MartService } = require('./mart-service');
+const { martConfigFor } = require('./mart-config');
 const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./merchant-profile');
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
 const { SyncQueue } = require('./sync-queue');
@@ -33,6 +36,8 @@ let store;
 let platformService;
 let platformSession;
 let platformConfig;
+let martService;
+let martSession;
 let userDataRoot;
 let activePlatformUserId = null;
 let scheduler;
@@ -384,6 +389,36 @@ function enforceManualSyncCooldown(accountId) {
   manualSyncAtByAccount.set(accountId, Date.now());
 }
 
+// 平台登录成功后建立 Mart 会话；Mart 不可用不影响本地监控功能，失败只记录并通知渲染层
+async function ensureFreshPlatformToken() {
+  const tokens = await platformSession.tokens();
+  const expiresAt = tokens?.accessExpiresAt ? Date.parse(tokens.accessExpiresAt) : 0;
+  if (!expiresAt || expiresAt - Date.now() < 60_000) {
+    // 借 PlatformClient 的 401 重试刷新令牌，保证换取的凭据不会立刻过期
+    await platformService.getProfile();
+  }
+}
+
+async function linkMartSession() {
+  if (!martService) return null;
+  try {
+    await ensureFreshPlatformToken();
+    const summary = await martService.linkFromPlatform();
+    sendToRenderer('mart:changed', { linked: true, ...summary });
+    return summary;
+  } catch (error) {
+    console.error('Mart session link failed:', error.message);
+    sendToRenderer('mart:changed', { linked: false, error: error.message });
+    return null;
+  }
+}
+
+async function announceSignedIn({ profile, security, accountEmail }) {
+  await linkMartSession();
+  sendToRenderer('platform:changed', { status: 'signed_in', profile, security, accountEmail });
+  return { status: 'signed_in', profile, security, accountEmail };
+}
+
 function registerIpc(adapter) {
   ipcMain.handle('platform:state', async () => {
     if (!platformService || !(await platformSession.accessToken())) return { status: 'signed_out' };
@@ -414,8 +449,7 @@ function registerIpc(adapter) {
     }
     activateUserStore(profile.userId);
     const accountEmail = await platformService.accountEmail();
-    sendToRenderer('platform:changed', { status: 'signed_in', profile, security, accountEmail });
-    return { status: 'signed_in', profile, security, accountEmail };
+    return announceSignedIn({ profile, security, accountEmail });
   });
   ipcMain.handle('platform:requestRegistrationCode', (_event, email) => platformService.requestRegistrationCode(String(email || '').trim()));
   ipcMain.handle('platform:completeRegistration', async (_event, input) => {
@@ -423,8 +457,7 @@ function registerIpc(adapter) {
     const security = await platformService.getSecurity();
     activateUserStore(profile.userId);
     const accountEmail = await platformService.accountEmail();
-    sendToRenderer('platform:changed', { status: 'signed_in', profile, security, accountEmail });
-    return { status: 'signed_in', profile, security, accountEmail };
+    return announceSignedIn({ profile, security, accountEmail });
   });
   ipcMain.handle('platform:requestPasswordResetCode', (_event, email) => platformService.requestPasswordResetCode(String(email || '').trim()));
   ipcMain.handle('platform:resetPassword', (_event, input) => platformService.resetPassword(input || {}));
@@ -433,7 +466,7 @@ function registerIpc(adapter) {
     const result = await platformService.pollWechatLogin();
     if (result.state === 'signed_in') {
       activateUserStore(result.profile.userId);
-      sendToRenderer('platform:changed', { status: 'signed_in', profile: result.profile, security: result.security, accountEmail: await platformService.accountEmail() });
+      await announceSignedIn({ profile: result.profile, security: result.security, accountEmail: await platformService.accountEmail() });
     }
     return result;
   });
@@ -446,8 +479,7 @@ function registerIpc(adapter) {
     const security = await platformService.getSecurity();
     activateUserStore(profile.userId);
     const accountEmail = await platformService.accountEmail();
-    sendToRenderer('platform:changed', { status: 'signed_in', profile, security, accountEmail });
-    return { status: 'signed_in', profile, security, accountEmail };
+    return announceSignedIn({ profile, security, accountEmail });
   });
   ipcMain.handle('platform:accountEmailBindingComplete', async (_event, input) => {
     const security = await platformService.completeAuthenticatedEmailBinding(input || {});
@@ -455,15 +487,23 @@ function registerIpc(adapter) {
     const profile = await platformService.getProfile();
     activateUserStore(profile.userId);
     const accountEmail = await platformService.accountEmail();
-    sendToRenderer('platform:changed', { status: 'signed_in', profile, security, accountEmail });
-    return { status: 'signed_in', profile, security, accountEmail };
+    return announceSignedIn({ profile, security, accountEmail });
   });
   ipcMain.handle('platform:wechatCancel', () => platformService.cancelWechatLogin());
   ipcMain.handle('platform:logout', async () => {
+    await martService?.logout();
     await platformService.logout();
     closeActiveStore();
     sendToRenderer('platform:changed', { status: 'signed_out' });
+    sendToRenderer('mart:changed', { linked: false });
     return { status: 'signed_out' };
+  });
+  ipcMain.handle('mart:state', () => (martService
+    ? martService.status()
+    : { linked: false, user: null, default_team: null }));
+  ipcMain.handle('mart:link', async () => {
+    if (!martService) throw new Error('Mart 服务尚未初始化');
+    return martService.linkFromPlatform();
   });
   ipcMain.handle('platform:profile', () => platformService.getProfile());
   ipcMain.handle('platform:security', () => platformService.getSecurity());
@@ -589,6 +629,18 @@ app.whenReady().then(() => {
     session: platformSession
   });
   platformService = new PlatformService({ client: platformClient, session: platformSession, config: platformConfig });
+  martSession = new PlatformSession({
+    tokenStore: new SafeStorageTokenStore({
+      filePath: path.join(userDataRoot, 'elunvi-mart-session.bin'),
+      safeStorage
+    }),
+    label: 'Mart'
+  });
+  const martClient = new MartClient({
+    apiBaseUrl: martConfigFor().apiBaseUrl,
+    session: martSession
+  });
+  martService = new MartService({ client: martClient, session: martSession, platformSession });
   const adapter = new PddActivityAdapter({
     getLoginWindow: id => loginWindows.get(id),
     getAntiContent: id => antiContentByAccount.get(id) || '',

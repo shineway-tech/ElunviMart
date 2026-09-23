@@ -36,6 +36,10 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     closeCheckout: (checkoutId) => ipcRenderer.invoke('platform:closeCheckout', checkoutId),
     openPayment: (paymentUrl) => ipcRenderer.invoke('platform:openPayment', paymentUrl)
   },
+  mart: {
+    state: () => ipcRenderer.invoke('mart:state'),
+    link: () => ipcRenderer.invoke('mart:link')
+  },
   accounts: {
     list: () => ipcRenderer.invoke('accounts:list'),
     startLogin: (accountId) => ipcRenderer.invoke('accounts:startLogin', accountId),
@@ -54,5 +58,6 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     test: (kind, config) => ipcRenderer.invoke('notifications:test', { kind, config })
   },
   onAccountsChanged: (callback) => ipcRenderer.on('accounts:changed', callback),
-  onPlatformChanged: (callback) => ipcRenderer.on('platform:changed', (_event, payload) => callback(payload))
+  onPlatformChanged: (callback) => ipcRenderer.on('platform:changed', (_event, payload) => callback(payload)),
+  onMartChanged: (callback) => ipcRenderer.on('mart:changed', (_event, payload) => callback(payload))
 });
