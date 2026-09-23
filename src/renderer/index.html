@@ -13,6 +13,8 @@
       <div class="brand"><span class="brand-mark"><img src="assets/elunvi-mart.png" alt="Elunvi Mart"></span><span>Elunvi Mart</span></div>
       <nav class="nav" aria-label="主导航">
         <button class="nav-button is-active" type="button" data-view="accounts"><i data-lucide="store"></i><span>商家账号</span></button>
+        <button class="nav-button" type="button" data-view="team"><i data-lucide="users"></i><span>团队</span></button>
+        <button class="nav-button" type="button" data-view="wallet"><i data-lucide="wallet"></i><span>钱包</span></button>
         <button class="nav-button" type="button" data-view="settings"><i data-lucide="settings"></i><span>监控设置</span></button>
       </nav>
       <div class="account-limit" id="account-limit">已添加 0 / 10 个账号</div>
@@ -88,6 +90,18 @@
             </section>
             <button class="button button-primary" type="submit"><i data-lucide="save"></i>保存设置</button>
           </form>
+        </section>
+
+        <section class="view" id="team-view" hidden>
+          <div class="empty-state">
+            <i data-lucide="users"></i><h2>团队功能即将接入</h2><p>团队成员、邀请和权限将在当前项目后端中实现。</p>
+          </div>
+        </section>
+
+        <section class="view" id="wallet-view" hidden>
+          <div class="empty-state">
+            <i data-lucide="wallet"></i><h2>钱包功能即将接入</h2><p>余额、订单和流水将由当前项目统一管理。</p>
+          </div>
         </section>
       </div>
     </main>

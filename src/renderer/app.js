@@ -245,6 +245,10 @@ function showView(name) {
   } else if (isSettings) {
     elements.title.textContent = '监控设置';
     loadSettings();
+  } else if (name === 'team') {
+    elements.title.textContent = '团队';
+  } else if (name === 'wallet') {
+    elements.title.textContent = '钱包';
   }
   hideNotice();
 }
