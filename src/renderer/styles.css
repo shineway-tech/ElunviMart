@@ -345,5 +345,5 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .plan-option.is-muted{background:var(--soft)}
 #team-view{padding-bottom:88px}
 
-.member-avatar{overflow:hidden}
+.member-avatar{overflow:hidden;border-radius:50%}
 .member-avatar img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
