@@ -1265,6 +1265,9 @@ function renderTeamSummary(team, membership) {
   const subscription = membership?.subscription || null;
   const active = Boolean(subscription?.active);
   const quota = membership?.quota || {};
+  const usedMembers = Number(quota.used_members ?? 1);
+  const maxMembers = Number(quota.max_members ?? 1);
+  const memberFull = usedMembers >= maxMembers;
 
   const identity = document.createElement('div');
   identity.className = 'team-identity';
@@ -1297,7 +1300,15 @@ function renderTeamSummary(team, membership) {
     invite.className = 'button-link is-primary';
     invite.type = 'button';
     invite.textContent = '邀请成员';
-    invite.addEventListener('click', () => openTeamAction('invite'));
+    if (memberFull) {
+      // 名额已满时邀请没有意义：后端在成员接受邀请时才会拒绝，这里提前挡住
+      invite.disabled = true;
+      invite.title = active
+        ? `成员席位已满（${usedMembers}/${maxMembers}），升级会员后可继续邀请`
+        : '当前团队未开通会员，开通后才能邀请成员';
+    } else {
+      invite.addEventListener('click', () => openTeamAction('invite'));
+    }
     actions.append(invite);
   } else {
     const leave = document.createElement('button');
@@ -1315,11 +1326,11 @@ function renderTeamSummary(team, membership) {
   const metrics = document.createElement('div');
   metrics.className = 'team-metrics';
   const tiles = [
-    ['users', '成员席位', `${quota.used_members ?? 1} / ${quota.max_members ?? 1}`],
-    ['store', '店铺额度', `${quota.max_shops ?? 0} 家`],
-    ['calendar-clock', '会员到期', active ? formatDay(subscription.expires_at) : '—']
+    ['users', '成员席位', `${usedMembers} / ${maxMembers}`, memberFull],
+    ['store', '店铺额度', `${quota.max_shops ?? 0} 家`, false],
+    ['calendar-clock', '会员到期', active ? formatDay(subscription.expires_at) : '—', false]
   ];
-  for (const [icon, label, value] of tiles) {
+  for (const [icon, label, value, full] of tiles) {
     const tile = document.createElement('div');
     tile.className = 'hero-metric';
     const name = document.createElement('span');
@@ -1327,6 +1338,7 @@ function renderTeamSummary(team, membership) {
     name.append(createIcon(icon), document.createTextNode(label));
     const strong = document.createElement('strong');
     strong.textContent = value;
+    if (full) strong.classList.add('is-full');
     tile.append(name, strong);
     metrics.append(tile);
   }

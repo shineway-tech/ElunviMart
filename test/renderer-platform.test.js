@@ -113,6 +113,9 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(html, /id="confirm-modal-submit"/);
   assert.doesNotMatch(renderer, /window\.confirm\(/);
   assert.doesNotMatch(html, /id="remove-account-modal"/);
+  // 成员席位满了（含未开通会员）就不给邀请入口
+  assert.match(renderer, /const memberFull = usedMembers >= maxMembers/);
+  assert.match(renderer, /invite\.disabled = true/);
   // 商家账号页：额度脚注 + 未开通会员时禁止添加
   assert.match(html, /id="accounts-footer"/);
   assert.doesNotMatch(html, /<h2>账号列表<\/h2>/);
