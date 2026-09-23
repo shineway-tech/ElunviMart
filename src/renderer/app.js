@@ -783,6 +783,10 @@ function isMartLinked() {
   return state.mart.linked === true;
 }
 
+function isViewVisible(name) {
+  return document.querySelector(`#${name}-view`)?.hidden === false;
+}
+
 function formatPoints(value) {
   return Number(value || 0).toLocaleString('zh-CN');
 }
@@ -2705,12 +2709,16 @@ window.pddMonitor.onPlatformChanged((payload) => {
     showPlatformLogin();
   }
 });
-window.pddMonitor.onMartChanged((payload) => {
+// 平台重新登录后 Mart 才接上；此时正开着的团队/钱包页要自己重载，否则会停在"未链接"的空壳上
+function handleMartChanged(payload) {
   state.mart.linked = Boolean(payload?.linked);
   state.mart.user = payload?.user || null;
   if (!state.mart.linked) return;
-  if (!elements.teamSummary || elements.teamSummary.closest('.view')?.hidden === false) void loadTeamData();
-});
+  if (isViewVisible('team')) void loadTeamData();
+  if (isViewVisible('wallet')) void loadWalletData();
+}
+
+window.pddMonitor.onMartChanged(handleMartChanged);
 
 refreshIcons();
 setPlatformShell('loading');
