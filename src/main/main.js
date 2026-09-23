@@ -570,6 +570,7 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:walletTransactions', (_event, input) => martService.walletTransactions(input || {}));
   ipcMain.handle('mart:rechargeOrder', (_event, input) => martService.createRechargeOrder(input || {}));
   ipcMain.handle('mart:order', (_event, orderId) => martService.order(orderId));
+  ipcMain.handle('mart:orders', (_event, input) => martService.listOrders(input || {}));
   ipcMain.handle('mart:paymentAttempt', (_event, input) => martService.createPaymentAttempt(input || {}));
   ipcMain.handle('mart:closeOrder', (_event, orderId) => martService.closeOrder(orderId));
   ipcMain.handle('mart:syncOrder', (_event, orderId) => martService.syncOrder(orderId));

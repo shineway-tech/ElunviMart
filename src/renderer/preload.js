@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     walletTransactions: (input) => ipcRenderer.invoke('mart:walletTransactions', input),
     rechargeOrder: (input) => ipcRenderer.invoke('mart:rechargeOrder', input),
     order: (orderId) => ipcRenderer.invoke('mart:order', orderId),
+    orders: (input) => ipcRenderer.invoke('mart:orders', input),
     paymentAttempt: (input) => ipcRenderer.invoke('mart:paymentAttempt', input),
     closeOrder: (orderId) => ipcRenderer.invoke('mart:closeOrder', orderId),
     syncOrder: (orderId) => ipcRenderer.invoke('mart:syncOrder', orderId),

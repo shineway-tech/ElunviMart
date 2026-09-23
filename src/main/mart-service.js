@@ -159,6 +159,16 @@ class MartService {
     return data.order;
   }
 
+  // 购买记录：bizType 1 = 会员，2 = 积分充值，不传则全部
+  async listOrders({
+    teamId, bizType = null, limit = 20, offset = 0,
+  }) {
+    const query = new URLSearchParams({ team_id: String(teamId), limit: String(limit), offset: String(offset) });
+    if (bizType) query.set('biz_type', String(bizType));
+    const { data } = await this.client.request(`/v1/orders?${query.toString()}`);
+    return data;
+  }
+
   async createPaymentAttempt({ orderId, channel = 'mock' }) {
     const { data } = await this.client.request(
       `/v1/orders/${encodeURIComponent(orderId)}/payment-attempts`,

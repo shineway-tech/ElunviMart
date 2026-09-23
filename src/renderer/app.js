@@ -12,6 +12,8 @@ const state = {
     packages: [],
     transactions: [],
     transactionTotal: 0,
+    teamOrders: [],
+    walletOrders: [],
     preferencesLoaded: false
   },
   purchase: { kind: null, order: null, attempt: null },
@@ -114,8 +116,10 @@ const elements = {
   walletTabs: document.querySelector('#wallet-tabs'),
   walletTabCount: document.querySelector('#wallet-tab-count'),
   teamMembers: document.querySelector('#team-members-list'),
-  teamMemberCount: document.querySelector('#team-member-count'),
-  teamMemberActions: document.querySelector('#team-member-actions'),
+  teamOrderList: document.querySelector('#team-order-list'),
+  teamOrderCount: document.querySelector('#team-order-count'),
+  walletOrderList: document.querySelector('#wallet-order-list'),
+  walletOrderCount: document.querySelector('#wallet-order-count'),
   paymentStatusCard: document.querySelector('#payment-status-card'),
   paymentStatusCopy: document.querySelector('#payment-status-copy'),
   paymentOrderDetail: document.querySelector('#payment-order-detail'),
@@ -764,6 +768,7 @@ function setTeamTab(tab) {
   document.querySelectorAll('[data-team-panel]').forEach((panel) => {
     panel.hidden = panel.dataset.teamPanel !== tab;
   });
+  if (tab === 'orders') void loadTeamOrders();
 }
 
 function setWalletTab(tab) {
@@ -776,6 +781,7 @@ function setWalletTab(tab) {
   document.querySelectorAll('[data-wallet-panel]').forEach((panel) => {
     panel.hidden = panel.dataset.walletPanel !== tab;
   });
+  if (tab === 'orders') void loadWalletOrders();
 }
 
 // 一个用户可以加入多个团队，切换只影响当前查看和操作的团队
@@ -849,22 +855,41 @@ async function loadWalletData() {
 function renderWalletSummary(team) {
   elements.walletSummary.replaceChildren();
   const wallet = state.mart.wallet || { balance_points: 0 };
-  const icon = document.createElement('span');
-  icon.className = 'wallet-hero-icon';
-  icon.append(createIcon('wallet-cards'));
-  const body = document.createElement('div');
-  const heading = document.createElement('h3');
-  heading.textContent = team.name || '我的团队';
-  const value = document.createElement('strong');
+  const isOwner = team.role === MEMBER_ROLE_OWNER;
+
+  const head = document.createElement('div');
+  head.className = 'wallet-hero-head';
+  const label = document.createElement('span');
+  label.textContent = '积分余额';
+  const teamChip = document.createElement('span');
+  teamChip.className = 'wallet-team-chip';
+  teamChip.append(createIcon('users'), document.createTextNode(team.name || '我的团队'));
+  head.append(label, teamChip);
+
+  const value = document.createElement('div');
   value.className = 'wallet-balance-value';
-  value.textContent = formatPoints(wallet.balance_points);
-  const unit = document.createElement('span');
-  unit.className = 'wallet-balance-unit';
-  unit.textContent = team.role === MEMBER_ROLE_OWNER
-    ? '积分可用余额 · 1 元到账 100 积分，只有负责人可以充值'
-    : '积分可用余额 · 由团队负责人充值，成员可查看余额和流水';
-  body.append(heading, value, unit);
-  elements.walletSummary.append(icon, body);
+  value.append(document.createTextNode(formatPoints(wallet.balance_points)));
+  const unit = document.createElement('i');
+  unit.textContent = '积分';
+  value.append(unit);
+
+  const foot = document.createElement('div');
+  foot.className = 'wallet-hero-foot';
+  const note = document.createElement('span');
+  note.textContent = isOwner
+    ? '1 元到账 100 积分 · 只有负责人可以充值'
+    : '由团队负责人充值，成员可查看余额和流水';
+  foot.append(note);
+  if (isOwner) {
+    const recharge = document.createElement('button');
+    recharge.className = 'button';
+    recharge.type = 'button';
+    recharge.textContent = '去充值';
+    recharge.addEventListener('click', () => setWalletTab('recharge'));
+    foot.append(recharge);
+  }
+
+  elements.walletSummary.append(head, value, foot);
   refreshIcons();
 }
 
@@ -877,40 +902,42 @@ function renderWalletPackages(team) {
     return;
   }
   for (const item of packages) {
+    const discounted = item.payable_fen < item.price_fen;
     const card = document.createElement('article');
     card.className = 'plan-card';
     const title = document.createElement('h4');
     title.textContent = `${formatPoints(item.points)} 积分`;
     const price = document.createElement('div');
     price.className = 'plan-price';
+    const currency = document.createElement('span');
+    currency.className = 'currency';
+    currency.textContent = '¥';
     const amount = document.createElement('strong');
-    amount.textContent = formatYuan(item.payable_fen);
-    price.append(amount);
-    if (item.payable_fen < item.price_fen) {
+    amount.textContent = item.payable_fen % 100 === 0
+      ? String(item.payable_fen / 100)
+      : (item.payable_fen / 100).toFixed(2);
+    price.append(currency, amount);
+    if (discounted) {
       const original = document.createElement('del');
-      original.textContent = formatYuan(item.price_fen);
+      original.textContent = `¥${item.price_fen / 100}`;
       price.append(original);
-      const badge = document.createElement('span');
-      badge.className = 'plan-badge';
-      badge.textContent = `${(item.payable_fen / item.price_fen * 10).toFixed(1).replace(/\.0$/u, '')} 折`;
-      card.append(badge);
     }
-    const features = document.createElement('ul');
-    features.className = 'plan-features';
-    const unitPrice = document.createElement('li');
-    unitPrice.append(
-      createIcon('tag'),
-      document.createTextNode(`${item.payable_fen < item.price_fen ? '折后' : ''}${Math.round(item.points / (item.payable_fen / 100))} 积分/元`)
-    );
-    features.append(unitPrice);
-    const discounted = item.payable_fen < item.price_fen;
+    const hint = document.createElement('p');
+    hint.className = 'plan-hint';
+    hint.textContent = `${discounted ? '折后 ' : ''}${Math.round(item.points / (item.payable_fen / 100))} 积分/元`;
     const button = document.createElement('button');
     button.className = discounted && isOwner ? 'button button-primary' : 'button';
     button.type = 'button';
     button.textContent = isOwner ? '立即充值' : '仅负责人可充值';
     button.disabled = !isOwner;
     if (isOwner) button.addEventListener('click', () => void startRechargePurchase(item));
-    card.append(title, price, features, button);
+    card.append(title, price, hint, button);
+    if (discounted) {
+      const ribbon = document.createElement('span');
+      ribbon.className = 'plan-ribbon';
+      ribbon.textContent = `${(item.payable_fen / item.price_fen * 10).toFixed(1).replace(/\.0$/u, '')} 折`;
+      card.append(ribbon);
+    }
     elements.walletPackages.append(card);
   }
   refreshIcons();
@@ -949,6 +976,100 @@ function renderWalletTransactions() {
     container.append(item);
   }
   refreshIcons();
+}
+
+// 订单快照里只有档位代码，展示时映射成档位名称
+function planLabel(code) {
+  const plan = (state.mart.membership?.plans || []).find((item) => item.code === code);
+  return plan ? plan.name : (code || '一个月');
+}
+
+const ORDER_STATUS_CHIPS = {
+  1: ['待支付', 'status-warning'],
+  2: ['已支付', 'status-info'],
+  3: ['已关闭', 'status-muted'],
+  4: ['已完成', 'status-active'],
+  5: ['支付失败', 'status-lost']
+};
+
+function renderOrderList(container, orders, kind) {
+  container.replaceChildren();
+  if (!orders.length) {
+    renderEmptyState(container, kind === 'membership' ? '还没有会员购买记录' : '还没有充值记录');
+    return;
+  }
+  for (const order of orders) {
+    const snapshot = order.quote_snapshot || {};
+    const row = document.createElement('article');
+    row.className = 'order-row';
+    const icon = document.createElement('span');
+    icon.className = `order-icon${kind === 'recharge' ? ' is-recharge' : ''}`;
+    icon.append(createIcon(kind === 'recharge' ? 'coins' : 'crown'));
+    const main = document.createElement('div');
+    main.className = 'order-main';
+    const title = document.createElement('strong');
+    title.textContent = kind === 'recharge'
+      ? `${formatPoints(snapshot.points || 0)} 积分`
+      : `会员 · ${planLabel(snapshot.plan_code)}`;
+    const meta = document.createElement('small');
+    meta.textContent = `${order.order_no} · ${formatDate(order.created_at, '时间待同步')}`;
+    main.append(title, meta);
+    const side = document.createElement('div');
+    side.className = 'order-side';
+    const amount = document.createElement('span');
+    amount.className = 'order-amount';
+    amount.textContent = formatYuan(order.amount_fen);
+    const [label, chipClass] = ORDER_STATUS_CHIPS[order.status] || ['处理中', 'status-info'];
+    const chip = document.createElement('span');
+    chip.className = `status ${chipClass}`;
+    chip.textContent = label;
+    side.append(amount, chip);
+    if (order.status === 1) {
+      const resume = document.createElement('button');
+      resume.className = 'button';
+      resume.type = 'button';
+      resume.textContent = '继续支付';
+      resume.addEventListener('click', () => openPurchase(kind, order));
+      side.append(resume);
+    }
+    row.append(icon, main, side);
+    container.append(row);
+  }
+  refreshIcons();
+}
+
+async function loadTeamOrders() {
+  if (!isMartLinked()) return;
+  if (!state.mart.team) await loadTeamData();
+  const team = state.mart.team;
+  if (!team) return;
+  elements.teamOrderList.replaceChildren();
+  try {
+    const page = await window.pddMonitor.mart.orders({ teamId: team.id, bizType: 1 });
+    state.mart.teamOrders = page.orders || [];
+    elements.teamOrderCount.textContent = page.total ? String(page.total) : '';
+    renderOrderList(elements.teamOrderList, state.mart.teamOrders, 'membership');
+  } catch (error) {
+    showNotice(error.message || '购买记录暂时无法加载', true);
+    renderEmptyState(elements.teamOrderList, '购买记录暂时无法加载。', '重新加载', () => void loadTeamOrders());
+  }
+}
+
+async function loadWalletOrders() {
+  if (!isMartLinked()) return;
+  if (!state.mart.team) await loadTeamData();
+  const team = state.mart.team;
+  if (!team) return;
+  elements.walletOrderList.replaceChildren();
+  try {
+    const page = await window.pddMonitor.mart.orders({ teamId: team.id, bizType: 2 });
+    state.mart.walletOrders = page.orders || [];
+    elements.walletOrderCount.textContent = page.total ? String(page.total) : '';
+    renderOrderList(elements.walletOrderList, state.mart.walletOrders, 'recharge');
+  } catch (error) {
+    showNotice(error.message || '充值记录暂时无法加载', true);
+    renderEmptyState(elements.walletOrderList, '充值记录暂时无法加载。', '重新加载', () => void loadWalletOrders());
+  }
 }
 
 async function loadTeamData() {
@@ -1007,26 +1128,60 @@ function renderTeamSummary(team, membership) {
   const avatar = document.createElement('span');
   avatar.className = 'team-avatar';
   avatar.textContent = (team.name || '团').trim().slice(0, 1);
-  const identityBody = document.createElement('div');
+  const body = document.createElement('div');
+  body.style.minWidth = '0';
+  const titleRow = document.createElement('div');
+  titleRow.className = 'team-title-row';
   const heading = document.createElement('h3');
   heading.textContent = team.name || '我的团队';
+  const planChip = document.createElement('span');
+  planChip.className = `chip ${active ? 'chip-plan' : 'chip-muted'}`;
+  planChip.textContent = active ? (subscription.plan?.name || '会员已开通') : '未开通会员';
+  titleRow.append(heading, planChip);
   const meta = document.createElement('div');
   meta.className = 'team-meta';
-  const rolePill = document.createElement('span');
-  rolePill.className = `status ${isOwner ? 'status-active' : 'status-info'}`;
-  rolePill.textContent = isOwner ? '负责人' : '成员';
-  meta.append(rolePill);
-  if (active) {
-    const planPill = document.createElement('span');
-    planPill.className = 'status status-warning';
-    planPill.textContent = `${subscription.plan?.name || '会员'} · 至 ${formatDay(subscription.expires_at)}`;
-    meta.append(planPill);
+  const roleChip = document.createElement('span');
+  roleChip.className = `chip ${isOwner ? 'chip-owner' : 'chip-member'}`;
+  roleChip.textContent = isOwner ? '负责人' : '成员';
+  meta.append(roleChip, document.createTextNode(active
+    ? '会员按月计费，到期前不能降级'
+    : '开通会员后可以添加成员'));
+  body.append(titleRow, meta);
+  identity.append(avatar, body);
+
+  const stats = document.createElement('div');
+  stats.className = 'team-stats';
+  const statRows = [
+    ['成员席位', `${quota.used_members ?? 1}`, `/ ${quota.max_members ?? 1}`],
+    ['店铺额度', `${quota.max_shops ?? 0}`, '家'],
+    ['会员到期', active ? formatDay(subscription.expires_at) : '—', '']
+  ];
+  for (const [label, value, unit] of statRows) {
+    const stat = document.createElement('div');
+    stat.className = 'stat';
+    const name = document.createElement('span');
+    name.textContent = label;
+    const strong = document.createElement('strong');
+    strong.textContent = value;
+    if (unit) {
+      const note = document.createElement('i');
+      note.textContent = unit;
+      strong.append(note);
+    }
+    stat.append(name, strong);
+    stats.append(stat);
   }
-  identityBody.append(heading, meta);
-  identity.append(avatar, identityBody);
 
   const actions = document.createElement('div');
   actions.className = 'team-actions';
+  if (isOwner) {
+    const invite = document.createElement('button');
+    invite.className = 'button button-primary';
+    invite.type = 'button';
+    invite.textContent = '邀请成员';
+    invite.addEventListener('click', () => openTeamAction('invite'));
+    actions.append(invite);
+  }
   const join = document.createElement('button');
   join.className = 'button';
   join.type = 'button';
@@ -1041,33 +1196,8 @@ function renderTeamSummary(team, membership) {
     leave.addEventListener('click', () => void leaveCurrentTeam(team));
     actions.append(leave);
   }
-  const identityColumn = document.createElement('div');
-  identityColumn.className = 'team-identity-col';
-  identityColumn.append(identity, actions);
 
-  const metrics = document.createElement('div');
-  metrics.className = 'team-hero-metrics';
-  const tiles = [
-    ['会员档位', active ? (subscription.plan?.name || '已开通') : '未开通', active ? '按团队按月计费' : '开通后可添加成员', ''],
-    ['到期时间', active ? formatDay(subscription.expires_at) : '—', active ? '到期后重新购买' : '不自动续费', ''],
-    ['成员席位', `${quota.used_members ?? 1} / ${quota.max_members ?? 1}`, '负责人也占一个席位', ''],
-    ['店铺额度', `${quota.max_shops ?? 0} 家`, '每个成员可管理的店铺数', '']
-  ];
-  for (const [label, value, note, fontSize] of tiles) {
-    const tile = document.createElement('div');
-    tile.className = 'hero-metric';
-    const name = document.createElement('span');
-    name.textContent = label;
-    const strong = document.createElement('strong');
-    strong.textContent = value;
-    if (fontSize) strong.style.fontSize = fontSize;
-    const small = document.createElement('small');
-    small.textContent = note;
-    tile.append(name, strong, small);
-    metrics.append(tile);
-  }
-
-  elements.teamSummary.append(identityColumn, metrics);
+  elements.teamSummary.append(identity, stats, actions);
   refreshIcons();
 }
 
@@ -1083,21 +1213,25 @@ function renderTeamPlans(team, membership) {
   }
   const current = membership?.subscription?.active ? membership.subscription.plan : null;
   for (const plan of membership?.plans || []) {
-    const card = document.createElement('article');
-    card.className = 'plan-card';
     const isCurrent = Boolean(current) && plan.id === current.id;
-    if (isCurrent) card.classList.add('is-current');
-    if (current && plan.sort_order < current.sort_order) card.classList.add('is-muted');
+    const isUpgrade = Boolean(current) && plan.sort_order > current.sort_order;
+    const isDowngrade = Boolean(current) && plan.sort_order < current.sort_order;
+    const card = document.createElement('article');
+    card.className = `plan-card${isCurrent ? ' is-current' : ''}${isDowngrade ? ' is-muted' : ''}`;
 
     const title = document.createElement('h4');
     title.textContent = plan.name;
     const price = document.createElement('div');
     price.className = 'plan-price';
+    const currency = document.createElement('span');
+    currency.className = 'currency';
+    currency.textContent = '¥';
     const amount = document.createElement('strong');
-    amount.textContent = formatYuan(plan.price_fen);
-    const per = document.createElement('em');
-    per.textContent = '/月';
-    price.append(amount, per);
+    amount.textContent = String(Math.round(plan.price_fen / 100));
+    const period = document.createElement('span');
+    period.className = 'period';
+    period.textContent = '/月';
+    price.append(currency, amount, period);
 
     const features = document.createElement('ul');
     features.className = 'plan-features';
@@ -1110,6 +1244,15 @@ function renderTeamPlans(team, membership) {
       li.append(createIcon('check'), document.createTextNode(text));
       features.append(li);
     }
+    const hint = document.createElement('p');
+    hint.className = 'plan-hint';
+    hint.textContent = isCurrent
+      ? '当前档位，续期从到期日顺延一个月'
+      : isUpgrade
+        ? '按剩余时间补差价，到期时间不变'
+        : isDowngrade
+          ? '会员到期后可以重新购买'
+          : '支付成功后立即生效，有效期一个月';
 
     const button = document.createElement('button');
     button.type = 'button';
@@ -1119,7 +1262,7 @@ function renderTeamPlans(team, membership) {
     } else if (isCurrent) {
       label = '续期一个月';
       button.className = 'button button-primary';
-    } else if (plan.sort_order > current.sort_order) {
+    } else if (isUpgrade) {
       label = '升级并补差价';
       button.className = 'button button-accent-outline';
     } else {
@@ -1130,12 +1273,12 @@ function renderTeamPlans(team, membership) {
     button.textContent = label;
     if (!button.disabled) button.addEventListener('click', () => void startMembershipPurchase(plan));
 
-    card.append(title, price, features, button);
+    card.append(title, price, features, hint, button);
     if (isCurrent) {
-      const badge = document.createElement('span');
-      badge.className = 'plan-badge';
-      badge.textContent = '当前档位';
-      card.append(badge);
+      const ribbon = document.createElement('span');
+      ribbon.className = 'plan-ribbon';
+      ribbon.textContent = '当前档位';
+      card.append(ribbon);
     }
     elements.teamPlans.append(card);
   }
@@ -1146,16 +1289,7 @@ function renderTeamMembers(team) {
   const isOwner = team.role === MEMBER_ROLE_OWNER;
   const members = state.mart.members || [];
   elements.teamMembers.replaceChildren();
-  elements.teamMemberActions.replaceChildren();
   elements.teamTabCount.textContent = members.length ? String(members.length) : '';
-  if (isOwner) {
-    const invite = document.createElement('button');
-    invite.className = 'button button-primary';
-    invite.type = 'button';
-    invite.textContent = '邀请成员';
-    invite.addEventListener('click', () => openTeamAction('invite'));
-    elements.teamMemberActions.append(invite);
-  }
   if (!members.length) {
     renderEmptyState(elements.teamMembers, '成员列表暂时无法加载。');
     return;
@@ -1298,8 +1432,9 @@ function openPurchase(kind, order, subject) {
 
 function purchaseSubject() {
   const { kind, order, subject } = state.purchase;
-  if (kind === 'membership') return `${subject?.name || '会员'} · 一个月`;
-  if (kind === 'recharge') return `${formatPoints(order?.quote_snapshot?.points || subject?.points || 0)} 积分`;
+  const snapshot = order?.quote_snapshot || {};
+  if (kind === 'membership') return `会员 · ${subject?.name || planLabel(snapshot.plan_code)}`;
+  if (kind === 'recharge') return `${formatPoints(snapshot.points || subject?.points || 0)} 积分`;
   return 'Mart 订单';
 }
 
@@ -1435,6 +1570,7 @@ async function refreshPaymentOrder(showFeedback = true, { sync = false } = {}) {
     if (fresh.status === 4) {
       stopOrderPolling();
       await Promise.all([loadTeamData(), loadWalletData()]);
+      if (state.purchase.kind === 'membership') void loadTeamOrders(); else void loadWalletOrders();
       showNotice(state.purchase.kind === 'membership' ? '会员已生效' : '充值已到账');
     } else if (showFeedback) {
       showNotice(`订单状态：${ORDER_STATUS_LABELS[fresh.status] || '处理中'}`);
