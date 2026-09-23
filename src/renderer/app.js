@@ -100,6 +100,8 @@ const elements = {
   platformAccountTeamName: document.querySelector('#platform-account-team-name'),
   platformAccountPoints: document.querySelector('#platform-account-points'),
   platformAccountPointsRow: document.querySelector('#platform-account-points-row'),
+  platformAccountSwitch: document.querySelector('#platform-account-switch'),
+  teamSwitchMenu: document.querySelector('#team-switch-menu'),
   platformAccountMenuEmail: document.querySelector('#platform-account-menu-email'),
   platformAccountChangePassword: document.querySelector('#platform-account-change-password'),
   platformAccountLogout: document.querySelector('#platform-account-logout'),
@@ -399,7 +401,40 @@ function renderSidebarAccount() {
   const current = wallet && String(wallet.team_id) === String(team.id);
   elements.platformAccountPoints.textContent = current ? `${formatPoints(wallet.balance_points)} 积分` : '';
   elements.platformAccountPointsRow.hidden = !current;
+  // 只有一个团队时没什么可切的
+  elements.platformAccountSwitch.hidden = (state.mart.teams || []).length < 2;
   node.hidden = false;
+}
+
+function closeTeamSwitchMenu() {
+  elements.teamSwitchMenu.hidden = true;
+  elements.platformAccountSwitch.setAttribute('aria-expanded', 'false');
+}
+
+function toggleTeamSwitchMenu() {
+  const open = elements.teamSwitchMenu.hidden;
+  if (!open) return closeTeamSwitchMenu();
+  const menu = elements.teamSwitchMenu;
+  menu.replaceChildren();
+  for (const item of state.mart.teams || []) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `team-switch-item${String(item.id) === String(state.mart.teamId) ? ' is-active' : ''}`;
+    const name = document.createElement('span');
+    name.className = 'team-switch-name';
+    name.textContent = item.name || '未命名团队';
+    const role = document.createElement('span');
+    role.className = 'team-switch-role';
+    role.textContent = item.role === MEMBER_ROLE_OWNER ? '我的团队' : '成员';
+    button.append(name, role);
+    button.addEventListener('click', () => {
+      closeTeamSwitchMenu();
+      void selectTeam(item.id);
+    });
+    menu.append(button);
+  }
+  menu.hidden = false;
+  elements.platformAccountSwitch.setAttribute('aria-expanded', 'true');
 }
 
 async function loadSidebarAccount() {
@@ -916,7 +951,7 @@ function renderTeamSwitcher() {
 }
 
 async function selectTeam(teamId) {
-  if (String(teamId) === String(state.mart.teamId)) return;
+  if (String(teamId) === String(state.mart.teamId)) return closeTeamSwitchMenu();
   const next = (state.mart.teams || []).find((item) => String(item.id) === String(teamId));
   state.mart.teamId = teamId;
   // 当前团队对象要立刻跟上：下面两个加载是并行的，只改 teamId 的话
@@ -2672,8 +2707,13 @@ elements.platformAccountLogout.addEventListener('click', async (event) => {
   closePlatformAccountMenu();
   await logoutPlatform();
 });
+elements.platformAccountSwitch.addEventListener('click', (event) => {
+  event.stopPropagation();
+  toggleTeamSwitchMenu();
+});
 document.addEventListener('click', (event) => {
   if (!event.target.closest('.platform-account-wrap')) closePlatformAccountMenu();
+  if (!event.target.closest('.summary-switch-wrap')) closeTeamSwitchMenu();
 });
 elements.platformLoginForm.addEventListener('submit', submitLoginForm);
 document.querySelector('#platform-register-form').addEventListener('submit', submitRegistrationForm);
@@ -2734,6 +2774,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!elements.confirmModal.hidden) closeConfirmModal(false);
   else if (!elements.platformLoginModal.hidden) closePlatformAuthModal();
+  else if (!elements.teamSwitchMenu.hidden) closeTeamSwitchMenu();
 });
 
 window.pddMonitor.onAccountsChanged(() => loadAccounts());

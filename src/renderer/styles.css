@@ -363,13 +363,26 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 /* 没有头像时显示昵称首字（与大列表的成员头像一致） */
 .platform-avatar-initial{font-size:15px;font-weight:600;line-height:1}
 
-/* 侧边栏：账号块下面的独立团队/积分块（和账号块分开，不挤在一起） */
-.platform-account-summary{display:grid;gap:7px;margin-bottom:14px;padding:10px 11px;border:1px solid #262d37;border-radius:11px;background:#1e232b}
+/* 侧边栏：分割线以上的团队/积分行，右侧带切换团队按钮（无边框） */
+.platform-account-summary{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.platform-account-summary .summary-rows{display:grid;gap:7px;flex:1;min-width:0}
 .platform-account-summary .summary-row{display:flex;align-items:center;gap:7px;min-width:0;color:#aab3c0;font-size:11px}
 .platform-account-summary .summary-row svg{width:13px;height:13px;flex:0 0 auto;color:#7f8896}
 .platform-account-summary .summary-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .platform-account-summary .summary-points svg{color:#ff6a60}
 .platform-account-summary .summary-points strong{color:#eef2f7;font-size:12px;font-variant-numeric:tabular-nums}
+.summary-switch-wrap{position:relative;flex:0 0 auto}
+.summary-switch{display:grid;place-items:center;width:28px;height:28px;border:0;border-radius:8px;color:#aab3c0;background:transparent;cursor:pointer}
+.summary-switch:hover{color:#eef2f7;background:#262d37}
+.summary-switch svg{width:15px;height:15px}
+.team-switch-menu{position:absolute;right:0;bottom:calc(100% + 10px);z-index:15;width:196px;padding:8px;border:1px solid #dfe4ea;border-radius:10px;background:#fff;box-shadow:0 14px 34px rgba(14,23,35,.22)}
+.team-switch-menu:after{content:"";position:absolute;right:9px;bottom:-7px;width:12px;height:12px;border-right:1px solid #dfe4ea;border-bottom:1px solid #dfe4ea;background:#fff;transform:rotate(45deg)}
+.team-switch-item{position:relative;z-index:1;display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:7px 9px;border:0;border-radius:7px;color:#303844;background:transparent;cursor:pointer;text-align:left;font-size:13px}
+.team-switch-item:hover{background:#f5f7f9}
+.team-switch-item.is-active{color:var(--accent);background:var(--accent-soft)}
+.team-switch-item .team-switch-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.team-switch-item .team-switch-role{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px}
+.team-switch-item.is-active .team-switch-role{color:var(--accent)}
 
 /* 概览卡内的次级操作：纯文字链接，悬停出现下划线 */
 .button-link{min-height:0;padding:1px 0;border:0;border-radius:0;color:var(--muted);background:transparent;font-size:13px}

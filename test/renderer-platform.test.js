@@ -112,6 +112,10 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(html, /id="platform-account-summary"[\s\S]*id="platform-account-team-name"[\s\S]*id="platform-account-points"/);
   assert.match(renderer, /function renderSidebarAccount\(\)/);
   assert.match(renderer, /function loadSidebarAccount\(\)/);
+  // 侧边栏的切换团队按钮与菜单
+  assert.match(html, /id="platform-account-switch"[\s\S]*id="team-switch-menu"/);
+  assert.match(renderer, /function toggleTeamSwitchMenu\(\)/);
+  assert.match(renderer, /function closeTeamSwitchMenu\(\)/);
   // 切团队要同时同步 teamId 和当前团队对象，否则并行加载会读到上一个团队
   assert.match(renderer, /state\.mart\.team = next \|\| null;/);
   // Mart 会话接上时，正开着的团队/钱包页要自己重载

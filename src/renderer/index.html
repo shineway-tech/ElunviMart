@@ -17,8 +17,14 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="platform-account-summary" id="platform-account-summary" hidden>
-          <div class="summary-row" id="platform-account-team-row"><i data-lucide="users"></i><span id="platform-account-team-name"></span></div>
-          <div class="summary-row summary-points" id="platform-account-points-row"><i data-lucide="coins"></i><strong id="platform-account-points"></strong></div>
+          <div class="summary-rows">
+            <div class="summary-row" id="platform-account-team-row"><i data-lucide="users"></i><span id="platform-account-team-name"></span></div>
+            <div class="summary-row summary-points" id="platform-account-points-row"><i data-lucide="coins"></i><strong id="platform-account-points"></strong></div>
+          </div>
+          <div class="summary-switch-wrap">
+            <button class="summary-switch" type="button" id="platform-account-switch" aria-expanded="false" aria-label="切换团队" title="切换团队" hidden><i data-lucide="chevrons-up-down"></i></button>
+            <div class="team-switch-menu" id="team-switch-menu" hidden></div>
+          </div>
         </div>
         <div class="sidebar-footer">
         <div class="platform-account-wrap">
