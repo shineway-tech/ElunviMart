@@ -15,7 +15,12 @@
         <button class="nav-button is-active" type="button" data-view="accounts"><i data-lucide="store"></i><span>商家账号</span></button>
         <button class="nav-button" type="button" data-view="settings"><i data-lucide="settings"></i><span>监控设置</span></button>
       </nav>
-      <div class="sidebar-footer">
+      <div class="sidebar-bottom">
+        <div class="platform-account-summary" id="platform-account-summary" hidden>
+          <div class="summary-row" id="platform-account-team-row"><i data-lucide="users"></i><span id="platform-account-team-name"></span></div>
+          <div class="summary-row summary-points" id="platform-account-points-row"><i data-lucide="coins"></i><strong id="platform-account-points"></strong></div>
+        </div>
+        <div class="sidebar-footer">
         <div class="platform-account-wrap">
           <div class="platform-account-menu" id="platform-account-menu" hidden>
             <div class="platform-account-menu-profile" id="platform-account-menu-profile">
@@ -32,9 +37,6 @@
             <span class="platform-account-copy"><strong id="platform-account-name">未登录</strong><small id="platform-account-meta">登录后使用软件</small></span>
             <i class="platform-account-chevron" data-lucide="chevron-up"></i>
           </button>
-          <div class="platform-account-summary" id="platform-account-summary" hidden>
-            <div class="summary-row" id="platform-account-team-row"><i data-lucide="users"></i><span id="platform-account-team-name"></span></div>
-            <div class="summary-row summary-points" id="platform-account-points-row"><i data-lucide="coins"></i><strong id="platform-account-points"></strong></div>
           </div>
         </div>
       </div>

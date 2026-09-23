@@ -177,7 +177,7 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 @media(max-height:700px){.platform-auth-layout{min-height:0}.platform-auth-brand{padding:54px 24px 22px}.platform-auth-brand-mark{width:38px;height:38px}.platform-auth-brand-heading>strong{font-size:20px}.platform-auth-brand>p{margin-top:16px;font-size:13px}.platform-auth-illustration{max-width:205px;margin-top:30px}.platform-auth-pane{padding:22px 28px}.platform-auth-header{margin-bottom:18px}.platform-auth-modal form{gap:12px}}
 
 /* Sidebar account control: keep identity and account actions together at the bottom. */
-.sidebar-footer{position:relative;margin-top:auto;padding-top:18px;border-top:1px solid #303740}
+.sidebar-bottom{margin-top:auto}.sidebar-footer{position:relative;padding-top:18px;border-top:1px solid #303740}
 .platform-account-wrap{position:relative}
 .platform-account{width:100%;min-width:0;padding:7px 8px;border:1px solid transparent;border-radius:11px;color:#eef2f7;background:transparent;text-align:left}
 .platform-account:hover,.platform-account[aria-expanded="true"]{border-color:#394452;background:#242b35}
@@ -364,7 +364,7 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .platform-avatar-initial{font-size:15px;font-weight:600;line-height:1}
 
 /* 侧边栏：账号块下面的独立团队/积分块（和账号块分开，不挤在一起） */
-.platform-account-summary{display:grid;gap:7px;margin-top:8px;padding:10px 11px;border:1px solid #262d37;border-radius:11px;background:#1e232b}
+.platform-account-summary{display:grid;gap:7px;margin-bottom:14px;padding:10px 11px;border:1px solid #262d37;border-radius:11px;background:#1e232b}
 .platform-account-summary .summary-row{display:flex;align-items:center;gap:7px;min-width:0;color:#aab3c0;font-size:11px}
 .platform-account-summary .summary-row svg{width:13px;height:13px;flex:0 0 auto;color:#7f8896}
 .platform-account-summary .summary-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
