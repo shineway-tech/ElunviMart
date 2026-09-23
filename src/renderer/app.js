@@ -1268,21 +1268,21 @@ function renderTeamSummary(team, membership) {
   const actions = document.createElement('div');
   actions.className = 'team-hero-actions';
   const join = document.createElement('button');
-  join.className = 'button button-ghost';
+  join.className = 'button-link';
   join.type = 'button';
   join.textContent = '加入其他团队';
   join.addEventListener('click', () => openTeamAction('join'));
   actions.append(join);
   if (isOwner) {
     const invite = document.createElement('button');
-    invite.className = 'button button-primary';
+    invite.className = 'button-link is-primary';
     invite.type = 'button';
     invite.textContent = '邀请成员';
     invite.addEventListener('click', () => openTeamAction('invite'));
     actions.append(invite);
   } else {
     const leave = document.createElement('button');
-    leave.className = 'button';
+    leave.className = 'button-link';
     leave.type = 'button';
     leave.textContent = '退出团队';
     leave.addEventListener('click', () => void leaveCurrentTeam(team));

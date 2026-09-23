@@ -235,7 +235,7 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .team-avatar{display:grid;place-items:center;width:48px;height:48px;flex:0 0 auto;border-radius:13px;color:#fff;background:linear-gradient(140deg,#c92b21 0%,var(--accent) 62%,#e2503f 100%);box-shadow:0 8px 16px -10px rgba(217,48,37,.75);font-size:19px;font-weight:650}
 .team-title-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .team-title-row h3{margin:0;font-size:20px;font-weight:650;letter-spacing:-.01em;color:var(--text)}
-.team-hero-actions{display:flex;flex-wrap:wrap;gap:8px}
+.team-hero-actions{display:flex;align-items:center;flex-wrap:wrap;gap:18px}
 .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:500}
 .chip-plan{color:var(--accent);background:#fff;box-shadow:inset 0 0 0 1px #efb8b2}
 .chip-owner{color:var(--green);background:#fff;box-shadow:inset 0 0 0 1px #bfe3d3}
@@ -349,6 +349,8 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .member-avatar{overflow:hidden;border-radius:50%}
 .member-avatar img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
 
-/* 次级操作：无边框、低对比，悬停才出现底色 */
-.button-ghost{border-color:transparent;color:var(--muted);background:transparent}
-.button-ghost:hover{color:var(--text);background:var(--soft)}
+/* 概览卡内的次级操作：纯文字链接，悬停出现下划线 */
+.button-link{min-height:0;padding:1px 0;border:0;border-radius:0;color:var(--muted);background:transparent;font-size:13px}
+.button-link:hover{color:var(--accent);background:transparent;text-decoration:underline;text-underline-offset:3px}
+.button-link.is-primary{color:var(--accent)}
+.button-link.is-primary:hover{color:#c92b21}
