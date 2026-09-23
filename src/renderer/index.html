@@ -50,7 +50,6 @@
         <div class="notice" id="notice" role="status" aria-live="polite" hidden><i data-lucide="circle-check"></i><span></span></div>
 
         <section class="view" id="accounts-view">
-          <div class="section-header"><div><h2>账号列表</h2></div></div>
           <div class="table-frame" id="accounts-table-frame">
             <table>
               <thead><tr><th>商家账号</th><th>登录状态</th><th>营销活动商品</th><th>异常活动商品</th><th>最近同步</th><th></th></tr></thead>
@@ -58,8 +57,9 @@
             </table>
           </div>
           <div class="empty-state" id="accounts-empty" hidden>
-            <i data-lucide="store"></i><h2>还没有商家账号</h2><p>添加账号并登录拼多多商家后台后，即可读取营销活动商品。</p><button class="button button-primary" type="button" data-action="add-account"><i data-lucide="plus"></i>添加账号</button>
+            <i data-lucide="store"></i><h2 id="accounts-empty-title">还没有商家账号</h2><p id="accounts-empty-copy">添加账号并登录拼多多商家后台后，即可读取营销活动商品。</p><button class="button button-primary" type="button" id="accounts-empty-add" data-action="add-account"><i data-lucide="plus"></i>添加账号</button>
           </div>
+          <div class="list-footer" id="accounts-footer" hidden></div>
         </section>
 
         <section class="view detail-view" id="account-detail-view" hidden>

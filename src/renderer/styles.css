@@ -346,6 +346,14 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .plan-option.is-muted{background:var(--soft)}
 #team-view{padding-bottom:88px}
 
+.list-footer{display:flex;justify-content:flex-end;margin-top:12px;color:var(--muted);font-size:12px}
+#add-account:disabled,#accounts-empty-add:disabled{cursor:not-allowed}
+.quota-copy{display:inline-flex;align-items:baseline;gap:3px;margin:0}
+.quota-copy strong{color:var(--text);font-size:17px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.quota-copy strong.is-full{color:var(--accent)}
+.quota-link{margin-left:10px;padding:0;border:0;color:var(--accent);background:transparent;cursor:pointer;font-size:12px}
+.quota-link:hover{text-decoration:underline;text-underline-offset:3px}
+
 .member-avatar{overflow:hidden;border-radius:50%}
 .member-avatar img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
 

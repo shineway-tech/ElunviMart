@@ -105,8 +105,13 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /window\.pddMonitor\.mart\.acceptInvitation/);
   assert.match(renderer, /window\.pddMonitor\.mart\.walletTransactions/);
   // 渲染用的辅助函数必须存在，别再被重构顺手删掉
-  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole']) {
+  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
   }
+  // 商家账号页：额度脚注 + 未开通会员时禁止添加
+  assert.match(html, /id="accounts-footer"/);
+  assert.doesNotMatch(html, /<h2>账号列表<\/h2>/);
+  assert.match(renderer, /elements\.addAccount\.disabled = !allowed/);
+  assert.match(renderer, /elements\.accountsFooter\.hidden/);
   assert.doesNotMatch(renderer, /window\.pddMonitor\.platform\.(team|wallet|createCheckout|packages)/);
 });

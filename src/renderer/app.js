@@ -24,6 +24,7 @@ const state = {
   teamTab: 'members',
   walletTab: 'recharge',
   accounts: [],
+  accountQuota: null,
   currentAccount: null,
   products: [],
   productPage: 1,
@@ -57,6 +58,10 @@ const elements = {
   accountsBody: document.querySelector('#accounts-body'),
   accountsTable: document.querySelector('#accounts-table-frame'),
   accountsEmpty: document.querySelector('#accounts-empty'),
+  accountsFooter: document.querySelector('#accounts-footer'),
+  emptyAdd: document.querySelector('#accounts-empty-add'),
+  emptyTitle: document.querySelector('#accounts-empty-title'),
+  emptyCopy: document.querySelector('#accounts-empty-copy'),
   productsBody: document.querySelector('#products-body'),
   productsTable: document.querySelector('#products-table-frame'),
   productsEmpty: document.querySelector('#products-empty'),
@@ -1195,6 +1200,25 @@ async function loadWalletOrders() {
   }
 }
 
+async function resolveCurrentTeam({ refresh = false } = {}) {
+  if (!refresh && state.mart.team) return state.mart.team;
+  const teams = await window.pddMonitor.mart.teams();
+  state.mart.teams = teams.teams || [];
+  if (!state.mart.preferencesLoaded) {
+    state.mart.preferencesLoaded = true;
+    try {
+      const saved = await window.pddMonitor.preferences.get('ui.selectedTeamId');
+      if (!state.mart.teamId && saved) state.mart.teamId = saved;
+    } catch {}
+  }
+  const selected = state.mart.teamId
+    ? state.mart.teams.find((item) => String(item.id) === String(state.mart.teamId))
+    : null;
+  state.mart.team = selected || teams.default_team || state.mart.teams[0] || null;
+  state.mart.teamId = state.mart.team ? state.mart.team.id : null;
+  return state.mart.team;
+}
+
 async function loadTeamData() {
   elements.teamSummary.replaceChildren();
   elements.teamPlans.replaceChildren();
@@ -1204,22 +1228,8 @@ async function loadTeamData() {
     return;
   }
   try {
-    const teams = await window.pddMonitor.mart.teams();
-    state.mart.teams = teams.teams || [];
-    if (!state.mart.preferencesLoaded) {
-      state.mart.preferencesLoaded = true;
-      try {
-        const saved = await window.pddMonitor.preferences.get('ui.selectedTeamId');
-        if (!state.mart.teamId && saved) state.mart.teamId = saved;
-      } catch {}
-    }
-    const selected = state.mart.teamId
-      ? state.mart.teams.find((item) => String(item.id) === String(state.mart.teamId))
-      : null;
-    state.mart.team = selected || teams.default_team || state.mart.teams[0] || null;
-    state.mart.teamId = state.mart.team ? state.mart.team.id : null;
+    const team = await resolveCurrentTeam({ refresh: true });
     renderTeamSwitcher();
-    const team = state.mart.team;
     if (!team) {
       renderEmptyState(elements.teamSummary, '当前账号还没有团队。');
       return;
@@ -1931,6 +1941,7 @@ function showView(name) {
   elements.pageBack.hidden = true;
   if (isAccounts) {
     elements.title.textContent = '商家账号';
+    void loadAccountQuota();
   } else if (isSettings) {
     elements.title.textContent = '监控设置';
     loadSettings();
@@ -2007,6 +2018,85 @@ async function removeAccount() {
 async function loadAccounts() {
   state.accounts = await window.pddMonitor.accounts.list();
   renderAccounts();
+}
+
+async function loadAccountQuota() {
+  state.accountQuota = null;
+  try {
+    if (!isMartLinked()) await refreshMartState();
+    if (!isMartLinked()) return applyAccountQuota();
+    const team = await resolveCurrentTeam();
+    if (!team) return applyAccountQuota();
+    const membership = await window.pddMonitor.mart.membership(team.id);
+    state.accountQuota = {
+      teamId: team.id,
+      max: Number(membership.quota?.max_shops ?? 0),
+      active: Boolean(membership.subscription?.active)
+    };
+  } catch {
+    state.accountQuota = null;
+  }
+  applyAccountQuota();
+}
+
+// 会员额度不足时不允许添加商家；额度未知（接口失败）时不拦截
+function canAddAccount() {
+  const quota = state.accountQuota;
+  if (!quota) return true;
+  if (!quota.active) return false;
+  return state.accounts.length < quota.max;
+}
+
+function applyAccountQuota() {
+  const quota = state.accountQuota;
+  const unsubscribed = Boolean(quota && !quota.active);
+  const allowed = canAddAccount();
+  const reason = unsubscribed ? '当前团队未开通会员，开通后才能添加商家' : '商家数量已达到当前档位上限';
+  elements.addAccount.disabled = !allowed;
+  elements.addAccount.title = allowed ? '' : reason;
+  elements.emptyAdd.disabled = !allowed;
+  elements.emptyAdd.title = allowed ? '' : reason;
+  elements.emptyTitle.textContent = unsubscribed ? '需要先开通会员' : '还没有商家账号';
+  elements.emptyCopy.textContent = unsubscribed
+    ? '当前团队未开通会员，开通后即可添加商家并读取营销活动商品。'
+    : '添加账号并登录拼多多商家后台后，即可读取营销活动商品。';
+  renderAccountFooter();
+}
+
+function renderAccountFooter() {
+  const quota = state.accountQuota;
+  elements.accountsFooter.replaceChildren();
+  if (!quota || (state.accounts.length === 0 && quota.active)) {
+    elements.accountsFooter.hidden = true;
+    return;
+  }
+  const copy = document.createElement('p');
+  copy.className = 'quota-copy';
+  if (quota.active) {
+    const used = document.createElement('strong');
+    used.textContent = String(state.accounts.length);
+    if (state.accounts.length >= quota.max) used.classList.add('is-full');
+    const total = document.createElement('strong');
+    total.textContent = String(quota.max);
+    copy.append(
+      document.createTextNode('已添加 '), used,
+      document.createTextNode(' / '), total,
+      document.createTextNode(' 家')
+    );
+  } else {
+    const zero = document.createElement('strong');
+    zero.className = 'is-full';
+    zero.textContent = '0';
+    copy.append(document.createTextNode('未开通会员，商家额度 '), zero, document.createTextNode(' 家'));
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'quota-link';
+    link.textContent = '去开通会员';
+    link.addEventListener('click', () => showView('team'));
+    copy.append(link);
+  }
+  elements.accountsFooter.append(copy);
+  elements.accountsFooter.hidden = false;
 }
 
 function renderProducts() {
