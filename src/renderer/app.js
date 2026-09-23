@@ -2361,7 +2361,6 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
     showNotice(error.message, true);
   }
 });
-document.querySelector('#team-refresh').addEventListener('click', () => void loadTeamData());
 document.querySelectorAll('[data-team-tab]').forEach((button) => button.addEventListener('click', () => setTeamTab(button.dataset.teamTab)));
 document.querySelectorAll('[data-wallet-tab]').forEach((button) => button.addEventListener('click', () => setWalletTab(button.dataset.walletTab)));
 elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
