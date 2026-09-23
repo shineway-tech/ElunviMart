@@ -96,6 +96,10 @@ const elements = {
   platformAccountMenu: document.querySelector('#platform-account-menu'),
   platformAccountMenuAvatar: document.querySelector('#platform-account-menu-avatar'),
   platformAccountMenuName: document.querySelector('#platform-account-menu-name'),
+  platformAccountSummary: document.querySelector('#platform-account-summary'),
+  platformAccountTeamName: document.querySelector('#platform-account-team-name'),
+  platformAccountPoints: document.querySelector('#platform-account-points'),
+  platformAccountPointsRow: document.querySelector('#platform-account-points-row'),
   platformAccountMenuEmail: document.querySelector('#platform-account-menu-email'),
   platformAccountChangePassword: document.querySelector('#platform-account-change-password'),
   platformAccountLogout: document.querySelector('#platform-account-logout'),
@@ -381,6 +385,39 @@ function renderPlatformAvatar(profile, displayName) {
   renderPlatformAvatarInto(elements.platformAccountMenuAvatar, profile, displayName);
 }
 
+// 侧边栏独立的团队/积分块：和上面的账号块分开显示，拿不到团队就整块隐藏
+function renderSidebarAccount() {
+  const node = elements.platformAccountSummary;
+  if (!node) return;
+  const team = isPlatformSignedIn() ? state.mart.team : null;
+  if (!team) {
+    node.hidden = true;
+    return;
+  }
+  elements.platformAccountTeamName.textContent = team.name || '我的团队';
+  const wallet = state.mart.wallet;
+  const current = wallet && String(wallet.team_id) === String(team.id);
+  elements.platformAccountPoints.textContent = current ? `${formatPoints(wallet.balance_points)} 积分` : '';
+  elements.platformAccountPointsRow.hidden = !current;
+  node.hidden = false;
+}
+
+async function loadSidebarAccount() {
+  renderSidebarAccount();
+  if (!isPlatformSignedIn()) return;
+  try {
+    if (!isMartLinked()) await refreshMartState();
+    if (!isMartLinked()) return;
+    const team = await resolveCurrentTeam();
+    if (!team) return;
+    const wallet = await window.pddMonitor.mart.wallet(team.id);
+    if (wallet?.wallet) state.mart.wallet = wallet.wallet;
+  } catch {
+    // 侧边栏摘要拿不到就少显示一行，不打扰用户
+  }
+  renderSidebarAccount();
+}
+
 function setPlatformShell(status) {
   const signedIn = status === 'signed_in';
   state.platform.status = status;
@@ -398,9 +435,11 @@ function setPlatformShell(status) {
     elements.platformAccountMenuName.textContent = displayName;
     elements.platformAccountName.textContent = displayName;
     elements.platformAccountMeta.textContent = email;
+    renderSidebarAccount();
   } else {
     closePlatformAccountMenu();
     renderPlatformAvatar(null);
+    renderSidebarAccount();
     elements.platformAccountMenuEmail.textContent = '未登录';
     elements.platformAccountMenuName.textContent = '未登录';
     elements.platformAccountName.textContent = '未登录';
@@ -929,6 +968,7 @@ async function loadWalletData() {
     state.mart.packages = packages.packages || [];
     state.mart.transactions = transactions.transactions || [];
     state.mart.transactionTotal = transactions.total || 0;
+    renderSidebarAccount();
     renderWalletSummary(team);
     renderWalletPackages(team);
     renderWalletTransactions();
@@ -1278,6 +1318,7 @@ async function loadTeamData() {
   try {
     const team = await resolveCurrentTeam({ refresh: true });
     renderTeamSwitcher();
+    renderSidebarAccount();
     if (!team) {
       renderEmptyState(elements.teamSummary, '当前账号还没有团队。');
       return;
@@ -1915,6 +1956,7 @@ async function loadPlatformState() {
       state.platform.accountEmail = result.accountEmail || null;
       setPlatformShell('signed_in');
       await Promise.all([loadAccounts(), refreshMartState()]);
+      void loadSidebarAccount();
       return;
     }
     if (result.status === 'binding_required') {
@@ -2498,6 +2540,7 @@ async function finishPlatformSignIn(profile, security = null) {
   elements.platformLoginModal.hidden = true;
   setPlatformShell('signed_in');
   await Promise.all([loadAccounts(), refreshMartState()]);
+  void loadSidebarAccount();
   showView('accounts');
 }
 
@@ -2732,6 +2775,7 @@ function handleMartChanged(payload) {
   state.mart.linked = Boolean(payload?.linked);
   state.mart.user = payload?.user || null;
   if (!state.mart.linked) return;
+  void loadSidebarAccount();
   if (isViewVisible('team')) void loadTeamData();
   if (isViewVisible('wallet')) void loadWalletData();
 }

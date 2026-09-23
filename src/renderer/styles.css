@@ -363,6 +363,14 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 /* 没有头像时显示昵称首字（与大列表的成员头像一致） */
 .platform-avatar-initial{font-size:15px;font-weight:600;line-height:1}
 
+/* 侧边栏：账号块下面的独立团队/积分块（和账号块分开，不挤在一起） */
+.platform-account-summary{display:grid;gap:7px;margin-top:8px;padding:10px 11px;border:1px solid #262d37;border-radius:11px;background:#1e232b}
+.platform-account-summary .summary-row{display:flex;align-items:center;gap:7px;min-width:0;color:#aab3c0;font-size:11px}
+.platform-account-summary .summary-row svg{width:13px;height:13px;flex:0 0 auto;color:#7f8896}
+.platform-account-summary .summary-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.platform-account-summary .summary-points svg{color:#ff6a60}
+.platform-account-summary .summary-points strong{color:#eef2f7;font-size:12px;font-variant-numeric:tabular-nums}
+
 /* 概览卡内的次级操作：纯文字链接，悬停出现下划线 */
 .button-link{min-height:0;padding:1px 0;border:0;border-radius:0;color:var(--muted);background:transparent;font-size:13px}
 .button-link:hover{color:var(--accent);background:transparent;text-decoration:underline;text-underline-offset:3px}
