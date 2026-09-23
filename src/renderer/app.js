@@ -1441,6 +1441,25 @@ function renderTeamPurchaseBar(plans, current) {
   bar.append(summary, submit);
 }
 
+// 有平台头像就加载头像，加载失败或没有头像时回退到首字
+function renderMemberAvatar(container, member) {
+  container.replaceChildren();
+  const fallback = () => {
+    container.replaceChildren();
+    container.textContent = (member.display_name || '成').trim().slice(0, 1);
+  };
+  if (!member.avatar_url) {
+    fallback();
+    return;
+  }
+  const image = document.createElement('img');
+  image.src = member.avatar_url.replace(/^http:/, 'https:');
+  image.alt = '';
+  image.referrerPolicy = 'no-referrer';
+  image.addEventListener('error', fallback, { once: true });
+  container.replaceChildren(image);
+}
+
 function renderTeamMembers(team) {
   const isOwner = team.role === MEMBER_ROLE_OWNER;
   const members = state.mart.members || [];
@@ -1458,7 +1477,7 @@ function renderTeamMembers(team) {
     cell.className = 'account-cell';
     const avatar = document.createElement('span');
     avatar.className = `member-avatar${member.role === MEMBER_ROLE_OWNER ? ' is-owner' : ''}`;
-    avatar.textContent = (member.display_name || '成').trim().slice(0, 1);
+    renderMemberAvatar(avatar, member);
     const info = document.createElement('div');
     const name = document.createElement('div');
     name.className = 'primary-text';
