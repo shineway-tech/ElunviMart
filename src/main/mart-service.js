@@ -17,10 +17,15 @@ class MartService {
   async linkFromPlatform() {
     const platformToken = await this.platformSession.accessToken();
     if (!platformToken) throw new Error('请先登录 Elunvi 账号');
+    // 平台不给邮箱注册用户昵称，带上邮箱让 Mart 用 @ 前那截兜底（只影响本人显示名）
+    const accountEmail = await this.platformSession.accountEmail();
     const { data } = await this.client.request('/v1/auth/platform/exchange', {
       method: 'POST',
       auth: false,
-      body: { access_token: platformToken }
+      body: {
+        access_token: platformToken,
+        ...(accountEmail ? { account_email: accountEmail } : {})
+      }
     });
     await this.session.save({
       accessToken: data.access_token,

@@ -51,6 +51,23 @@ test('linkFromPlatform exchanges the platform token and persists the mart sessio
   assert.ok(persisted.accessExpiresAt);
 });
 
+test('linkFromPlatform forwards the account email so Mart can name email-only users', async () => {
+  const calls = [];
+  const { service } = makeService({
+    platformTokens: { accessToken: 'platform-access', refreshToken: 'platform-refresh', accountEmail: '350179435@qq.com' },
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return response(200, envelope({ access_token: 'a', refresh_token: 'b', user: {}, default_team: {} }));
+    }
+  });
+
+  await service.linkFromPlatform();
+  assert.deepEqual(JSON.parse(calls[0].init.body), {
+    access_token: 'platform-access',
+    account_email: '350179435@qq.com'
+  });
+});
+
 test('linkFromPlatform requires a platform session', async () => {
   const { service } = makeService({ platformTokens: null, fetchImpl: async () => response(200, envelope({})) });
   await assert.rejects(() => service.linkFromPlatform(), /请先登录 Elunvi 账号/);
