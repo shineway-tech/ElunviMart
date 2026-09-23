@@ -1268,7 +1268,7 @@ function renderTeamSummary(team, membership) {
   const actions = document.createElement('div');
   actions.className = 'team-hero-actions';
   const join = document.createElement('button');
-  join.className = 'button-link';
+  join.className = 'button-link is-primary';
   join.type = 'button';
   join.textContent = '加入其他团队';
   join.addEventListener('click', () => openTeamAction('join'));
