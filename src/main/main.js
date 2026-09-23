@@ -1,7 +1,7 @@
 const path = require('node:path');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
 const { SqliteStore, DEFAULT_DATA } = require('./store');
 const { PlatformClient } = require('./platform-client');
 const { PlatformSession, SafeStorageTokenStore } = require('./platform-session');
@@ -525,7 +525,18 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:order', (_event, orderId) => martService.order(orderId));
   ipcMain.handle('mart:paymentAttempt', (_event, input) => martService.createPaymentAttempt(input || {}));
   ipcMain.handle('mart:closeOrder', (_event, orderId) => martService.closeOrder(orderId));
+  ipcMain.handle('mart:syncOrder', (_event, orderId) => martService.syncOrder(orderId));
   ipcMain.handle('mart:simulatePayment', (_event, orderId) => martService.simulatePayment(orderId));
+  // 只在默认浏览器里打开支付宝收银台，其他地址一律拒绝
+  ipcMain.handle('mart:openPayUrl', async (_event, payUrl) => {
+    const value = String(payUrl || '');
+    let parsed;
+    try { parsed = new URL(value); } catch { throw new Error('支付地址无效'); }
+    const isAlipay = parsed.protocol === 'https:' && (parsed.hostname === 'alipay.com' || parsed.hostname.endsWith('.alipay.com'));
+    if (!isAlipay) throw new Error('不支持打开该支付地址');
+    await shell.openExternal(parsed.toString());
+    return true;
+  });
 
   ipcMain.handle('accounts:list', () => requireSignedInStore().getAccounts().map((account) => ({
     ...account,

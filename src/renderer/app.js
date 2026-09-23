@@ -1140,17 +1140,41 @@ function renderPaymentOrder() {
     detail.append(row);
   }
 
-  elements.paymentSimulate.hidden = !(order.status === 1 && attempt);
+  const channel = attempt?.channel || order.channel || '';
+  elements.paymentSimulate.hidden = !(order.status === 1 && attempt && channel === 'mock');
   elements.paymentRefreshOrder.hidden = !(order.status === 1 || order.status === 2);
   elements.paymentCloseOrder.hidden = order.status !== 1;
 
   if (order.status === 1 && !attempt) {
-    const start = document.createElement('button');
-    start.className = 'button button-primary';
-    start.type = 'button';
-    start.textContent = '发起支付';
-    start.addEventListener('click', () => void beginPayment());
-    detail.append(start);
+    const pick = document.createElement('div');
+    pick.className = 'payment-channel-actions';
+    const alipay = document.createElement('button');
+    alipay.className = 'button button-primary';
+    alipay.type = 'button';
+    alipay.textContent = '支付宝支付';
+    alipay.addEventListener('click', () => void beginPayment('alipay'));
+    const mock = document.createElement('button');
+    mock.className = 'button';
+    mock.type = 'button';
+    mock.textContent = '本地模拟支付';
+    mock.addEventListener('click', () => void beginPayment('mock'));
+    pick.append(alipay, mock);
+    detail.append(pick);
+  }
+  if (order.status === 1 && attempt?.payment_params?.pay_url) {
+    const open = document.createElement('button');
+    open.className = 'button button-primary';
+    open.type = 'button';
+    open.textContent = '打开支付宝收银台';
+    open.addEventListener('click', async () => {
+      try {
+        await window.pddMonitor.mart.openPayUrl(attempt.payment_params.pay_url);
+        showNotice('已打开收银台，支付完成后点「查询支付状态」');
+      } catch (error) {
+        showNotice(error.message || '无法打开支付页面', true);
+      }
+    });
+    detail.append(open);
   }
   if (order.status === 4) {
     const done = document.createElement('p');
@@ -1162,11 +1186,11 @@ function renderPaymentOrder() {
   }
 }
 
-async function beginPayment() {
+async function beginPayment(channel = 'mock') {
   const order = state.purchase.order;
   if (!order) return;
   try {
-    const result = await window.pddMonitor.mart.paymentAttempt({ orderId: order.id, channel: 'mock' });
+    const result = await window.pddMonitor.mart.paymentAttempt({ orderId: order.id, channel });
     state.purchase.attempt = result.attempt;
     state.purchase.order = result.order;
     renderPaymentOrder();
@@ -1188,11 +1212,14 @@ function stopOrderPolling() {
   }
 }
 
-async function refreshPaymentOrder(showFeedback = true) {
+async function refreshPaymentOrder(showFeedback = true, { sync = false } = {}) {
   const order = state.purchase.order;
   if (!order) return;
   try {
-    const fresh = await window.pddMonitor.mart.order(order.id);
+    // 手动查询时让服务端向渠道查单；自动轮询只读订单，避免频繁打渠道
+    const fresh = sync
+      ? await window.pddMonitor.mart.syncOrder(order.id)
+      : await window.pddMonitor.mart.order(order.id);
     state.purchase.order = fresh;
     renderPaymentOrder();
     if (fresh.status === 4) {
@@ -1945,7 +1972,7 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
 });
 document.querySelector('#wallet-refresh').addEventListener('click', () => void loadWalletData());
 document.querySelector('#team-refresh').addEventListener('click', () => void loadTeamData());
-elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true));
+elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
 elements.paymentSimulate.addEventListener('click', () => void simulatePayment());
 elements.paymentCloseOrder.addEventListener('click', () => void closePurchaseOrder());
 

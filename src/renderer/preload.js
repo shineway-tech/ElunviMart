@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     order: (orderId) => ipcRenderer.invoke('mart:order', orderId),
     paymentAttempt: (input) => ipcRenderer.invoke('mart:paymentAttempt', input),
     closeOrder: (orderId) => ipcRenderer.invoke('mart:closeOrder', orderId),
+    syncOrder: (orderId) => ipcRenderer.invoke('mart:syncOrder', orderId),
+    openPayUrl: (payUrl) => ipcRenderer.invoke('mart:openPayUrl', payUrl),
     simulatePayment: (orderId) => ipcRenderer.invoke('mart:simulatePayment', orderId)
   },
   accounts: {

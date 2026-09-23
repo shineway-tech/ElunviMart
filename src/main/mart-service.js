@@ -175,6 +175,15 @@ class MartService {
     return data.order;
   }
 
+  // 主动查单：本地没有公网回调地址时用渠道结果结单
+  async syncOrder(orderId) {
+    const { data } = await this.client.request(
+      `/v1/orders/${encodeURIComponent(orderId)}/payment-sync`,
+      { method: 'POST' }
+    );
+    return data.order;
+  }
+
   // 本地调试用：以模拟渠道身份回调，替代真实渠道的服务端通知
   async simulatePayment(orderId) {
     const order = await this.order(orderId);
