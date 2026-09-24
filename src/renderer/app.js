@@ -1883,6 +1883,8 @@ async function beginPayment(channel = 'mock') {
     startOrderPolling();
   } catch (error) {
     showNotice(error.message || '发起支付失败', true);
+    // 报价陈旧时服务端会直接关单，这里回读一次，界面不会停在「待支付」
+    await refreshPaymentOrder(false);
   }
 }
 

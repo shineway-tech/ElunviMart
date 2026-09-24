@@ -134,6 +134,14 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   // 成员席位满了（含未开通会员）就不给邀请入口
   assert.match(renderer, /const memberFull = usedMembers >= maxMembers/);
   assert.match(renderer, /invite\.disabled = true/);
+  // 「继续支付」只出现在待支付订单上（服务端关单后列表里就没有入口）
+  assert.match(renderer, /if \(order\.status === 1\) \{[\s\S]{0,200}继续支付/);
+  // 报价陈旧时服务端会拒绝发起支付并关单，界面要回读订单状态
+  const beginPaymentSource = renderer.slice(
+    renderer.indexOf('async function beginPayment'),
+    renderer.indexOf('function startOrderPolling')
+  );
+  assert.match(beginPaymentSource, /catch \(error\) \{[\s\S]*await refreshPaymentOrder\(false\);/);
   // 商家账号页：额度脚注 + 未开通会员时禁止添加
   assert.match(html, /id="accounts-footer"/);
   assert.doesNotMatch(html, /<h2>账号列表<\/h2>/);
