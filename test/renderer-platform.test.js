@@ -92,6 +92,12 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(html, /id="wallet-package-list"/);
   assert.match(html, /id="wallet-summary-card"/);
   assert.match(html, /id="payment-simulate"/);
+  assert.match(html, /id="payment-hero"/);
+  assert.match(html, /id="payment-status-chip"/);
+  assert.match(html, /id="payment-channels"/);
+  assert.match(html, /id="payment-purchase-bar"/);
+  assert.match(html, /id="payment-info-actions"/);
+  assert.doesNotMatch(html, /payment-status-card/);
   assert.match(html, /id="team-code-field"[\s\S]*id="team-action-code"/);
 
   assert.match(preload, /invoke\('mart:inviteMember'/);
@@ -105,7 +111,7 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /window\.pddMonitor\.mart\.acceptInvitation/);
   assert.match(renderer, /window\.pddMonitor\.mart\.walletTransactions/);
   // 渲染用的辅助函数必须存在，别再被重构顺手删掉
-  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal']) {
+  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentChannels', 'renderPaymentPurchaseBar', 'startOrderExpireCountdown']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
   }
   // 侧边栏账号块下面独立的团队/积分块

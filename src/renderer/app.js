@@ -19,7 +19,8 @@ const state = {
     pages: { ledger: 1, walletOrders: 1, teamOrders: 1 },
     preferencesLoaded: false
   },
-  purchase: { kind: null, order: null, attempt: null },
+  purchase: { kind: null, order: null, attempt: null, channel: 'alipay' },
+  expireTimer: null,
   orderPollTimer: null,
   teamTab: 'members',
   walletTab: 'recharge',
@@ -146,9 +147,16 @@ const elements = {
   teamOrderCount: document.querySelector('#team-order-count'),
   walletOrderList: document.querySelector('#wallet-order-list'),
   walletOrderCount: document.querySelector('#wallet-order-count'),
-  paymentStatusCard: document.querySelector('#payment-status-card'),
-  paymentStatusCopy: document.querySelector('#payment-status-copy'),
+  paymentHero: document.querySelector('#payment-hero'),
+  paymentHeroLabel: document.querySelector('#payment-hero-label'),
+  paymentStatusChip: document.querySelector('#payment-status-chip'),
+  paymentHeroAmount: document.querySelector('#payment-hero-amount'),
+  paymentHeroSubject: document.querySelector('#payment-hero-subject'),
+  paymentInfoCard: document.querySelector('#payment-info-card'),
+  paymentInfoActions: document.querySelector('#payment-info-actions'),
   paymentOrderDetail: document.querySelector('#payment-order-detail'),
+  paymentChannels: document.querySelector('#payment-channels'),
+  paymentPurchaseBar: document.querySelector('#payment-purchase-bar'),
   paymentCloseOrder: document.querySelector('#payment-close-order'),
   paymentRefreshOrder: document.querySelector('#payment-refresh-order'),
   paymentSimulate: document.querySelector('#payment-simulate'),
@@ -957,7 +965,7 @@ async function selectTeam(teamId) {
   // 当前团队对象要立刻跟上：下面两个加载是并行的，只改 teamId 的话
   // 钱包/记录页会拿到上一个团队的数据（角色、余额、流水全对不上）
   state.mart.team = next || null;
-  state.purchase = { kind: null, order: null, attempt: null };
+  state.purchase = { kind: null, order: null, attempt: null, channel: 'alipay' };
   try { await window.pddMonitor.preferences.set('ui.selectedTeamId', String(teamId)); } catch {}
   await Promise.all([loadTeamData(), loadWalletData()]);
 }
@@ -1765,8 +1773,14 @@ async function startRechargePurchase(pkg) {
   }
 }
 
+const PAYMENT_CHANNELS = {
+  alipay: { name: '支付宝', icon: 'qr-code', hint: '打开扫码窗口，用支付宝扫码支付' },
+  mock: { name: '本地模拟支付', icon: 'flask-conical', hint: '本地调试渠道，点击后直接完成支付' }
+};
+
 function openPurchase(kind, order, subject) {
-  state.purchase = { kind, order, attempt: null, subject };
+  const channel = PAYMENT_CHANNELS[order?.channel] ? order.channel : 'alipay';
+  state.purchase = { kind, order, attempt: null, subject, channel };
   showView('payment');
   renderPaymentOrder();
 }
@@ -1779,23 +1793,54 @@ function purchaseSubject() {
   return 'Mart 订单';
 }
 
+function paymentChannelLabel(channel) {
+  return PAYMENT_CHANNELS[channel]?.name || channel || '';
+}
+
+function formatRemaining(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  if (minutes >= 60) return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+  return `${minutes} 分 ${String(seconds).padStart(2, '0')} 秒`;
+}
+
 function renderPaymentOrder() {
   const { order, attempt } = state.purchase;
-  elements.paymentStatusCard.hidden = !order;
+  stopOrderExpireCountdown();
+  elements.paymentSimulate.hidden = true;
+  elements.paymentHero.hidden = !order;
+  elements.paymentInfoCard.hidden = !order;
+  elements.paymentChannels.hidden = true;
+  elements.paymentPurchaseBar.hidden = true;
   if (!order) return;
-  elements.paymentStatusCopy.textContent = `订单 ${order.order_no} · ${ORDER_STATUS_LABELS[order.status] || '处理中'}`;
 
+  elements.paymentHero.classList.toggle('is-done', order.status === 2 || order.status === 4);
+  elements.paymentHero.classList.toggle('is-inactive', order.status === 3 || order.status === 5);
+  elements.paymentHeroLabel.textContent = order.status === 1
+    ? '应付金额'
+    : (order.status === 2 || order.status === 4) ? '实付金额' : '订单金额';
+  elements.paymentStatusChip.textContent = ORDER_STATUS_LABELS[order.status] || '处理中';
+  const currency = document.createElement('span');
+  currency.className = 'currency';
+  currency.textContent = '¥';
+  elements.paymentHeroAmount.replaceChildren(
+    currency,
+    document.createTextNode((Number(order.amount_fen || 0) / 100).toFixed(2))
+  );
+  elements.paymentHeroSubject.textContent = purchaseSubject();
+
+  // 金额、商品、状态都在 hero 上，这里只留订单自身的信息
   const detail = elements.paymentOrderDetail;
   detail.replaceChildren();
   const rows = [
-    ['商品', purchaseSubject()],
-    ['应付金额', formatYuan(order.amount_fen)],
-    ['订单状态', ORDER_STATUS_LABELS[order.status] || '处理中'],
-    ['支付方式', order.channel ? (order.channel === 'mock' ? '本地模拟支付' : order.channel) : '未发起'],
-    ['有效至', formatDate(order.expire_at, '待确认')]
+    ['订单号', order.order_no],
+    ['支付方式', paymentChannelLabel(attempt?.channel || order.channel) || '未发起']
   ];
+  if (order.status === 1) rows.push(['有效至', formatDate(order.expire_at, '待确认'), true]);
   if (order.paid_at) rows.push(['支付时间', formatDate(order.paid_at, '待确认')]);
-  for (const [label, value] of rows) {
+  if (order.closed_at) rows.push(['关闭时间', formatDate(order.closed_at, '待确认')]);
+  for (const [label, value, withCountdown] of rows) {
     const row = document.createElement('div');
     row.className = 'finance-row';
     const left = document.createElement('div');
@@ -1805,46 +1850,91 @@ function renderPaymentOrder() {
     const right = document.createElement('div');
     right.className = 'finance-row-value';
     right.textContent = value;
+    if (withCountdown) {
+      const countdown = document.createElement('small');
+      countdown.id = 'payment-expire-countdown';
+      right.append(countdown);
+    }
     row.append(left, right);
     detail.append(row);
   }
 
-  const channel = attempt?.channel || order.channel || '';
-  elements.paymentSimulate.hidden = !(order.status === 1 && attempt && channel === 'mock');
   elements.paymentRefreshOrder.hidden = !(order.status === 1 || order.status === 2);
   elements.paymentCloseOrder.hidden = order.status !== 1;
+  elements.paymentInfoActions.hidden = elements.paymentRefreshOrder.hidden && elements.paymentCloseOrder.hidden;
 
-  if (order.status === 1 && !attempt) {
-    const pick = document.createElement('div');
-    pick.className = 'payment-channel-actions';
-    const alipay = document.createElement('button');
-    alipay.className = 'button button-primary';
-    alipay.type = 'button';
-    alipay.textContent = '支付宝支付';
-    alipay.addEventListener('click', () => void beginPayment('alipay'));
-    const mock = document.createElement('button');
-    mock.className = 'button';
-    mock.type = 'button';
-    mock.textContent = '本地模拟支付';
-    mock.addEventListener('click', () => void beginPayment('mock'));
-    pick.append(alipay, mock);
-    detail.append(pick);
-  }
-  if (order.status === 1 && attempt?.payment_params?.pay_url) {
-    const open = document.createElement('button');
-    open.className = 'button button-primary';
-    open.type = 'button';
-    open.textContent = '打开支付宝扫码窗口';
-    open.addEventListener('click', async () => {
-      try {
-        await window.pddMonitor.mart.openPayWindow(attempt.payment_params.pay_url);
-        showNotice('请用支付宝扫码支付，完成后关闭窗口即可自动确认');
-      } catch (error) {
-        showNotice(error.message || '无法打开支付窗口', true);
-      }
+  if (order.status === 1 && !attempt) renderPaymentChannels();
+  renderPaymentPurchaseBar(attempt);
+  startOrderExpireCountdown(order);
+  refreshIcons();
+}
+
+// 渠道做成可选卡片，支付只由底部固定栏那一个主按钮发起
+function renderPaymentChannels() {
+  const grid = elements.paymentChannels;
+  grid.replaceChildren();
+  grid.hidden = false;
+  for (const [key, meta] of Object.entries(PAYMENT_CHANNELS)) {
+    const selected = state.purchase.channel === key;
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = `plan-option${selected ? ' is-selected' : ''}`;
+    option.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    option.addEventListener('click', () => {
+      state.purchase.channel = key;
+      renderPaymentOrder();
     });
+    const icon = document.createElement('span');
+    icon.className = 'option-icon';
+    icon.append(createIcon(meta.icon));
+    const title = document.createElement('h4');
+    title.textContent = meta.name;
+    const hint = document.createElement('p');
+    hint.className = 'option-hint';
+    hint.textContent = meta.hint;
+    option.append(icon, title, hint);
+    if (selected) {
+      const check = document.createElement('span');
+      check.className = 'option-check';
+      check.append(createIcon('check'));
+      option.append(check);
+    }
+    grid.append(option);
+  }
+}
+
+function renderPaymentPurchaseBar(attempt) {
+  const { order } = state.purchase;
+  const bar = elements.paymentPurchaseBar;
+  bar.replaceChildren();
+  bar.hidden = true;
+  if (!order || order.status !== 1) return;
+
+  const summary = document.createElement('div');
+  summary.className = 'purchase-summary';
+  const total = document.createElement('strong');
+  total.textContent = `实付 ${formatYuan(order.amount_fen)}`;
+  const meta = document.createElement('small');
+  summary.append(total, meta);
+  const actions = document.createElement('div');
+  actions.className = 'purchase-actions';
+
+  if (!attempt) {
+    meta.textContent = PAYMENT_CHANNELS[state.purchase.channel]?.hint || '';
+    const submit = document.createElement('button');
+    submit.className = 'button button-primary';
+    submit.type = 'button';
+    submit.textContent = '立即支付';
+    submit.addEventListener('click', () => void beginPayment(state.purchase.channel));
+    actions.append(submit);
+  } else if (attempt.channel === 'mock') {
+    meta.textContent = '本地调试渠道，点击后立即完成支付';
+    elements.paymentSimulate.hidden = false;
+    actions.append(elements.paymentSimulate);
+  } else if (attempt.payment_params?.pay_url) {
+    meta.textContent = '扫码完成后自动确认，也可以手动查询';
     const browser = document.createElement('button');
-    browser.className = 'button';
+    browser.className = 'button-link';
     browser.type = 'button';
     browser.textContent = '在浏览器打开';
     browser.addEventListener('click', async () => {
@@ -1854,21 +1944,48 @@ function renderPaymentOrder() {
         showNotice(error.message || '无法打开支付页面', true);
       }
     });
-    const actions = document.createElement('div');
-    actions.className = 'payment-channel-actions';
-    actions.append(open, browser);
-    const hint = document.createElement('p');
-    hint.className = 'empty-copy';
-    hint.textContent = '扫码完成支付后，窗口关闭会自动查询支付状态。';
-    detail.append(actions, hint);
+    const open = document.createElement('button');
+    open.className = 'button button-primary';
+    open.type = 'button';
+    open.textContent = '打开扫码窗口';
+    open.addEventListener('click', async () => {
+      try {
+        await window.pddMonitor.mart.openPayWindow(attempt.payment_params.pay_url);
+        showNotice('请用支付宝扫码支付，完成后关闭窗口即可自动确认');
+      } catch (error) {
+        showNotice(error.message || '无法打开支付窗口', true);
+      }
+    });
+    actions.append(browser, open);
+  } else {
+    return;
   }
-  if (order.status === 4) {
-    const done = document.createElement('p');
-    done.className = 'empty-copy';
-    done.textContent = state.purchase.kind === 'membership'
-      ? '会员已生效，可返回团队页查看新的档位和配额。'
-      : '积分已到账，可返回钱包页查看余额和流水。';
-    detail.append(done);
+
+  bar.append(summary, actions);
+  bar.hidden = false;
+}
+
+// 10 分钟支付窗口要能看见剩余时间；节点随每次渲染重建，所以按 id 查找
+function startOrderExpireCountdown(order) {
+  if (order.status !== 1 || !order.expire_at) return;
+  const tick = () => {
+    const node = document.querySelector('#payment-expire-countdown');
+    if (!node) {
+      stopOrderExpireCountdown();
+      return;
+    }
+    const remain = Date.parse(order.expire_at) - Date.now();
+    node.textContent = remain > 0 ? `剩余 ${formatRemaining(remain)}` : '已超时，等待关闭';
+    node.classList.toggle('is-urgent', remain > 0 && remain <= 120000);
+  };
+  tick();
+  state.expireTimer = window.setInterval(tick, 1000);
+}
+
+function stopOrderExpireCountdown() {
+  if (state.expireTimer) {
+    window.clearInterval(state.expireTimer);
+    state.expireTimer = null;
   }
 }
 
@@ -1943,6 +2060,13 @@ async function simulatePayment() {
 async function closePurchaseOrder() {
   const order = state.purchase.order;
   if (!order) return;
+  const ok = await confirmAction({
+    title: '关闭订单？',
+    description: `关闭后订单 ${order.order_no} 无法继续支付，需要重新下单。`,
+    confirmLabel: '关闭订单',
+    icon: 'circle-slash'
+  });
+  if (!ok) return;
   try {
     await window.pddMonitor.mart.closeOrder(order.id);
     stopOrderPolling();
@@ -2092,6 +2216,7 @@ function showView(name) {
   }
   document.querySelectorAll('.view').forEach((view) => { view.hidden = view.id !== `${name}-view`; });
   document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('is-active', button.dataset.view === name));
+  if (name !== 'payment') stopOrderExpireCountdown();
   const isAccounts = name === 'accounts';
   const isSettings = name === 'settings';
   elements.addAccount.hidden = !isAccounts;

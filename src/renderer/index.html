@@ -187,12 +187,24 @@
         </section>
 
         <section class="view platform-view" id="payment-view" hidden>
-          <div class="section-header"><div><h2>支付订单</h2><p>支付结果以服务端回调为准，订单 10 分钟未支付会自动关闭。</p></div></div>
-          <section class="finance-card payment-status-card" id="payment-status-card" hidden>
-            <div class="finance-card-header"><div><h3>订单信息</h3><p id="payment-status-copy"></p></div></div>
-            <div id="payment-order-detail"></div>
-            <div class="modal-actions"><button class="button" type="button" id="payment-close-order">关闭订单</button><button class="button" type="button" id="payment-refresh-order">查询支付状态</button><button class="button button-accent-outline" type="button" id="payment-simulate" hidden>模拟支付成功（本地调试）</button></div>
+          <div class="payment-hero" id="payment-hero" hidden>
+            <div class="payment-hero-head">
+              <span class="payment-hero-label" id="payment-hero-label">应付金额</span>
+              <span class="payment-status-chip" id="payment-status-chip"></span>
+            </div>
+            <div class="payment-hero-value" id="payment-hero-amount"></div>
+            <div class="payment-hero-sub" id="payment-hero-subject"></div>
+          </div>
+          <section class="finance-card payment-info-card" id="payment-info-card" hidden>
+            <div class="finance-list" id="payment-order-detail"></div>
+            <div class="payment-info-actions" id="payment-info-actions">
+              <button class="button-link is-primary" type="button" id="payment-refresh-order">查询支付状态</button>
+              <button class="button-link" type="button" id="payment-close-order">关闭订单</button>
+            </div>
           </section>
+          <div class="plan-grid option-grid" id="payment-channels" role="radiogroup" aria-label="支付方式" hidden></div>
+          <div class="purchase-bar" id="payment-purchase-bar" hidden></div>
+          <button class="button button-primary" type="button" id="payment-simulate" hidden>模拟支付成功</button>
         </section>
       </div>
     </main>
