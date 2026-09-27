@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('pddMonitor', {
+  app: {
+    info: () => ipcRenderer.invoke('app:info')
+  },
   platform: {
     state: () => ipcRenderer.invoke('platform:state'),
     login: (credentials) => ipcRenderer.invoke('platform:login', credentials),

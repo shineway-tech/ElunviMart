@@ -112,6 +112,7 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(preload, /invoke\('mart:rechargeOrder'/);
   assert.match(preload, /invoke\('mart:simulatePayment'/);
   assert.match(preload, /invoke\('mart:orderContext'/);
+  assert.match(preload, /invoke\('app:info'/);
   assert.doesNotMatch(preload, /platform:createCheckout|platform:teamMembers|platform:billingContexts/);
 
   assert.match(renderer, /window\.pddMonitor\.mart\.membershipQuote/);
@@ -121,7 +122,7 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /qr\.createSvgTag\(/);
   assert.match(renderer, /payment_params\?\.qr_code/);
   // 渲染用的辅助函数必须存在，别再被重构顺手删掉
-  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentPurchaseBar', 'renderPaymentQrCard', 'startOrderExpireCountdown', 'startPaymentForOrder', 'isOrderExpired']) {
+  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentPurchaseBar', 'renderPaymentQrCard', 'startOrderExpireCountdown', 'startPaymentForOrder', 'isOrderExpired', 'isLocalBackend']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
   }
   // 侧边栏账号块下面独立的团队/积分块

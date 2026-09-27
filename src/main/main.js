@@ -571,6 +571,8 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:rechargeOrder', (_event, input) => martService.createRechargeOrder(input || {}));
   ipcMain.handle('mart:order', (_event, orderId) => martService.order(orderId));
   ipcMain.handle('mart:orderContext', (_event, orderId) => martService.orderContext(orderId));
+  // 渲染层靠这个判断当前是本地后端还是线上：mock 渠道只在本地开放
+  ipcMain.handle('app:info', () => ({ isPackaged: app.isPackaged, martApiBaseUrl: martConfigFor().apiBaseUrl }));
   ipcMain.handle('mart:orders', (_event, input) => martService.listOrders(input || {}));
   ipcMain.handle('mart:paymentAttempt', (_event, input) => martService.createPaymentAttempt(input || {}));
   ipcMain.handle('mart:closeOrder', (_event, orderId) => martService.closeOrder(orderId));

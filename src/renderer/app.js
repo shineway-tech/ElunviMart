@@ -1,4 +1,5 @@
 const state = {
+  app: { isPackaged: false, martApiBaseUrl: '' },
   platform: { status: 'loading', profile: null, security: null, accountEmail: null },
   mart: {
     linked: false,
@@ -1945,7 +1946,8 @@ function renderPaymentPurchaseBar(attempt) {
     submit.type = 'button';
     submit.textContent = '立即支付';
     submit.addEventListener('click', () => void beginPayment(state.purchase.channel));
-    actions.append(simulateLink());
+    const mockLink = simulateLink();
+    if (mockLink) actions.append(mockLink);
     bar.append(actions, submit);
   } else if (attempt.channel === 'mock') {
     elements.paymentSimulate.hidden = false;
@@ -1956,7 +1958,8 @@ function renderPaymentPurchaseBar(attempt) {
     confirm.type = 'button';
     confirm.textContent = '我已完成支付';
     confirm.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
-    actions.append(simulateLink());
+    const mockLink = simulateLink();
+    if (mockLink) actions.append(mockLink);
     bar.append(actions, confirm);
   } else if (attempt.payment_params?.pay_url) {
     // 没抓到码串就退回独立扫码窗口这条老路
@@ -1980,14 +1983,29 @@ function renderPaymentPurchaseBar(attempt) {
   bar.hidden = false;
 }
 
-// 本地调试走模拟渠道，日常支付页只留一个不显眼的小入口
+// 本地调试走模拟渠道；线上后端不提供 mock 渠道，这里就不显示入口
 function simulateLink() {
+  if (!isLocalBackend()) return null;
   const link = document.createElement('button');
   link.className = 'button-link';
   link.type = 'button';
   link.textContent = '本地模拟支付';
   link.addEventListener('click', () => void beginPayment('mock'));
   return link;
+}
+
+// 只有连本机后端（开发/联调）才认为 mock 渠道可用，打包版连线上不会出现这个入口
+function isLocalBackend() {
+  return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/u.test(state.app.martApiBaseUrl || '');
+}
+
+async function loadAppInfo() {
+  try {
+    const info = await window.pddMonitor.app.info();
+    state.app = { isPackaged: Boolean(info?.isPackaged), martApiBaseUrl: String(info?.martApiBaseUrl || '') };
+  } catch {
+    state.app = { isPackaged: false, martApiBaseUrl: '' };
+  }
 }
 
 // 10 分钟支付窗口要能看见剩余时间；节点随每次渲染重建，所以按 id 查找
@@ -2984,4 +3002,5 @@ window.pddMonitor.onMartChanged(handleMartChanged);
 
 refreshIcons();
 setPlatformShell('loading');
+void loadAppInfo();
 loadPlatformState();
