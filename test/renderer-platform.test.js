@@ -113,6 +113,13 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(preload, /invoke\('mart:simulatePayment'/);
   assert.match(preload, /invoke\('mart:orderContext'/);
   assert.match(preload, /invoke\('app:info'/);
+  assert.match(preload, /invoke\('app:updateInstall'/);
+  assert.match(preload, /invoke\('app:updateOpenDownload'/);
+  assert.match(preload, /onUpdateReady/);
+  assert.match(html, /id="update-banner"/);
+  assert.match(html, /id="update-banner-action"/);
+  assert.match(renderer, /window\.pddMonitor\.app\.onUpdateReady\(/);
+  assert.ok(renderer.includes('function showUpdateBanner('), '缺少更新提示条渲染函数');
   assert.doesNotMatch(preload, /platform:createCheckout|platform:teamMembers|platform:billingContexts/);
 
   assert.match(renderer, /window\.pddMonitor\.mart\.membershipQuote/);

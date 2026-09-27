@@ -1,5 +1,6 @@
 const state = {
   app: { isPackaged: false, martApiBaseUrl: '' },
+  update: { version: '', portable: false },
   platform: { status: 'loading', profile: null, security: null, accountEmail: null },
   mart: {
     linked: false,
@@ -75,6 +76,10 @@ const elements = {
   syncProducts: document.querySelector('#sync-products'),
   notice: document.querySelector('#notice'),
   toast: document.querySelector('#toast'),
+  updateBanner: document.querySelector('#update-banner'),
+  updateBannerCopy: document.querySelector('#update-banner-copy'),
+  updateBannerAction: document.querySelector('#update-banner-action'),
+  updateBannerDismiss: document.querySelector('#update-banner-dismiss'),
   modal: document.querySelector('#account-modal'),
   loginStartStep: document.querySelector('#login-start-step'),
   loginConfirmStep: document.querySelector('#login-confirm-step'),
@@ -2000,6 +2005,30 @@ function simulateLink() {
 function isLocalBackend() {
   return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/u.test(state.app.martApiBaseUrl || '');
 }
+
+// 自动更新：下载完成后弹一条常驻提示，用户点按钮才重启（免安装版引导去下载页）
+function showUpdateBanner({ version, portable }) {
+  state.update = { version: String(version || ''), portable: Boolean(portable) };
+  elements.updateBannerCopy.textContent = portable
+    ? `新版本 ${state.update.version} 已发布，免安装版请到下载页更新`
+    : `新版本 ${state.update.version} 已下载，重启即可完成更新`;
+  elements.updateBannerAction.textContent = portable ? '去下载' : '重启更新';
+  elements.updateBanner.hidden = false;
+  refreshIcons();
+}
+
+async function runUpdateAction() {
+  if (state.update.portable) {
+    await window.pddMonitor.app.openUpdateDownload();
+    return;
+  }
+  const result = await window.pddMonitor.app.installUpdate();
+  if (!result?.ok) showNotice('更新还没准备好，稍后再试', true);
+}
+
+window.pddMonitor.app.onUpdateReady((payload) => showUpdateBanner(payload || {}));
+elements.updateBannerAction.addEventListener('click', () => void runUpdateAction());
+elements.updateBannerDismiss.addEventListener('click', () => { elements.updateBanner.hidden = true; });
 
 async function loadAppInfo() {
   try {

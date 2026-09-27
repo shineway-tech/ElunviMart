@@ -4,19 +4,23 @@
   "version": "1.0.0",
   "private": true,
   "description": "拼多多商家百亿补贴状态监控客户端",
+  "author": "Shineway Tech",
   "main": "src/main/main.js",
+  "packageManager": "pnpm@11.19.0",
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
     "test": "node --test test/*.test.js",
-    "package:win": "node scripts/package-windows.js"
+    "package:win": "node scripts/package-windows.js",
+    "package:mac": "node scripts/package-mac.js"
   },
   "build": {
     "appId": "com.shineway.elunvimart",
     "productName": "Elunvi Mart",
     "asar": true,
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "src/**/*",
@@ -27,20 +31,71 @@
       "!design-qa.md",
       "!PROJECT_GUIDELINES.md"
     ],
-    "win": {
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://static.honeykid.cn/public/elunvi_mart"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.business",
+      "icon": "src/renderer/assets/elunvi-mart.icns",
+      "minimumSystemVersion": "11.0",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
       "target": [
         {
-          "target": "portable",
-          "arch": ["x64"]
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
         }
       ],
-      "artifactName": "Elunvi-Mart-${version}-portable.${ext}"
+      "artifactName": "Elunvi-Mart-${version}-macos-universal.${ext}"
+    },
+    "dmg": {
+      "title": "Elunvi Mart ${version}"
+    },
+    "win": {
+      "icon": "src/renderer/assets/elunvi-mart.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Elunvi-Mart-${version}-windows-x64-${target}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Elunvi-Mart-${version}-windows-x64-setup.${ext}"
     }
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "lucide": "^1.47.0"
   },
   "devDependencies": {
-    "electron": "^37.2.6"
+    "electron": "^37.2.6",
+    "electron-builder": "26.15.3"
   }
 }

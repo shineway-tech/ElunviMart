@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { initUpdater } = require('./updater');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
@@ -41,6 +42,7 @@ let martSession;
 let userDataRoot;
 let activePlatformUserId = null;
 let scheduler;
+let updater = null;
 let syncQueue;
 const loginWindows = new Map();
 const antiContentByAccount = new Map();
@@ -104,6 +106,15 @@ function requiresEmailBinding(security) {
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+// 免安装版装不了更新，只能引导用户去固定下载地址
+function updateDownloadUrl() {
+  try {
+    return String(require('../../package.json').build.publish[0].url || '');
+  } catch {
+    return '';
+  }
 }
 
 function createMainWindow() {
@@ -575,6 +586,13 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:orderContext', (_event, orderId) => martService.orderContext(orderId));
   // 渲染层靠这个判断当前是本地后端还是线上：mock 渠道只在本地开放
   ipcMain.handle('app:info', () => ({ isPackaged: app.isPackaged, martApiBaseUrl: martConfigFor().apiBaseUrl }));
+  ipcMain.handle('app:updateInstall', () => (updater?.enabled ? updater.install() : { ok: false, reason: 'disabled' }));
+  ipcMain.handle('app:updateOpenDownload', async () => {
+    const url = updateDownloadUrl();
+    if (!url) return { ok: false };
+    await shell.openExternal(url);
+    return { ok: true, url };
+  });
   ipcMain.handle('mart:orders', (_event, input) => martService.listOrders(input || {}));
   ipcMain.handle('mart:paymentAttempt', (_event, input) => martService.createPaymentAttempt(input || {}));
   ipcMain.handle('mart:closeOrder', (_event, orderId) => martService.closeOrder(orderId));
@@ -731,6 +749,7 @@ app.whenReady().then(() => {
   registerIpc(adapter);
   scheduler.configure(DEFAULT_DATA.settings);
   createMainWindow();
+  updater = initUpdater({ isPackaged: app.isPackaged, sendToRenderer });
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createMainWindow(); });
 });
 

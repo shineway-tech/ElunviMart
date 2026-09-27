@@ -1,0 +1,205 @@
+name: Release Desktop
+
+# 打 tag vX.Y.Z 触发正式发布（tag 必须和 package.json 的 version 一致）；
+# 也可以在 Actions 页面手动触发，做一次不发 Release 的构建验证。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  OSS_PREFIX: public/elunvi_mart
+
+jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [[ "$TAG" != "$VERSION" ]]; then
+              echo "tag(${GITHUB_REF_NAME}) 与 package.json 版本(${VERSION}) 不一致" >&2
+              exit 1
+            fi
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  macos:
+    name: Build macOS universal DMG
+    needs: resolve-version
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      APP_VERSION: ${{ needs.resolve-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+      - name: Import Apple Developer ID certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APPLE_CERTIFICATE:-}" || -z "${APPLE_CERTIFICATE_PASSWORD:-}" || -z "${KEYCHAIN_PASSWORD:-}" ]]; then
+            echo "缺少 APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD / KEYCHAIN_PASSWORD" >&2
+            exit 1
+          fi
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          echo "证书导入完成"
+
+      - name: Package signed and notarized DMG
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APPLE_API_ISSUER:-}" || -z "${APPLE_API_KEY_ID:-}" || -z "${APPLE_API_KEY_BASE64:-}" ]]; then
+            echo "缺少 APPLE_API_ISSUER / APPLE_API_KEY / APPLE_API_KEY_BASE64" >&2
+            exit 1
+          fi
+          P8_PATH="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8"
+          echo -n "$APPLE_API_KEY_BASE64" | base64 --decode > "$P8_PATH"
+          export APPLE_API_KEY="$P8_PATH"
+          ELUNVI_MAC_NOTARIZE=1 pnpm run package:mac
+
+      - name: Verify signature and staple the DMG
+        env:
+          APP_VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DMG="release/Elunvi-Mart-${APP_VERSION}-macos-universal.dmg"
+          # electron-builder 已对 .app 签名并公证，这里再对 DMG 做一次 staple，离线安装也能过 Gatekeeper
+          xcrun stapler staple -v "$DMG"
+          xcrun stapler validate -v "$DMG"
+          codesign --verify --deep --strict --verbose=2 "release/mac-universal/Elunvi Mart.app" || true
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: elunvi-mart-macos-universal
+          if-no-files-found: error
+          path: |
+            release/Elunvi-Mart-*-macos-universal.dmg
+            release/Elunvi-Mart-*-macos-universal.zip
+            release/latest-mac.yml
+
+      - name: Upload macOS artifacts to OSS
+        env:
+          ALIYUN_OSS_REGION: ${{ secrets.ALIYUN_OSS_REGION }}
+          ALIYUN_OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
+          ALIYUN_OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          ALIYUN_OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+          ALIYUN_OSS_PUBLIC_BASE_URL: https://static.honeykid.cn
+          ALIYUN_OSS_PREFIX: ${{ env.OSS_PREFIX }}
+        run: |
+          set -euo pipefail
+          for file in \
+            "release/Elunvi-Mart-${APP_VERSION}-macos-universal.dmg" \
+            "release/Elunvi-Mart-${APP_VERSION}-macos-universal.zip" \
+            "release/latest-mac.yml"
+          do
+            node scripts/upload-release-assets.js --file "$file" --version "$APP_VERSION"
+          done
+
+  windows:
+    name: Build Windows x64
+    needs: resolve-version
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      APP_VERSION: ${{ needs.resolve-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+      - name: Package installer and portable
+        run: pnpm run package:win
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: elunvi-mart-windows-x64
+          if-no-files-found: error
+          path: |
+            release/Elunvi-Mart-*-windows-x64-setup.exe
+            release/Elunvi-Mart-*-windows-x64-portable.exe
+            release/latest.yml
+
+      - name: Upload Windows artifacts to OSS
+        shell: pwsh
+        env:
+          ALIYUN_OSS_REGION: ${{ secrets.ALIYUN_OSS_REGION }}
+          ALIYUN_OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
+          ALIYUN_OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          ALIYUN_OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+          ALIYUN_OSS_PUBLIC_BASE_URL: https://static.honeykid.cn
+          ALIYUN_OSS_PREFIX: ${{ env.OSS_PREFIX }}
+        run: |
+          foreach ($file in @(
+            "release/Elunvi-Mart-$env:APP_VERSION-windows-x64-setup.exe",
+            "release/Elunvi-Mart-$env:APP_VERSION-windows-x64-portable.exe",
+            "release/latest.yml"
+          )) {
+            node scripts/upload-release-assets.js --file $file --version $env:APP_VERSION
+            if ($LASTEXITCODE -ne 0) { throw "OSS 上传失败：$file" }
+          }
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [resolve-version, macos, windows]
+    if: needs.resolve-version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Elunvi Mart v${{ needs.resolve-version.outputs.version }}
+          body: |
+            macOS（通用包，Intel 与 Apple Silicon 通用）与 Windows x64 安装包 / 免安装包。
+            应用内会自动检查更新；免安装版请重新下载覆盖。
+          files: artifacts/**
+          fail_on_unmatched_files: true
