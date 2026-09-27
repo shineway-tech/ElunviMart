@@ -24,6 +24,9 @@ git tag v1.0.1 && git push origin v1.0.1
 | Windows x64 | `Elunvi-Mart-<version>-windows-x64-setup.exe`（安装版，支持应用内更新）、`Elunvi-Mart-<version>-windows-x64-portable.exe`（免安装） |
 | 更新清单 | `latest-mac.yml` / `latest.yml`（electron-builder 生成，供 electron-updater 读取） |
 
+`Elunvi-Mart-macos-universal.zip.blockmap` 与 `Elunvi-Mart-windows-x64-setup.exe.blockmap` 也会一起上传：
+electron-updater 靠它做**差分更新**（只下载变化的块，而不是整包 200MB）。缺了这两个文件更新仍能成功，但会退化成整包下载。
+
 产物同时上传到 GitHub Release 和 OSS（`https://static.honeykid.cn`）：
 
 ```text

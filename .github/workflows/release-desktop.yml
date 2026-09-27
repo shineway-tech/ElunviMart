@@ -111,6 +111,7 @@ jobs:
           path: |
             release/Elunvi-Mart-macos-universal.dmg
             release/Elunvi-Mart-macos-universal.zip
+            release/Elunvi-Mart-macos-universal.zip.blockmap
             release/latest-mac.yml
 
       - name: Upload macOS artifacts to OSS
@@ -128,6 +129,7 @@ jobs:
           for file in \
             "release/Elunvi-Mart-macos-universal.dmg" \
             "release/Elunvi-Mart-macos-universal.zip" \
+            "release/Elunvi-Mart-macos-universal.zip.blockmap" \
             "release/latest-mac.yml"
           do
             node scripts/upload-release-assets.js --file "$file" --version "$APP_VERSION"
@@ -160,6 +162,7 @@ jobs:
           if-no-files-found: error
           path: |
             release/Elunvi-Mart-windows-x64-setup.exe
+            release/Elunvi-Mart-windows-x64-setup.exe.blockmap
             release/Elunvi-Mart-windows-x64-portable.exe
             release/latest.yml
 
@@ -177,6 +180,7 @@ jobs:
         run: |
           foreach ($file in @(
             "release/Elunvi-Mart-windows-x64-setup.exe",
+            "release/Elunvi-Mart-windows-x64-setup.exe.blockmap",
             "release/Elunvi-Mart-windows-x64-portable.exe",
             "release/latest.yml"
           )) {
