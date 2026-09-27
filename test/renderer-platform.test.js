@@ -121,6 +121,9 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   // 二维码模式拿到的码串本地渲染，别再退回独立窗口
   assert.match(renderer, /qr\.createSvgTag\(/);
   assert.match(renderer, /payment_params\?\.qr_code/);
+  // 二维码会过期：进支付页必须重新拉码，不能复用上一次的（历史上这么干过）
+  assert.match(renderer, /刷新二维码/);
+  assert.doesNotMatch(renderer, /latest_attempt/);
   // 渲染用的辅助函数必须存在，别再被重构顺手删掉
   for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentPurchaseBar', 'renderPaymentQrCard', 'startOrderExpireCountdown', 'startPaymentForOrder', 'isOrderExpired', 'isLocalBackend']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);

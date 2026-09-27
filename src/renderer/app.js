@@ -1800,22 +1800,17 @@ function isOrderExpired(order) {
 
 async function startPaymentForOrder(order) {
   try {
+    // 先回读一次订单，避免给已经超时的单再发起一笔渠道交易
     const detail = await window.pddMonitor.mart.orderContext(order.id);
     if (String(state.purchase.order?.id) !== String(order.id)) return;
     if (detail.order) {
       state.purchase.order = detail.order;
-      if (detail.order.status !== 1) {
+      if (detail.order.status !== 1 || isOrderExpired(detail.order)) {
         renderPaymentOrder();
         return;
       }
     }
-    const attempt = detail.latest_attempt;
-    if (attempt?.payment_params?.qr_code || attempt?.payment_params?.pay_url) {
-      state.purchase.attempt = attempt;
-      renderPaymentOrder();
-      startOrderPolling();
-      return;
-    }
+    // 二维码会过期，所以每次进支付页都重新发起一次，拿一张新码
     await beginPayment('alipay');
   } catch (error) {
     showNotice(error.message || '无法发起支付', true);
@@ -1953,6 +1948,13 @@ function renderPaymentPurchaseBar(attempt) {
     elements.paymentSimulate.hidden = false;
     bar.append(actions, elements.paymentSimulate);
   } else if (attempt.payment_params?.qr_code) {
+    // 二维码有有效期，用户扫之前发现失效可以自己换一张
+    const refreshQr = document.createElement('button');
+    refreshQr.className = 'button-link';
+    refreshQr.type = 'button';
+    refreshQr.textContent = '刷新二维码';
+    refreshQr.addEventListener('click', () => void beginPayment(state.purchase.channel));
+    actions.append(refreshQr);
     const confirm = document.createElement('button');
     confirm.className = 'button button-primary';
     confirm.type = 'button';
