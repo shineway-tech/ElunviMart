@@ -187,25 +187,28 @@
         </section>
 
         <section class="view platform-view" id="payment-view" hidden>
-          <div class="payment-hero" id="payment-hero" hidden>
-            <div class="payment-hero-head">
-              <span class="payment-hero-label" id="payment-hero-label">应付金额</span>
-              <span class="payment-status-chip" id="payment-status-chip"></span>
+          <div class="payment-sheet" id="payment-sheet" hidden>
+            <div class="payment-amount-block" id="payment-hero">
+              <div class="payment-amount-head">
+                <span class="payment-amount-label" id="payment-hero-label">应付金额</span>
+                <span class="payment-status-chip" id="payment-status-chip"></span>
+              </div>
+              <div class="payment-amount-value" id="payment-hero-amount"></div>
+              <div class="payment-amount-sub" id="payment-hero-subject"></div>
+              <div class="payment-countdown" id="payment-countdown" hidden><span>支付剩余时间</span><strong id="payment-expire-countdown"></strong></div>
             </div>
-            <div class="payment-hero-value" id="payment-hero-amount"></div>
-            <div class="payment-hero-sub" id="payment-hero-subject"></div>
+            <div class="payment-qr-block" id="payment-qr-card" hidden>
+              <div class="payment-qr-frame" id="payment-qr-code" role="img" aria-label="支付宝支付二维码"></div>
+              <strong class="payment-qr-title">打开支付宝扫一扫</strong>
+              <button class="button-link" type="button" id="payment-qr-browser">在浏览器打开</button>
+            </div>
+            <div class="payment-channel-block" id="payment-channels" role="radiogroup" aria-label="支付方式" hidden></div>
+            <div class="payment-meta" id="payment-info-card" hidden>
+              <div class="finance-list" id="payment-order-detail"></div>
+              <div class="payment-meta-actions" id="payment-info-actions" hidden></div>
+            </div>
+            <div class="payment-footer" id="payment-purchase-bar" hidden></div>
           </div>
-          <section class="finance-card payment-qr-card" id="payment-qr-card" hidden>
-            <div class="payment-qr-frame" id="payment-qr-code" role="img" aria-label="支付宝支付二维码"></div>
-            <strong class="payment-qr-title">打开支付宝扫一扫</strong>
-            <button class="button-link" type="button" id="payment-qr-browser">在浏览器打开</button>
-          </section>
-          <div class="plan-grid option-grid" id="payment-channels" role="radiogroup" aria-label="支付方式" hidden></div>
-          <section class="finance-card payment-info-card" id="payment-info-card" hidden>
-            <div class="finance-list" id="payment-order-detail"></div>
-            <div class="payment-info-actions" id="payment-info-actions" hidden></div>
-          </section>
-          <div class="purchase-bar" id="payment-purchase-bar" hidden></div>
           <button class="button-link is-primary" type="button" id="payment-refresh-order" hidden>查询支付状态</button>
           <button class="button-link" type="button" id="payment-close-order" hidden>关闭订单</button>
           <button class="button button-primary" type="button" id="payment-simulate" hidden>模拟支付成功</button>

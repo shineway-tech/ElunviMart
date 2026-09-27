@@ -149,6 +149,8 @@ const elements = {
   walletOrderCount: document.querySelector('#wallet-order-count'),
   paymentHero: document.querySelector('#payment-hero'),
   paymentHeroLabel: document.querySelector('#payment-hero-label'),
+  paymentSheet: document.querySelector('#payment-sheet'),
+  paymentCountdown: document.querySelector('#payment-countdown'),
   paymentStatusChip: document.querySelector('#payment-status-chip'),
   paymentHeroAmount: document.querySelector('#payment-hero-amount'),
   paymentHeroSubject: document.querySelector('#payment-hero-subject'),
@@ -1800,30 +1802,29 @@ function paymentChannelLabel(channel) {
   return PAYMENT_CHANNELS[channel]?.name || channel || '';
 }
 
-function formatRemaining(ms) {
+function formatClock(ms) {
   const total = Math.max(0, Math.round(ms / 1000));
   const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  if (minutes >= 60) return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
-  return `${minutes} 分 ${String(seconds).padStart(2, '0')} 秒`;
+  return `${String(minutes).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
 function renderPaymentOrder() {
   const { order, attempt } = state.purchase;
   stopOrderExpireCountdown();
   elements.paymentSimulate.hidden = true;
-  elements.paymentCloseOrder.hidden = false;
+  elements.paymentCloseOrder.hidden = true;
   elements.paymentRefreshOrder.hidden = true;
   elements.paymentInfoActions.hidden = true;
-  elements.paymentHero.hidden = !order;
+  elements.paymentSheet.hidden = !order;
   elements.paymentInfoCard.hidden = !order;
   elements.paymentQrCard.hidden = true;
   elements.paymentChannels.hidden = true;
   elements.paymentPurchaseBar.hidden = true;
+  elements.paymentCountdown.hidden = true;
   if (!order) return;
 
-  elements.paymentHero.classList.toggle('is-done', order.status === 2 || order.status === 4);
-  elements.paymentHero.classList.toggle('is-inactive', order.status === 3 || order.status === 5);
+  elements.paymentSheet.classList.toggle('is-done', order.status === 2 || order.status === 4);
+  elements.paymentSheet.classList.toggle('is-inactive', order.status === 3 || order.status === 5);
   elements.paymentHeroLabel.textContent = order.status === 1
     ? '应付金额'
     : (order.status === 2 || order.status === 4) ? '实付金额' : '订单金额';
@@ -1836,18 +1837,18 @@ function renderPaymentOrder() {
     document.createTextNode((Number(order.amount_fen || 0) / 100).toFixed(2))
   );
   elements.paymentHeroSubject.textContent = purchaseSubject();
+  elements.paymentCountdown.hidden = order.status !== 1;
 
-  // 金额、商品、状态都在 hero 上，这里只留订单自身的信息
+  // 金额、商品、倒计时在上面，这里只留订单自身的信息
   const detail = elements.paymentOrderDetail;
   detail.replaceChildren();
   const rows = [
     ['订单号', order.order_no],
     ['支付方式', paymentChannelLabel(attempt?.channel || order.channel) || '未发起']
   ];
-  if (order.status === 1) rows.push(['有效至', formatDate(order.expire_at, '待确认'), true]);
   if (order.paid_at) rows.push(['支付时间', formatDate(order.paid_at, '待确认')]);
   if (order.closed_at) rows.push(['关闭时间', formatDate(order.closed_at, '待确认')]);
-  for (const [label, value, withCountdown] of rows) {
+  for (const [label, value] of rows) {
     const row = document.createElement('div');
     row.className = 'finance-row';
     const left = document.createElement('div');
@@ -1857,16 +1858,11 @@ function renderPaymentOrder() {
     const right = document.createElement('div');
     right.className = 'finance-row-value';
     right.textContent = value;
-    if (withCountdown) {
-      const countdown = document.createElement('small');
-      countdown.id = 'payment-expire-countdown';
-      right.append(countdown);
-    }
     row.append(left, right);
     detail.append(row);
   }
 
-  // 待支付的动作全在底栏；已支付后还要能主动查一次单
+  // 待支付的动作全在卡片底部；已支付后还要能主动查一次单
   if (order.status === 2) {
     elements.paymentRefreshOrder.hidden = false;
     elements.paymentInfoActions.hidden = false;
@@ -1896,7 +1892,7 @@ function renderPaymentQrCard(attempt) {
   card.hidden = false;
 }
 
-// 渠道做成可选卡片，支付只由底部固定栏那一个主按钮发起
+// 渠道是一行一个的紧凑选项，支付由卡片底部那一个主按钮发起
 function renderPaymentChannels() {
   const grid = elements.paymentChannels;
   grid.replaceChildren();
@@ -1905,24 +1901,26 @@ function renderPaymentChannels() {
     const selected = state.purchase.channel === key;
     const option = document.createElement('button');
     option.type = 'button';
-    option.className = `plan-option${selected ? ' is-selected' : ''}`;
+    option.className = `payment-channel${selected ? ' is-selected' : ''}`;
     option.setAttribute('aria-pressed', selected ? 'true' : 'false');
     option.addEventListener('click', () => {
       state.purchase.channel = key;
       renderPaymentOrder();
     });
     const icon = document.createElement('span');
-    icon.className = 'option-icon';
+    icon.className = 'payment-channel-icon';
     icon.append(createIcon(meta.icon));
-    const title = document.createElement('h4');
+    const copy = document.createElement('span');
+    copy.className = 'payment-channel-copy';
+    const title = document.createElement('strong');
     title.textContent = meta.name;
-    const hint = document.createElement('p');
-    hint.className = 'option-hint';
+    const hint = document.createElement('small');
     hint.textContent = meta.hint;
-    option.append(icon, title, hint);
+    copy.append(title, hint);
+    option.append(icon, copy);
     if (selected) {
       const check = document.createElement('span');
-      check.className = 'option-check';
+      check.className = 'payment-channel-check';
       check.append(createIcon('check'));
       option.append(check);
     }
@@ -1937,39 +1935,30 @@ function renderPaymentPurchaseBar(attempt) {
   bar.hidden = true;
   if (!order || order.status !== 1) return;
 
-  const summary = document.createElement('div');
-  summary.className = 'purchase-summary';
-  const total = document.createElement('strong');
-  total.textContent = `实付 ${formatYuan(order.amount_fen)}`;
-  const meta = document.createElement('small');
-  summary.append(total, meta);
   const actions = document.createElement('div');
-  actions.className = 'purchase-actions';
+  actions.className = 'payment-footer-links';
+  elements.paymentCloseOrder.hidden = false;
   actions.append(elements.paymentCloseOrder);
 
   if (!attempt) {
-    meta.textContent = PAYMENT_CHANNELS[state.purchase.channel]?.hint || '';
     const submit = document.createElement('button');
     submit.className = 'button button-primary';
     submit.type = 'button';
     submit.textContent = '立即支付';
     submit.addEventListener('click', () => void beginPayment(state.purchase.channel));
-    actions.append(submit);
+    bar.append(actions, submit);
   } else if (attempt.channel === 'mock') {
-    meta.textContent = '本地调试渠道，点击后立即完成支付';
     elements.paymentSimulate.hidden = false;
-    actions.append(elements.paymentSimulate);
+    bar.append(actions, elements.paymentSimulate);
   } else if (attempt.payment_params?.qr_code) {
-    meta.textContent = '扫码支付后会自动确认';
     const confirm = document.createElement('button');
     confirm.className = 'button button-primary';
     confirm.type = 'button';
     confirm.textContent = '我已完成支付';
     confirm.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
-    actions.append(confirm);
+    bar.append(actions, confirm);
   } else if (attempt.payment_params?.pay_url) {
     // 没抓到码串就退回独立扫码窗口这条老路
-    meta.textContent = '扫码完成后自动确认，也可以手动查询';
     const open = document.createElement('button');
     open.className = 'button button-primary';
     open.type = 'button';
@@ -1982,12 +1971,11 @@ function renderPaymentPurchaseBar(attempt) {
         showNotice(error.message || '无法打开支付窗口', true);
       }
     });
-    actions.append(open);
+    bar.append(actions, open);
   } else {
     return;
   }
 
-  bar.append(summary, actions);
   bar.hidden = false;
 }
 
@@ -2001,7 +1989,7 @@ function startOrderExpireCountdown(order) {
       return;
     }
     const remain = Date.parse(order.expire_at) - Date.now();
-    node.textContent = remain > 0 ? `剩余 ${formatRemaining(remain)}` : '已超时，等待关闭';
+    node.textContent = remain > 0 ? formatClock(remain) : '已超时，等待关闭';
     node.classList.toggle('is-urgent', remain > 0 && remain <= 120000);
   };
   tick();
