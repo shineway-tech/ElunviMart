@@ -79,8 +79,7 @@
             "x64"
           ]
         }
-      ],
-      "artifactName": "Elunvi-Mart-${version}-windows-x64-${target}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
@@ -88,6 +87,9 @@
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
       "artifactName": "Elunvi-Mart-${version}-windows-x64-setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "Elunvi-Mart-${version}-windows-x64-portable.${ext}"
     }
   },
   "dependencies": {

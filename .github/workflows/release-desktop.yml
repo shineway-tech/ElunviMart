@@ -94,16 +94,14 @@ jobs:
           export APPLE_API_KEY="$P8_PATH"
           ELUNVI_MAC_NOTARIZE=1 pnpm run package:mac
 
-      - name: Verify signature and staple the DMG
-        env:
-          APP_VERSION: ${{ needs.resolve-version.outputs.version }}
+      - name: Verify the signed and notarized app
         run: |
           set -euo pipefail
-          DMG="release/Elunvi-Mart-${APP_VERSION}-macos-universal.dmg"
-          # electron-builder 已对 .app 签名并公证，这里再对 DMG 做一次 staple，离线安装也能过 Gatekeeper
-          xcrun stapler staple -v "$DMG"
-          xcrun stapler validate -v "$DMG"
-          codesign --verify --deep --strict --verbose=2 "release/mac-universal/Elunvi Mart.app" || true
+          APP="release/mac-universal/Elunvi Mart.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # 公证作用于 .app（electron-builder 已提交公证并 staple）；DMG 本身没有票据，不能 staple
+          xcrun stapler staple -v "$APP"
+          xcrun stapler validate -v "$APP"
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
