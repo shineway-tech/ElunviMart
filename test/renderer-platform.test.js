@@ -97,6 +97,10 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(html, /id="payment-channels"/);
   assert.match(html, /id="payment-purchase-bar"/);
   assert.match(html, /id="payment-info-actions"/);
+  assert.match(html, /id="payment-qr-card"/);
+  assert.match(html, /id="payment-qr-code"/);
+  assert.match(html, /id="payment-qr-browser"/);
+  assert.match(html, /vendor\/qrcode-generator\.js/);
   assert.doesNotMatch(html, /payment-status-card/);
   assert.match(html, /id="team-code-field"[\s\S]*id="team-action-code"/);
 
@@ -110,8 +114,11 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /window\.pddMonitor\.mart\.membershipQuote/);
   assert.match(renderer, /window\.pddMonitor\.mart\.acceptInvitation/);
   assert.match(renderer, /window\.pddMonitor\.mart\.walletTransactions/);
+  // 二维码模式拿到的码串本地渲染，别再退回独立窗口
+  assert.match(renderer, /qr\.createSvgTag\(/);
+  assert.match(renderer, /payment_params\?\.qr_code/);
   // 渲染用的辅助函数必须存在，别再被重构顺手删掉
-  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentChannels', 'renderPaymentPurchaseBar', 'startOrderExpireCountdown']) {
+  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentChannels', 'renderPaymentPurchaseBar', 'renderPaymentQrCard', 'startOrderExpireCountdown']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
   }
   // 侧边栏账号块下面独立的团队/积分块

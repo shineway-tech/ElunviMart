@@ -343,6 +343,10 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .payment-hero-sub{position:relative;margin-top:10px;font-size:13px;color:rgba(255,255,255,.82)}
 .payment-hero.is-inactive .payment-hero-sub{color:var(--muted)}
 .payment-info-card #payment-order-detail{color:var(--text);font-size:13px;word-break:break-all}
+.payment-qr-card{display:grid;justify-items:center;gap:10px;padding:18px 16px 16px;text-align:center}
+.payment-qr-frame{display:grid;place-items:center;padding:6px;border:1px solid var(--line);border-radius:12px;background:#fff}
+.payment-qr-frame svg{display:block;width:200px;height:200px}
+.payment-qr-title{font-size:14px;font-weight:600;color:var(--text)}
 .payment-info-actions{display:flex;align-items:center;gap:18px;margin-top:12px;padding-top:14px;border-top:1px solid var(--line)}
 .payment-info-actions[hidden]{display:none}
 .finance-row-value small.is-urgent{color:var(--accent)}

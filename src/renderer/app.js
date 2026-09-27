@@ -154,6 +154,9 @@ const elements = {
   paymentHeroSubject: document.querySelector('#payment-hero-subject'),
   paymentInfoCard: document.querySelector('#payment-info-card'),
   paymentInfoActions: document.querySelector('#payment-info-actions'),
+  paymentQrCard: document.querySelector('#payment-qr-card'),
+  paymentQrCode: document.querySelector('#payment-qr-code'),
+  paymentQrBrowser: document.querySelector('#payment-qr-browser'),
   paymentOrderDetail: document.querySelector('#payment-order-detail'),
   paymentChannels: document.querySelector('#payment-channels'),
   paymentPurchaseBar: document.querySelector('#payment-purchase-bar'),
@@ -1809,8 +1812,12 @@ function renderPaymentOrder() {
   const { order, attempt } = state.purchase;
   stopOrderExpireCountdown();
   elements.paymentSimulate.hidden = true;
+  elements.paymentCloseOrder.hidden = false;
+  elements.paymentRefreshOrder.hidden = true;
+  elements.paymentInfoActions.hidden = true;
   elements.paymentHero.hidden = !order;
   elements.paymentInfoCard.hidden = !order;
+  elements.paymentQrCard.hidden = true;
   elements.paymentChannels.hidden = true;
   elements.paymentPurchaseBar.hidden = true;
   if (!order) return;
@@ -1859,14 +1866,34 @@ function renderPaymentOrder() {
     detail.append(row);
   }
 
-  elements.paymentRefreshOrder.hidden = !(order.status === 1 || order.status === 2);
-  elements.paymentCloseOrder.hidden = order.status !== 1;
-  elements.paymentInfoActions.hidden = elements.paymentRefreshOrder.hidden && elements.paymentCloseOrder.hidden;
+  // 待支付的动作全在底栏；已支付后还要能主动查一次单
+  if (order.status === 2) {
+    elements.paymentRefreshOrder.hidden = false;
+    elements.paymentInfoActions.hidden = false;
+    elements.paymentInfoActions.append(elements.paymentRefreshOrder);
+  }
 
   if (order.status === 1 && !attempt) renderPaymentChannels();
+  renderPaymentQrCard(attempt);
   renderPaymentPurchaseBar(attempt);
   startOrderExpireCountdown(order);
   refreshIcons();
+}
+
+// 二维码模式拿到的码串在这里画出来，不再开独立窗口
+function renderPaymentQrCard(attempt) {
+  const card = elements.paymentQrCard;
+  card.hidden = true;
+  elements.paymentQrCode.replaceChildren();
+  const qrCode = attempt?.payment_params?.qr_code;
+  const encoder = window.qrcode;
+  if (!qrCode || typeof encoder !== 'function') return;
+  const qr = encoder(0, 'M');
+  qr.addData(qrCode);
+  qr.make();
+  const cellSize = Math.max(3, Math.floor(200 / qr.getModuleCount()));
+  elements.paymentQrCode.innerHTML = qr.createSvgTag({ cellSize, margin: cellSize * 2 });
+  card.hidden = false;
 }
 
 // 渠道做成可选卡片，支付只由底部固定栏那一个主按钮发起
@@ -1918,6 +1945,7 @@ function renderPaymentPurchaseBar(attempt) {
   summary.append(total, meta);
   const actions = document.createElement('div');
   actions.className = 'purchase-actions';
+  actions.append(elements.paymentCloseOrder);
 
   if (!attempt) {
     meta.textContent = PAYMENT_CHANNELS[state.purchase.channel]?.hint || '';
@@ -1931,19 +1959,17 @@ function renderPaymentPurchaseBar(attempt) {
     meta.textContent = '本地调试渠道，点击后立即完成支付';
     elements.paymentSimulate.hidden = false;
     actions.append(elements.paymentSimulate);
+  } else if (attempt.payment_params?.qr_code) {
+    meta.textContent = '扫码支付后会自动确认';
+    const confirm = document.createElement('button');
+    confirm.className = 'button button-primary';
+    confirm.type = 'button';
+    confirm.textContent = '我已完成支付';
+    confirm.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
+    actions.append(confirm);
   } else if (attempt.payment_params?.pay_url) {
+    // 没抓到码串就退回独立扫码窗口这条老路
     meta.textContent = '扫码完成后自动确认，也可以手动查询';
-    const browser = document.createElement('button');
-    browser.className = 'button-link';
-    browser.type = 'button';
-    browser.textContent = '在浏览器打开';
-    browser.addEventListener('click', async () => {
-      try {
-        await window.pddMonitor.mart.openPayUrl(attempt.payment_params.pay_url);
-      } catch (error) {
-        showNotice(error.message || '无法打开支付页面', true);
-      }
-    });
     const open = document.createElement('button');
     open.className = 'button button-primary';
     open.type = 'button';
@@ -1956,7 +1982,7 @@ function renderPaymentPurchaseBar(attempt) {
         showNotice(error.message || '无法打开支付窗口', true);
       }
     });
-    actions.append(browser, open);
+    actions.append(open);
   } else {
     return;
   }
@@ -1994,7 +2020,8 @@ async function beginPayment(channel = 'mock') {
   if (!order) return;
   try {
     const result = await window.pddMonitor.mart.paymentAttempt({ orderId: order.id, channel });
-    state.purchase.attempt = result.attempt;
+    // 支付参数在响应顶层，渲染层按 attempt 读，这里并进去
+    state.purchase.attempt = { ...result.attempt, payment_params: result.payment_params };
     state.purchase.order = result.order;
     renderPaymentOrder();
     startOrderPolling();
@@ -2896,6 +2923,15 @@ document.querySelectorAll('[data-wallet-tab]').forEach((button) => button.addEve
 elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
 elements.paymentSimulate.addEventListener('click', () => void simulatePayment());
 elements.paymentCloseOrder.addEventListener('click', () => void closePurchaseOrder());
+elements.paymentQrBrowser.addEventListener('click', async () => {
+  const payUrl = state.purchase.attempt?.payment_params?.pay_url;
+  if (!payUrl) return;
+  try {
+    await window.pddMonitor.mart.openPayUrl(payUrl);
+  } catch (error) {
+    showNotice(error.message || '无法打开支付页面', true);
+  }
+});
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;

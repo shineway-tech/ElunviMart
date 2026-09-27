@@ -195,15 +195,19 @@
             <div class="payment-hero-value" id="payment-hero-amount"></div>
             <div class="payment-hero-sub" id="payment-hero-subject"></div>
           </div>
-          <section class="finance-card payment-info-card" id="payment-info-card" hidden>
-            <div class="finance-list" id="payment-order-detail"></div>
-            <div class="payment-info-actions" id="payment-info-actions">
-              <button class="button-link is-primary" type="button" id="payment-refresh-order">查询支付状态</button>
-              <button class="button-link" type="button" id="payment-close-order">关闭订单</button>
-            </div>
+          <section class="finance-card payment-qr-card" id="payment-qr-card" hidden>
+            <div class="payment-qr-frame" id="payment-qr-code" role="img" aria-label="支付宝支付二维码"></div>
+            <strong class="payment-qr-title">打开支付宝扫一扫</strong>
+            <button class="button-link" type="button" id="payment-qr-browser">在浏览器打开</button>
           </section>
           <div class="plan-grid option-grid" id="payment-channels" role="radiogroup" aria-label="支付方式" hidden></div>
+          <section class="finance-card payment-info-card" id="payment-info-card" hidden>
+            <div class="finance-list" id="payment-order-detail"></div>
+            <div class="payment-info-actions" id="payment-info-actions" hidden></div>
+          </section>
           <div class="purchase-bar" id="payment-purchase-bar" hidden></div>
+          <button class="button-link is-primary" type="button" id="payment-refresh-order" hidden>查询支付状态</button>
+          <button class="button-link" type="button" id="payment-close-order" hidden>关闭订单</button>
           <button class="button button-primary" type="button" id="payment-simulate" hidden>模拟支付成功</button>
         </section>
       </div>
@@ -308,6 +312,7 @@
   </div>
 
   <script src="vendor/lucide.js"></script>
+  <script src="vendor/qrcode-generator.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
