@@ -27,6 +27,18 @@ function createUpdateController({ autoUpdater, portable = false, sendToRenderer 
   });
 
   const check = () => { void autoUpdater.checkForUpdates().catch(() => {}); };
+  // 手动检查：把 electron-updater 的结果整理成渲染层能直接用的状态
+  const checkNow = async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      if (state.readyVersion) return { status: 'ready', version: state.readyVersion };
+      if (result?.isUpdateAvailable) return { status: 'downloading', version: String(result?.updateInfo?.version || '') };
+      return { status: 'latest', version: '' };
+    } catch (error) {
+      console.error(`[updater] check failed: ${error?.message || error}`);
+      return { status: 'error', version: '' };
+    }
+  };
   check();
   const timer = setInterval(check, checkIntervalMs);
   if (typeof timer.unref === 'function') timer.unref();
@@ -36,6 +48,7 @@ function createUpdateController({ autoUpdater, portable = false, sendToRenderer 
     portable,
     readyVersion: () => state.readyVersion,
     check,
+    checkNow,
     install: () => {
       if (portable) return { ok: false, reason: 'portable' };
       if (!state.readyVersion) return { ok: false, reason: 'not-ready' };

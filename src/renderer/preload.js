@@ -3,9 +3,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('pddMonitor', {
   app: {
     info: () => ipcRenderer.invoke('app:info'),
+    updateCheck: () => ipcRenderer.invoke('app:updateCheck'),
     installUpdate: () => ipcRenderer.invoke('app:updateInstall'),
     openUpdateDownload: () => ipcRenderer.invoke('app:updateOpenDownload'),
-    onUpdateReady: (handler) => ipcRenderer.on('app:update-ready', (_event, payload) => handler(payload))
+    onUpdateReady: (handler) => ipcRenderer.on('app:update-ready', (_event, payload) => handler(payload)),
+    onForceUpdate: (handler) => ipcRenderer.on('app:force-update', (_event, payload) => handler(payload))
   },
   platform: {
     state: () => ipcRenderer.invoke('platform:state'),

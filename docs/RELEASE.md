@@ -52,6 +52,13 @@ CI 用 GitHub Secrets（与 ArtForgeStudio 同账号，可直接复用）：
 `package:mac` 在 `ELUNVI_MAC_NOTARIZE=1` 时让 electron-builder 走公证，之后工作流再对 DMG 做 `stapler staple`。
 日志里出现 `notarization` 相关失败时，用 `xcrun notarytool log <submission-id>` 看原因。
 
+## 版本号、手动检查与强制更新
+
+- **侧边栏底部**显示 `Elunvi Mart v<版本>`，右侧小图标是更新入口：默认「检查更新」（点击立即查一次）、有新版本时变成红色的下载/重启图标（点击执行更新动作）。
+- **手动检查**结果会用轻提示反馈：已是最新版 / 发现新版本正在下载 / 下载完成弹右下角提示条；源码运行会提示"当前是开发版"。
+- **强制更新**由后端下发：`GET /v1/app/policy` 返回 `min_client_version`，低于它的客户端会弹**不可关闭**的「需要更新后才能继续使用」弹窗（按钮：立即更新 → 下载完变「重启更新」，免安装版为「去下载」）。配置在 `backend/configs/<env>.yaml` 的 `app` 段，留空即不强制；改完重启 API 生效，不需要发客户端。
+- 拿不到策略（断网/后端没升级）时按"不强制"处理，不能把用户挡在门外。
+
 ## 应用内自动更新
 
 - 打包版启动时检查 `https://static.honeykid.cn/public/elunvi_mart/latest-<platform>.yml`，后台下载完成后在窗口右下角提示"新版本已下载，重启即可更新"。

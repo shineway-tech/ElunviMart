@@ -44,6 +44,10 @@
             <i class="platform-account-more" data-lucide="ellipsis"></i>
           </button>
           </div>
+          <div class="sidebar-version" id="sidebar-version">
+            <span id="sidebar-version-label">Elunvi Mart</span>
+            <button class="sidebar-version-button" type="button" id="sidebar-version-action" title="检查更新" aria-label="检查更新"><i data-lucide="refresh-cw"></i></button>
+          </div>
         </div>
       </div>
     </aside>
@@ -245,6 +249,17 @@
         <p id="confirm-modal-description"></p>
       </div>
       <div class="modal-actions"><button class="button" type="button" data-close-confirm-modal>取消</button><button class="button button-danger" type="button" id="confirm-modal-submit"><span class="button-icon" id="confirm-modal-submit-icon"></span><span id="confirm-modal-submit-label">确定</span></button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="force-update-modal" hidden>
+    <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="force-update-title">
+      <div class="modal-header"><h2 id="force-update-title">需要更新后才能继续使用</h2></div>
+      <div class="confirm-content">
+        <span class="confirm-icon confirm-icon-accent"><i data-lucide="arrow-up-circle"></i></span>
+        <p id="force-update-copy"></p>
+      </div>
+      <div class="modal-actions"><button class="button button-primary" type="button" id="force-update-submit">立即更新</button></div>
     </section>
   </div>
 

@@ -1,6 +1,7 @@
 const state = {
-  app: { isPackaged: false, martApiBaseUrl: '' },
-  update: { version: '', portable: false },
+  app: { isPackaged: false, version: '', martApiBaseUrl: '' },
+  update: { ready: null, available: '', checking: false },
+  forceUpdate: null,
   platform: { status: 'loading', profile: null, security: null, accountEmail: null },
   mart: {
     linked: false,
@@ -76,6 +77,11 @@ const elements = {
   syncProducts: document.querySelector('#sync-products'),
   notice: document.querySelector('#notice'),
   toast: document.querySelector('#toast'),
+  sidebarVersionLabel: document.querySelector('#sidebar-version-label'),
+  sidebarVersionAction: document.querySelector('#sidebar-version-action'),
+  forceUpdateModal: document.querySelector('#force-update-modal'),
+  forceUpdateCopy: document.querySelector('#force-update-copy'),
+  forceUpdateSubmit: document.querySelector('#force-update-submit'),
   updateBanner: document.querySelector('#update-banner'),
   updateBannerCopy: document.querySelector('#update-banner-copy'),
   updateBannerAction: document.querySelector('#update-banner-action'),
@@ -2006,19 +2012,44 @@ function isLocalBackend() {
   return /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\/?$/u.test(state.app.martApiBaseUrl || '');
 }
 
-// 自动更新：下载完成后弹一条常驻提示，用户点按钮才重启（免安装版引导去下载页）
+// —— 更新：侧边栏版本行 / 右下角提示条 / 强制更新弹窗 ——
+
+// 侧边栏底部显示版本；图标随状态变：默认=检查更新，有新版=下载中，下载完=可直接更新
+function renderSidebarVersion() {
+  const version = state.app.version ? `v${state.app.version}` : '';
+  elements.sidebarVersionLabel.textContent = ['Elunvi Mart', version].filter(Boolean).join(' ');
+  const action = elements.sidebarVersionAction;
+  action.disabled = state.update.checking;
+  action.classList.toggle('is-ready', Boolean(state.update.ready));
+  if (state.update.checking) {
+    setIcon(action, 'loader-circle');
+    action.title = '正在检查更新…';
+    return;
+  }
+  if (state.update.ready) {
+    setIcon(action, 'arrow-up-circle');
+    action.title = `新版本 ${state.update.ready.version} 已就绪，点击更新`;
+    return;
+  }
+  setIcon(action, state.update.available ? 'download' : 'refresh-cw');
+  action.title = state.update.available ? `新版本 ${state.update.available} 正在下载` : '检查更新';
+}
+
 function showUpdateBanner({ version, portable }) {
-  state.update = { version: String(version || ''), portable: Boolean(portable) };
-  elements.updateBannerCopy.textContent = portable
-    ? `新版本 ${state.update.version} 已发布，免安装版请到下载页更新`
-    : `新版本 ${state.update.version} 已下载，重启即可完成更新`;
-  elements.updateBannerAction.textContent = portable ? '去下载' : '重启更新';
+  state.update.ready = { version: String(version || ''), portable: Boolean(portable) };
+  state.update.available = '';
+  elements.updateBannerCopy.textContent = state.update.ready.portable
+    ? `新版本 ${state.update.ready.version} 已发布，免安装版请到下载页更新`
+    : `新版本 ${state.update.ready.version} 已下载，重启即可完成更新`;
+  elements.updateBannerAction.textContent = state.update.ready.portable ? '去下载' : '重启更新';
   elements.updateBanner.hidden = false;
-  refreshIcons();
+  renderSidebarVersion();
+  renderForceUpdate();
 }
 
 async function runUpdateAction() {
-  if (state.update.portable) {
+  if (!state.update.ready) return;
+  if (state.update.ready.portable) {
     await window.pddMonitor.app.openUpdateDownload();
     return;
   }
@@ -2026,17 +2057,98 @@ async function runUpdateAction() {
   if (!result?.ok) showNotice('更新还没准备好，稍后再试', true);
 }
 
+// 手动检查更新：点侧边栏那个小图标触发
+async function runUpdateCheck() {
+  if (state.update.checking) return;
+  state.update.checking = true;
+  renderSidebarVersion();
+  try {
+    const result = await window.pddMonitor.app.updateCheck();
+    if (result.status === 'dev') showNotice('当前是开发版，不检查更新');
+    else if (result.status === 'force') showForceUpdate(result);
+    else if (result.status === 'ready') showUpdateBanner({ version: result.version, portable: result.portable });
+    else if (result.status === 'downloading') {
+      state.update.available = result.version || '';
+      renderSidebarVersion();
+      showNotice(result.version ? `发现新版本 ${result.version}，正在后台下载` : '发现新版本，正在后台下载');
+    } else if (result.status === 'latest') showNotice(`已是最新版本 ${result.currentVersion ? `v${result.currentVersion}` : ''}`.trim());
+    else showNotice('暂时无法检查更新，请稍后再试', true);
+  } finally {
+    state.update.checking = false;
+    renderSidebarVersion();
+  }
+}
+
+// 强制更新：后端下发的最低版本高于当前版本时，用不可关闭的弹窗挡住使用
+function showForceUpdate(payload) {
+  state.forceUpdate = payload || {};
+  elements.forceUpdateCopy.textContent = [
+    `当前版本 v${state.forceUpdate.currentVersion || '?'}，最低要求 v${state.forceUpdate.minVersion || '?'}。`,
+    state.forceUpdate.note || '请更新到最新版本后继续使用。'
+  ].join('');
+  elements.forceUpdateModal.hidden = false;
+  elements.updateBanner.hidden = true;
+  renderForceUpdate();
+}
+
+function renderForceUpdate() {
+  if (elements.forceUpdateModal.hidden) return;
+  const ready = state.update.ready;
+  if (ready) {
+    elements.forceUpdateSubmit.textContent = ready.portable ? '去下载' : '重启更新';
+    elements.forceUpdateSubmit.disabled = false;
+    return;
+  }
+  elements.forceUpdateSubmit.textContent = state.update.checking ? '正在准备更新…' : '立即更新';
+  elements.forceUpdateSubmit.disabled = state.update.checking;
+}
+
+// 弹窗里的按钮：没下载完就先触发检查+下载，下载好了直接安装（免安装版去下载页）
+async function runForceUpdateAction() {
+  if (state.update.ready) return runUpdateAction();
+  if (state.update.checking) return;
+  state.update.checking = true;
+  renderSidebarVersion();
+  renderForceUpdate();
+  try {
+    const result = await window.pddMonitor.app.updateCheck();
+    if (result.status === 'ready') return showUpdateBanner({ version: result.version, portable: result.portable });
+    if (result.status === 'portable') return window.pddMonitor.app.openUpdateDownload();
+    if (result.status === 'downloading') {
+      state.update.available = result.version || '';
+      showNotice('正在后台下载更新，完成后会自动提示');
+      return undefined;
+    }
+    if (result.status === 'dev') return showNotice('当前是开发版，无法更新');
+    return showNotice('暂时拿不到更新包，请检查网络后重试', true);
+  } finally {
+    state.update.checking = false;
+    renderSidebarVersion();
+    renderForceUpdate();
+  }
+}
+
 window.pddMonitor.app.onUpdateReady((payload) => showUpdateBanner(payload || {}));
+window.pddMonitor.app.onForceUpdate((payload) => showForceUpdate(payload || {}));
 elements.updateBannerAction.addEventListener('click', () => void runUpdateAction());
 elements.updateBannerDismiss.addEventListener('click', () => { elements.updateBanner.hidden = true; });
+elements.sidebarVersionAction.addEventListener('click', () => {
+  if (state.update.ready) void runUpdateAction(); else void runUpdateCheck();
+});
+elements.forceUpdateSubmit.addEventListener('click', () => void runForceUpdateAction());
 
 async function loadAppInfo() {
   try {
     const info = await window.pddMonitor.app.info();
-    state.app = { isPackaged: Boolean(info?.isPackaged), martApiBaseUrl: String(info?.martApiBaseUrl || '') };
+    state.app = {
+      isPackaged: Boolean(info?.isPackaged),
+      version: String(info?.version || ''),
+      martApiBaseUrl: String(info?.martApiBaseUrl || '')
+    };
   } catch {
-    state.app = { isPackaged: false, martApiBaseUrl: '' };
+    state.app = { isPackaged: false, version: '', martApiBaseUrl: '' };
   }
+  renderSidebarVersion();
 }
 
 // 10 分钟支付窗口要能看见剩余时间；节点随每次渲染重建，所以按 id 查找

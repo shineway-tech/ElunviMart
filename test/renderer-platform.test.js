@@ -114,12 +114,22 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(preload, /invoke\('mart:orderContext'/);
   assert.match(preload, /invoke\('app:info'/);
   assert.match(preload, /invoke\('app:updateInstall'/);
+  assert.match(preload, /invoke\('app:updateCheck'/);
+  assert.match(preload, /onForceUpdate/);
   assert.match(preload, /invoke\('app:updateOpenDownload'/);
   assert.match(preload, /onUpdateReady/);
   assert.match(html, /id="update-banner"/);
   assert.match(html, /id="update-banner-action"/);
   assert.match(renderer, /window\.pddMonitor\.app\.onUpdateReady\(/);
   assert.ok(renderer.includes('function showUpdateBanner('), '缺少更新提示条渲染函数');
+  assert.match(html, /id="sidebar-version"/);
+  assert.match(html, /id="sidebar-version-action"/);
+  assert.match(html, /id="force-update-modal"/);
+  assert.match(html, /id="force-update-submit"/);
+  for (const helper of ['renderSidebarVersion', 'runUpdateCheck', 'showForceUpdate', 'runForceUpdateAction']) {
+    assert.ok(renderer.includes(`function ${helper}(`), `缺少更新辅助函数 ${helper}`);
+  }
+  assert.match(renderer, /window\.pddMonitor\.app\.onForceUpdate\(/);
   assert.doesNotMatch(preload, /platform:createCheckout|platform:teamMembers|platform:billingContexts/);
 
   assert.match(renderer, /window\.pddMonitor\.mart\.membershipQuote/);

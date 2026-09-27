@@ -1,5 +1,6 @@
 const path = require('node:path');
 const { initUpdater } = require('./updater');
+const { fetchPolicy, isBelowMinVersion } = require('./app-policy');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
@@ -43,6 +44,7 @@ let userDataRoot;
 let activePlatformUserId = null;
 let scheduler;
 let updater = null;
+let policyTimer = null;
 let syncQueue;
 const loginWindows = new Map();
 const antiContentByAccount = new Map();
@@ -106,6 +108,35 @@ function requiresEmailBinding(security) {
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
+}
+
+// 版本策略：后端可以要求低于某个版本的客户端先更新（configs 的 app.min_client_version）
+async function checkVersionPolicy() {
+  if (!app.isPackaged) return null;
+  const policy = await fetchPolicy({ apiBaseUrl: martConfigFor().apiBaseUrl });
+  if (policy && isBelowMinVersion(app.getVersion(), policy.minClientVersion)) {
+    sendToRenderer('app:force-update', {
+      currentVersion: app.getVersion(),
+      minVersion: policy.minClientVersion,
+      note: policy.note,
+      downloadUrl: policy.downloadUrl,
+      portable: Boolean(updater?.portable)
+    });
+  }
+  return policy;
+}
+
+// 手动检查：先看版本策略，再问更新源；返回值给渲染层决定提示文案
+async function runUpdateCheck() {
+  const currentVersion = app.getVersion();
+  if (!app.isPackaged) return { status: 'dev', currentVersion };
+  const policy = await checkVersionPolicy();
+  if (policy && isBelowMinVersion(currentVersion, policy.minClientVersion)) {
+    return { status: 'force', currentVersion, minVersion: policy.minClientVersion };
+  }
+  if (!updater?.enabled) return { status: 'disabled', currentVersion };
+  const result = await updater.checkNow();
+  return { ...result, currentVersion, portable: Boolean(updater.portable) };
 }
 
 // 免安装版装不了更新，只能引导用户去固定下载地址
@@ -585,7 +616,8 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:order', (_event, orderId) => martService.order(orderId));
   ipcMain.handle('mart:orderContext', (_event, orderId) => martService.orderContext(orderId));
   // 渲染层靠这个判断当前是本地后端还是线上：mock 渠道只在本地开放
-  ipcMain.handle('app:info', () => ({ isPackaged: app.isPackaged, martApiBaseUrl: martConfigFor().apiBaseUrl }));
+  ipcMain.handle('app:info', () => ({ isPackaged: app.isPackaged, version: app.getVersion(), martApiBaseUrl: martConfigFor().apiBaseUrl }));
+  ipcMain.handle('app:updateCheck', () => runUpdateCheck());
   ipcMain.handle('app:updateInstall', () => (updater?.enabled ? updater.install() : { ok: false, reason: 'disabled' }));
   ipcMain.handle('app:updateOpenDownload', async () => {
     const url = updateDownloadUrl();
@@ -750,6 +782,8 @@ app.whenReady().then(() => {
   scheduler.configure(DEFAULT_DATA.settings);
   createMainWindow();
   updater = initUpdater({ isPackaged: app.isPackaged, sendToRenderer });
+  void checkVersionPolicy();
+  policyTimer = setInterval(() => void checkVersionPolicy(), 60 * 60 * 1000);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createMainWindow(); });
 });
 
@@ -759,6 +793,8 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   scheduler?.stop();
+  if (policyTimer) clearInterval(policyTimer);
+  updater?.stop?.();
   syncQueue?.cancelAll();
   store?.close();
 });

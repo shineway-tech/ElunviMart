@@ -178,6 +178,14 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 
 /* Sidebar account control: keep identity and account actions together at the bottom. */
 .sidebar-bottom{margin-top:auto}.sidebar-footer{position:relative;padding-top:18px;border-top:1px solid #303740}
+.sidebar-version{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 6px 0 2px;color:#7d8794;font-size:11px}
+.sidebar-version-button{display:grid;place-items:center;width:22px;height:22px;padding:0;border:0;border-radius:6px;color:#7d8794;background:transparent;cursor:pointer}
+.sidebar-version-button:hover{color:#ff6a60;background:rgba(255,255,255,.06)}
+.sidebar-version-button:disabled{cursor:wait;opacity:.6}
+.sidebar-version-button.is-ready{color:#ff6a60}
+.sidebar-version-button svg{width:13px;height:13px}
+#force-update-modal{z-index:60}
+.confirm-icon-accent{color:var(--accent);background:var(--accent-soft)}
 .platform-account-wrap{position:relative}
 .platform-account{width:100%;min-width:0;padding:7px 8px;border:1px solid transparent;border-radius:11px;color:#eef2f7;background:transparent;text-align:left}
 .platform-account:hover,.platform-account[aria-expanded="true"]{border-color:#394452;background:#242b35}
