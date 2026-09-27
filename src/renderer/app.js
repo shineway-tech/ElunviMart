@@ -2017,7 +2017,7 @@ function isLocalBackend() {
 // 侧边栏底部显示版本；图标随状态变：默认=检查更新，有新版=下载中，下载完=可直接更新
 function renderSidebarVersion() {
   const version = state.app.version ? `v${state.app.version}` : '';
-  elements.sidebarVersionLabel.textContent = ['Elunvi Mart', version].filter(Boolean).join(' ');
+  elements.sidebarVersionLabel.textContent = version || '';
   const action = elements.sidebarVersionAction;
   action.disabled = state.update.checking;
   action.classList.toggle('is-ready', Boolean(state.update.ready));
