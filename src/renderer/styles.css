@@ -353,13 +353,15 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 .payment-meta .finance-row{padding:9px 0}
 .payment-meta .finance-row strong{color:var(--muted);font-size:12px;font-weight:400}
 .payment-meta .finance-row-value{font-size:12px;font-weight:500}
-.payment-meta-actions{display:flex;align-items:center;gap:16px;padding-top:8px}
+.payment-meta-actions{display:flex;align-items:center;gap:10px;padding-top:8px}
 .payment-meta-actions[hidden]{display:none}
 .payment-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
-.payment-footer-links{display:flex;align-items:center;gap:16px}
+.payment-footer-links{display:flex;align-items:center;gap:10px}
 .payment-footer .button-primary{border-color:var(--alipay);background:var(--alipay)}
 .payment-footer .button-primary:hover{border-color:#0f62e6;background:#0f62e6}
-.payment-footer .button-link.is-primary{color:var(--alipay)}
+/* 次要动作用描边按钮：纯文字链接在这个页面里看着像说明文字，不像能点 */
+.payment-action{min-height:34px;padding:0 14px;border-radius:8px;color:var(--text);background:var(--surface)}
+.payment-action:hover{border-color:var(--alipay);color:var(--alipay);background:var(--alipay-soft)}
 .plan-badge{position:absolute;top:14px;right:14px;padding:3px 8px;border:1px solid #efb8b2;border-radius:999px;color:var(--accent);background:#fff;font-size:11px}
 @media(max-width:1240px){.plan-grid-5{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}}
 @media(max-width:1000px){.team-hero{grid-template-columns:1fr}.plan-grid{grid-template-columns:1fr}}

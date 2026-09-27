@@ -1950,7 +1950,7 @@ function renderPaymentPurchaseBar(attempt) {
   } else if (attempt.payment_params?.qr_code) {
     // 二维码有有效期，用户扫之前发现失效可以自己换一张
     const refreshQr = document.createElement('button');
-    refreshQr.className = 'button-link';
+    refreshQr.className = 'button payment-action';
     refreshQr.type = 'button';
     refreshQr.textContent = '刷新二维码';
     refreshQr.addEventListener('click', () => void beginPayment(state.purchase.channel));
@@ -1989,7 +1989,7 @@ function renderPaymentPurchaseBar(attempt) {
 function simulateLink() {
   if (!isLocalBackend()) return null;
   const link = document.createElement('button');
-  link.className = 'button-link';
+  link.className = 'button payment-action';
   link.type = 'button';
   link.textContent = '本地模拟支付';
   link.addEventListener('click', () => void beginPayment('mock'));
