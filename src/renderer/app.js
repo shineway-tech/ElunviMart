@@ -158,9 +158,7 @@ const elements = {
   paymentInfoActions: document.querySelector('#payment-info-actions'),
   paymentQrCard: document.querySelector('#payment-qr-card'),
   paymentQrCode: document.querySelector('#payment-qr-code'),
-  paymentQrBrowser: document.querySelector('#payment-qr-browser'),
   paymentOrderDetail: document.querySelector('#payment-order-detail'),
-  paymentChannels: document.querySelector('#payment-channels'),
   paymentPurchaseBar: document.querySelector('#payment-purchase-bar'),
   paymentCloseOrder: document.querySelector('#payment-close-order'),
   paymentRefreshOrder: document.querySelector('#payment-refresh-order'),
@@ -1237,6 +1235,8 @@ function renderOrderTable(body, orders, kind) {
   }
   for (const order of orders) {
     const snapshot = order.quote_snapshot || {};
+    // 到点没付的订单按已关闭展示，也不给「继续支付」入口
+    const expired = isOrderExpired(order);
     const tr = document.createElement('tr');
     const no = document.createElement('td');
     no.className = 'order-no';
@@ -1249,17 +1249,17 @@ function renderOrderTable(body, orders, kind) {
     amount.className = 'order-amount';
     amount.textContent = formatYuan(order.amount_fen);
     const status = document.createElement('td');
-    const [label, chipClass] = ORDER_STATUS_CHIPS[order.status] || ['处理中', 'status-info'];
+    const [label, chipClass] = expired ? ORDER_STATUS_CHIPS[3] : (ORDER_STATUS_CHIPS[order.status] || ['处理中', 'status-info']);
     const chip = document.createElement('span');
     chip.className = `status ${chipClass}`;
-    chip.textContent = label;
+    chip.textContent = expired ? '已超时关闭' : label;
     status.append(chip);
     const time = document.createElement('td');
     time.className = 'time';
     time.textContent = formatDate(order.created_at, '时间待同步');
     const action = document.createElement('td');
     action.className = 'order-action';
-    if (order.status === 1) {
+    if (order.status === 1 && !expired) {
       const resume = document.createElement('button');
       resume.className = 'button';
       resume.type = 'button';
@@ -1779,8 +1779,8 @@ async function startRechargePurchase(pkg) {
 }
 
 const PAYMENT_CHANNELS = {
-  alipay: { name: '支付宝', icon: 'qr-code', hint: '打开扫码窗口，用支付宝扫码支付' },
-  mock: { name: '本地模拟支付', icon: 'flask-conical', hint: '本地调试渠道，点击后直接完成支付' }
+  alipay: { name: '支付宝' },
+  mock: { name: '本地模拟支付' }
 };
 
 function openPurchase(kind, order, subject) {
@@ -1788,6 +1788,37 @@ function openPurchase(kind, order, subject) {
   state.purchase = { kind, order, attempt: null, subject, channel };
   showView('payment');
   renderPaymentOrder();
+  // 直接进支付：能复用上一次的二维码就复用，否则立刻发起一次支付宝支付
+  if (order?.status === 1 && !isOrderExpired(order)) void startPaymentForOrder(order);
+}
+
+function isOrderExpired(order) {
+  return Boolean(order) && order.status === 1 && Boolean(order.expire_at)
+    && Date.parse(order.expire_at) <= Date.now();
+}
+
+async function startPaymentForOrder(order) {
+  try {
+    const detail = await window.pddMonitor.mart.orderContext(order.id);
+    if (String(state.purchase.order?.id) !== String(order.id)) return;
+    if (detail.order) {
+      state.purchase.order = detail.order;
+      if (detail.order.status !== 1) {
+        renderPaymentOrder();
+        return;
+      }
+    }
+    const attempt = detail.latest_attempt;
+    if (attempt?.payment_params?.qr_code || attempt?.payment_params?.pay_url) {
+      state.purchase.attempt = attempt;
+      renderPaymentOrder();
+      startOrderPolling();
+      return;
+    }
+    await beginPayment('alipay');
+  } catch (error) {
+    showNotice(error.message || '无法发起支付', true);
+  }
 }
 
 function purchaseSubject() {
@@ -1818,17 +1849,21 @@ function renderPaymentOrder() {
   elements.paymentSheet.hidden = !order;
   elements.paymentInfoCard.hidden = !order;
   elements.paymentQrCard.hidden = true;
-  elements.paymentChannels.hidden = true;
   elements.paymentPurchaseBar.hidden = true;
   elements.paymentCountdown.hidden = true;
   if (!order) return;
 
-  elements.paymentSheet.classList.toggle('is-done', order.status === 2 || order.status === 4);
-  elements.paymentSheet.classList.toggle('is-inactive', order.status === 3 || order.status === 5);
-  elements.paymentHeroLabel.textContent = order.status === 1
+  // 到点没付的订单直接按已关闭展示，别让用户点进去才发现过期
+  const expired = isOrderExpired(order);
+  const status = expired ? 3 : order.status;
+  const pending = status === 1;
+
+  elements.paymentSheet.classList.toggle('is-done', status === 2 || status === 4);
+  elements.paymentSheet.classList.toggle('is-inactive', status === 3 || status === 5);
+  elements.paymentHeroLabel.textContent = pending
     ? '应付金额'
-    : (order.status === 2 || order.status === 4) ? '实付金额' : '订单金额';
-  elements.paymentStatusChip.textContent = ORDER_STATUS_LABELS[order.status] || '处理中';
+    : (status === 2 || status === 4) ? '实付金额' : '订单金额';
+  elements.paymentStatusChip.textContent = expired ? '已超时关闭' : (ORDER_STATUS_LABELS[order.status] || '处理中');
   const currency = document.createElement('span');
   currency.className = 'currency';
   currency.textContent = '¥';
@@ -1837,7 +1872,7 @@ function renderPaymentOrder() {
     document.createTextNode((Number(order.amount_fen || 0) / 100).toFixed(2))
   );
   elements.paymentHeroSubject.textContent = purchaseSubject();
-  elements.paymentCountdown.hidden = order.status !== 1;
+  elements.paymentCountdown.hidden = !pending;
 
   // 金额、商品、倒计时在上面，这里只留订单自身的信息
   const detail = elements.paymentOrderDetail;
@@ -1863,16 +1898,15 @@ function renderPaymentOrder() {
   }
 
   // 待支付的动作全在卡片底部；已支付后还要能主动查一次单
-  if (order.status === 2) {
+  if (status === 2) {
     elements.paymentRefreshOrder.hidden = false;
     elements.paymentInfoActions.hidden = false;
     elements.paymentInfoActions.append(elements.paymentRefreshOrder);
   }
 
-  if (order.status === 1 && !attempt) renderPaymentChannels();
-  renderPaymentQrCard(attempt);
-  renderPaymentPurchaseBar(attempt);
-  startOrderExpireCountdown(order);
+  renderPaymentQrCard(pending ? attempt : null);
+  renderPaymentPurchaseBar(pending ? attempt : null);
+  if (pending) startOrderExpireCountdown(order);
   refreshIcons();
 }
 
@@ -1892,48 +1926,12 @@ function renderPaymentQrCard(attempt) {
   card.hidden = false;
 }
 
-// 渠道是一行一个的紧凑选项，支付由卡片底部那一个主按钮发起
-function renderPaymentChannels() {
-  const grid = elements.paymentChannels;
-  grid.replaceChildren();
-  grid.hidden = false;
-  for (const [key, meta] of Object.entries(PAYMENT_CHANNELS)) {
-    const selected = state.purchase.channel === key;
-    const option = document.createElement('button');
-    option.type = 'button';
-    option.className = `payment-channel${selected ? ' is-selected' : ''}`;
-    option.setAttribute('aria-pressed', selected ? 'true' : 'false');
-    option.addEventListener('click', () => {
-      state.purchase.channel = key;
-      renderPaymentOrder();
-    });
-    const icon = document.createElement('span');
-    icon.className = 'payment-channel-icon';
-    icon.append(createIcon(meta.icon));
-    const copy = document.createElement('span');
-    copy.className = 'payment-channel-copy';
-    const title = document.createElement('strong');
-    title.textContent = meta.name;
-    const hint = document.createElement('small');
-    hint.textContent = meta.hint;
-    copy.append(title, hint);
-    option.append(icon, copy);
-    if (selected) {
-      const check = document.createElement('span');
-      check.className = 'payment-channel-check';
-      check.append(createIcon('check'));
-      option.append(check);
-    }
-    grid.append(option);
-  }
-}
-
 function renderPaymentPurchaseBar(attempt) {
   const { order } = state.purchase;
   const bar = elements.paymentPurchaseBar;
   bar.replaceChildren();
   bar.hidden = true;
-  if (!order || order.status !== 1) return;
+  if (!order || order.status !== 1 || isOrderExpired(order)) return;
 
   const actions = document.createElement('div');
   actions.className = 'payment-footer-links';
@@ -1941,11 +1939,13 @@ function renderPaymentPurchaseBar(attempt) {
   actions.append(elements.paymentCloseOrder);
 
   if (!attempt) {
+    // 发起失败时留一个手动重试入口
     const submit = document.createElement('button');
     submit.className = 'button button-primary';
     submit.type = 'button';
     submit.textContent = '立即支付';
     submit.addEventListener('click', () => void beginPayment(state.purchase.channel));
+    actions.append(simulateLink());
     bar.append(actions, submit);
   } else if (attempt.channel === 'mock') {
     elements.paymentSimulate.hidden = false;
@@ -1956,6 +1956,7 @@ function renderPaymentPurchaseBar(attempt) {
     confirm.type = 'button';
     confirm.textContent = '我已完成支付';
     confirm.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
+    actions.append(simulateLink());
     bar.append(actions, confirm);
   } else if (attempt.payment_params?.pay_url) {
     // 没抓到码串就退回独立扫码窗口这条老路
@@ -1977,6 +1978,16 @@ function renderPaymentPurchaseBar(attempt) {
   }
 
   bar.hidden = false;
+}
+
+// 本地调试走模拟渠道，日常支付页只留一个不显眼的小入口
+function simulateLink() {
+  const link = document.createElement('button');
+  link.className = 'button-link';
+  link.type = 'button';
+  link.textContent = '本地模拟支付';
+  link.addEventListener('click', () => void beginPayment('mock'));
+  return link;
 }
 
 // 10 分钟支付窗口要能看见剩余时间；节点随每次渲染重建，所以按 id 查找
@@ -2042,16 +2053,17 @@ async function refreshPaymentOrder(showFeedback = true, { sync = false } = {}) {
       : await window.pddMonitor.mart.order(order.id);
     state.purchase.order = fresh;
     renderPaymentOrder();
-    if (fresh.status !== 1) {
-      // 关单、履约或失败都会改变记录列表里的状态，这里同步刷新一次
+    const settled = fresh.status !== 1 || isOrderExpired(fresh);
+    if (settled) {
+      // 关单、履约、失败或超时都会改变记录列表里的状态，这里同步刷新一次
       stopOrderPolling();
       if (state.purchase.kind === 'membership') void loadTeamOrders(); else void loadWalletOrders();
     }
     if (fresh.status === 4) {
       await Promise.all([loadTeamData(), loadWalletData()]);
       showNotice(state.purchase.kind === 'membership' ? '会员已生效' : '充值已到账');
-    } else if (fresh.status !== 1 || showFeedback) {
-      showNotice(`订单状态：${ORDER_STATUS_LABELS[fresh.status] || '处理中'}`);
+    } else if (settled || showFeedback) {
+      showNotice(`订单状态：${isOrderExpired(fresh) ? '已超时关闭' : (ORDER_STATUS_LABELS[fresh.status] || '处理中')}`);
     }
   } catch (error) {
     if (showFeedback) showNotice(error.message || '订单状态暂时无法确认', true);
@@ -2911,15 +2923,6 @@ document.querySelectorAll('[data-wallet-tab]').forEach((button) => button.addEve
 elements.paymentRefreshOrder.addEventListener('click', () => void refreshPaymentOrder(true, { sync: true }));
 elements.paymentSimulate.addEventListener('click', () => void simulatePayment());
 elements.paymentCloseOrder.addEventListener('click', () => void closePurchaseOrder());
-elements.paymentQrBrowser.addEventListener('click', async () => {
-  const payUrl = state.purchase.attempt?.payment_params?.pay_url;
-  if (!payUrl) return;
-  try {
-    await window.pddMonitor.mart.openPayUrl(payUrl);
-  } catch (error) {
-    showNotice(error.message || '无法打开支付页面', true);
-  }
-});
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;

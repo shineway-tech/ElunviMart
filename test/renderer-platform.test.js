@@ -94,14 +94,14 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(html, /id="payment-simulate"/);
   assert.match(html, /id="payment-hero"/);
   assert.match(html, /id="payment-status-chip"/);
-  assert.match(html, /id="payment-channels"/);
   assert.match(html, /id="payment-purchase-bar"/);
   assert.match(html, /id="payment-info-actions"/);
   assert.match(html, /id="payment-sheet"/);
   assert.match(html, /id="payment-countdown"/);
   assert.match(html, /id="payment-qr-card"/);
   assert.match(html, /id="payment-qr-code"/);
-  assert.match(html, /id="payment-qr-browser"/);
+  assert.doesNotMatch(html, /id="payment-qr-browser"/);
+  assert.doesNotMatch(html, /id="payment-channels"/);
   assert.match(html, /vendor\/qrcode-generator\.js/);
   assert.doesNotMatch(html, /payment-status-card/);
   assert.match(html, /id="team-code-field"[\s\S]*id="team-action-code"/);
@@ -111,6 +111,7 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(preload, /invoke\('mart:membershipQuote'/);
   assert.match(preload, /invoke\('mart:rechargeOrder'/);
   assert.match(preload, /invoke\('mart:simulatePayment'/);
+  assert.match(preload, /invoke\('mart:orderContext'/);
   assert.doesNotMatch(preload, /platform:createCheckout|platform:teamMembers|platform:billingContexts/);
 
   assert.match(renderer, /window\.pddMonitor\.mart\.membershipQuote/);
@@ -120,7 +121,7 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /qr\.createSvgTag\(/);
   assert.match(renderer, /payment_params\?\.qr_code/);
   // 渲染用的辅助函数必须存在，别再被重构顺手删掉
-  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentChannels', 'renderPaymentPurchaseBar', 'renderPaymentQrCard', 'startOrderExpireCountdown']) {
+  for (const helper of ['planLabel', 'tableEmptyRow', 'renderPager', 'renderOrderTable', 'setTabCount', 'applyWalletRole', 'resolveCurrentTeam', 'canAddAccount', 'applyAccountQuota', 'renderAccountFooter', 'confirmAction', 'closeConfirmModal', 'renderPaymentOrder', 'renderPaymentPurchaseBar', 'renderPaymentQrCard', 'startOrderExpireCountdown', 'startPaymentForOrder', 'isOrderExpired']) {
     assert.ok(renderer.includes(`function ${helper}(`), `缺少辅助函数 ${helper}`);
   }
   // 侧边栏账号块下面独立的团队/积分块
@@ -149,8 +150,8 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   // 成员席位满了（含未开通会员）就不给邀请入口
   assert.match(renderer, /const memberFull = usedMembers >= maxMembers/);
   assert.match(renderer, /invite\.disabled = true/);
-  // 「继续支付」只出现在待支付订单上（服务端关单后列表里就没有入口）
-  assert.match(renderer, /if \(order\.status === 1\) \{[\s\S]{0,200}继续支付/);
+  // 「继续支付」只出现在还没超时的待支付订单上（超时/关单后列表里就没有入口）
+  assert.match(renderer, /if \(order\.status === 1 && !expired\) \{[\s\S]{0,200}继续支付/);
   // 报价陈旧时服务端会拒绝发起支付并关单，界面要回读订单状态
   const beginPaymentSource = renderer.slice(
     renderer.indexOf('async function beginPayment'),

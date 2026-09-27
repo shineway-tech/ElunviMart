@@ -164,6 +164,12 @@ class MartService {
     return data.order;
   }
 
+  // 订单详情（含最近一次支付尝试），重进支付页时用来复用同一个二维码
+  async orderContext(orderId) {
+    const { data } = await this.client.request(`/v1/orders/${encodeURIComponent(orderId)}`);
+    return data;
+  }
+
   // 购买记录：bizType 1 = 会员，2 = 积分充值，不传则全部
   async listOrders({
     teamId, bizType = null, limit = 20, offset = 0,
