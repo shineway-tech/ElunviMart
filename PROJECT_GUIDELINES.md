@@ -213,7 +213,7 @@ Store 不得依赖渲染层，也不得包含 Electron 窗口逻辑。对外返�
 - 提交前至少运行：
 
   ```bash
-  npm test
+  pnpm test
   node --check src/main/main.js
   node --check src/renderer/app.js
   ```
