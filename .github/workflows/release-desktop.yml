@@ -124,6 +124,7 @@ jobs:
           ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
           ALIYUN_OSS_PUBLIC_BASE_URL: https://static.honeykid.cn
           ALIYUN_OSS_PREFIX: ${{ env.OSS_PREFIX }}
+          ALIYUN_OSS_OBJECT_ACL: ${{ secrets.ALIYUN_OSS_OBJECT_ACL }}
         run: |
           set -euo pipefail
           for file in \
@@ -174,6 +175,7 @@ jobs:
           ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
           ALIYUN_OSS_PUBLIC_BASE_URL: https://static.honeykid.cn
           ALIYUN_OSS_PREFIX: ${{ env.OSS_PREFIX }}
+          ALIYUN_OSS_OBJECT_ACL: ${{ secrets.ALIYUN_OSS_OBJECT_ACL }}
         run: |
           foreach ($file in @(
             "release/Elunvi-Mart-$env:APP_VERSION-windows-x64-setup.exe",
