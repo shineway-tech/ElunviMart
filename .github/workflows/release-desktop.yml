@@ -109,8 +109,8 @@ jobs:
           name: elunvi-mart-macos-universal
           if-no-files-found: error
           path: |
-            release/Elunvi-Mart-*-macos-universal.dmg
-            release/Elunvi-Mart-*-macos-universal.zip
+            release/Elunvi-Mart-macos-universal.dmg
+            release/Elunvi-Mart-macos-universal.zip
             release/latest-mac.yml
 
       - name: Upload macOS artifacts to OSS
@@ -126,8 +126,8 @@ jobs:
         run: |
           set -euo pipefail
           for file in \
-            "release/Elunvi-Mart-${APP_VERSION}-macos-universal.dmg" \
-            "release/Elunvi-Mart-${APP_VERSION}-macos-universal.zip" \
+            "release/Elunvi-Mart-macos-universal.dmg" \
+            "release/Elunvi-Mart-macos-universal.zip" \
             "release/latest-mac.yml"
           do
             node scripts/upload-release-assets.js --file "$file" --version "$APP_VERSION"
@@ -159,8 +159,8 @@ jobs:
           name: elunvi-mart-windows-x64
           if-no-files-found: error
           path: |
-            release/Elunvi-Mart-*-windows-x64-setup.exe
-            release/Elunvi-Mart-*-windows-x64-portable.exe
+            release/Elunvi-Mart-windows-x64-setup.exe
+            release/Elunvi-Mart-windows-x64-portable.exe
             release/latest.yml
 
       - name: Upload Windows artifacts to OSS
@@ -176,8 +176,8 @@ jobs:
           ALIYUN_OSS_OBJECT_ACL: ${{ secrets.ALIYUN_OSS_OBJECT_ACL }}
         run: |
           foreach ($file in @(
-            "release/Elunvi-Mart-$env:APP_VERSION-windows-x64-setup.exe",
-            "release/Elunvi-Mart-$env:APP_VERSION-windows-x64-portable.exe",
+            "release/Elunvi-Mart-windows-x64-setup.exe",
+            "release/Elunvi-Mart-windows-x64-portable.exe",
             "release/latest.yml"
           )) {
             node scripts/upload-release-assets.js --file $file --version $env:APP_VERSION

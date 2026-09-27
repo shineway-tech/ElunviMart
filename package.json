@@ -59,7 +59,7 @@
           ]
         }
       ],
-      "artifactName": "Elunvi-Mart-${version}-macos-universal.${ext}"
+      "artifactName": "Elunvi-Mart-macos-universal.${ext}"
     },
     "dmg": {
       "title": "Elunvi Mart ${version}"
@@ -86,10 +86,10 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false,
-      "artifactName": "Elunvi-Mart-${version}-windows-x64-setup.${ext}"
+      "artifactName": "Elunvi-Mart-windows-x64-setup.${ext}"
     },
     "portable": {
-      "artifactName": "Elunvi-Mart-${version}-windows-x64-portable.${ext}"
+      "artifactName": "Elunvi-Mart-windows-x64-portable.${ext}"
     }
   },
   "dependencies": {
