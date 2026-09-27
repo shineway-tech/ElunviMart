@@ -479,7 +479,9 @@ function registerIpc(adapter) {
       activateUserStore(profile.userId);
       return { status: 'signed_in', profile, security, accountEmail: await platformService.accountEmail() };
     } catch (error) {
+      console.error(`[platform] state check failed code=${error.code} status=${error.status} message=${error.message}`);
       if (['AUTH_REQUIRED', 'authentication_required'].includes(error.code) || error.status === 401) {
+        console.error('[platform] clearing session and signing out');
         await platformService.logout();
         closeActiveStore();
         return { status: 'signed_out' };

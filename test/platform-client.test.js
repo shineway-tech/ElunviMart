@@ -58,6 +58,43 @@ test('PlatformClient refreshes once after a 401 and retries the original request
   assert.deepEqual(calls, ['Bearer old', 'Bearer new']);
 });
 
+test('the built-in refresh adopts the snake_case token payload', async () => {
+  const calls = [];
+  const session = new PlatformSession({ tokenStore: new MemoryTokenStore({ accessToken: 'access-1', refreshToken: 'refresh-1' }) });
+  const client = new PlatformClient({
+    apiBaseUrl: 'https://example.test',
+    clientId: 'elunvi-mart-macos',
+    session,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, auth: init.headers.authorization, body: init.body });
+      if (url.endsWith('/v1/auth/refresh')) {
+        return response(200, {
+          access_token: 'access-2',
+          refresh_token: 'refresh-2',
+          access_expires_at: '2026-09-27T09:15:00Z',
+          refresh_expires_at: '2026-10-27T09:00:00Z'
+        });
+      }
+      const profileCalls = calls.filter((call) => call.url.endsWith('/v1/me/profile'));
+      if (profileCalls.length === 1) return response(401, { error: { code: 'AUTH_REQUIRED', message: 'expired' } });
+      return response(200, { user_id: 'u1' });
+    }
+  });
+
+  const result = await client.request('/v1/me/profile');
+  assert.deepEqual(result.data, { user_id: 'u1' });
+
+  const tokens = await session.tokens();
+  assert.equal(tokens.accessToken, 'access-2', '会话必须换上新 access token');
+  assert.equal(tokens.refreshToken, 'refresh-2', '会话必须换上新 refresh token，否则下次刷新就是重放，平台会撤销整个会话族');
+  assert.equal(tokens.accessExpiresAt, '2026-09-27T09:15:00Z', '新到期时间要跟着存下来');
+  assert.equal(tokens.refreshExpiresAt, '2026-10-27T09:00:00Z');
+
+  const refreshCall = calls.find((call) => call.url.endsWith('/v1/auth/refresh'));
+  assert.deepEqual(JSON.parse(refreshCall.body), { refresh_token: 'refresh-1' }, '刷新请求带的是会话里的 refresh token');
+  assert.equal(calls[calls.length - 1].auth, 'Bearer access-2', '重放的原请求要用新令牌');
+});
+
 test('PlatformClient exposes structured API errors', async () => {
   const client = new PlatformClient({
     apiBaseUrl: 'https://example.test',
