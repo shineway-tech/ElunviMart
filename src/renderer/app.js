@@ -2033,7 +2033,12 @@ async function beginPayment(channel = 'mock') {
 
 function startOrderPolling() {
   stopOrderPolling();
-  state.orderPollTimer = window.setInterval(() => void refreshPaymentOrder(false), 3000);
+  let ticks = 0;
+  state.orderPollTimer = window.setInterval(() => {
+    ticks += 1;
+    // 每三次轮询向渠道查一次单：本地没有公网回调，扫码付款后靠这里自动结单
+    void refreshPaymentOrder(false, { sync: ticks % 3 === 0 });
+  }, 3000);
 }
 
 function stopOrderPolling() {
