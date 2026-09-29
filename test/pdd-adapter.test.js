@@ -79,7 +79,14 @@ test('aborts when the page never produces a list', async () => {
     syncTimeoutMs: 20,
     pageDelayMs: () => 0
   });
-  await assert.rejects(adapter.syncProducts({ id: 'shop' }), (error) => /abort/i.test(`${error.name} ${error.message}`));
+  // AbortSignal.timeout 的定时器是 unref 的：Node 22 的 test runner 会先判定事件循环已清空，
+  // 把还没 settle 的用例当成 pending 取消（Node 24 不会）。这里挂一个 ref 定时器撑住循环。
+  const keepAlive = setTimeout(() => {}, 1_000);
+  try {
+    await assert.rejects(adapter.syncProducts({ id: 'shop' }), (error) => /abort/i.test(`${error.name} ${error.message}`));
+  } finally {
+    clearTimeout(keepAlive);
+  }
 });
 
 test('business errors preserve the API error code', () => {
