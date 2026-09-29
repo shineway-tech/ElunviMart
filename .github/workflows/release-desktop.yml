@@ -114,7 +114,11 @@ jobs:
             release/Elunvi-Mart-macos-universal.zip.blockmap
             release/latest-mac.yml
 
+      # 国际链路到阿里云 OSS 会周期性变得极慢（实测 ~50KB/s，200MB 要传一小时以上）。
+      # 这里给个上限并允许失败：Release 先发出来（更新链路的源），OSS 镜像事后补传。
       - name: Upload macOS artifacts to OSS
+        timeout-minutes: 15
+        continue-on-error: true
         env:
           ALIYUN_OSS_REGION: ${{ secrets.ALIYUN_OSS_REGION }}
           ALIYUN_OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
@@ -167,6 +171,8 @@ jobs:
             release/latest.yml
 
       - name: Upload Windows artifacts to OSS
+        timeout-minutes: 15
+        continue-on-error: true
         shell: pwsh
         env:
           ALIYUN_OSS_REGION: ${{ secrets.ALIYUN_OSS_REGION }}
