@@ -2384,6 +2384,10 @@ function friendlyError(error) {
       return `${label}只能选：${raw.match(/必须为\[([^\]]+)\]之一/)[1].split(',').join('、')}。`;
     }
   }
+  // 客户端自身的兜底守卫（配置不完整、路径不合法之类）不暴露给用户
+  if (/(Mart|Platform)\s*(client|service)\s*配置不完整|路径必须是|不支持的界面配置项/.test(raw)) {
+    return '客户端内部出了点问题，请重启应用后再试。';
+  }
   // 兜底：还带着技术词的（英文错误名、undefined/null 之类）不要直接丢给用户
   if (/\b(Error|TypeError|undefined|null|NaN|IPC)\b/.test(raw)) {
     return '操作没有完成，请稍后重试。';
