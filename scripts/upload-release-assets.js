@@ -8,6 +8,9 @@ const http = require('http');
 const https = require('https');
 const path = require('path');
 
+const UPLOAD_IDLE_TIMEOUT_MS = Number(process.env.ALIYUN_OSS_UPLOAD_IDLE_TIMEOUT_MS || 300_000);
+const UPLOAD_ATTEMPTS = Number(process.env.ALIYUN_OSS_UPLOAD_ATTEMPTS || 3);
+
 function parseArgs(argv) {
   const args = {};
   for (let index = 0; index < argv.length; index += 1) {
@@ -105,7 +108,7 @@ function signOssRequest({ method, contentType, date, objectKey, ossHeaders }) {
   return `OSS ${accessKeyId}:${signature}`;
 }
 
-function putObject(objectKey, filePath) {
+function putObjectOnce(objectKey, filePath) {
   const fileStat = fs.statSync(filePath);
   const method = 'PUT';
   const contentType = contentTypeFor(filePath);
@@ -139,8 +142,30 @@ function putObject(objectKey, filePath) {
       });
     });
     request.on('error', reject);
+    // 国际链路到阿里云 OSS 偶发卡死：没有超时的话会一直挂到 job 超时，所以按空闲时间兜底
+    request.setTimeout(UPLOAD_IDLE_TIMEOUT_MS, () => {
+      request.destroy(new Error(`OSS upload stalled for ${Math.round(UPLOAD_IDLE_TIMEOUT_MS / 60000)} minutes`));
+    });
     fs.createReadStream(filePath).pipe(request);
   });
+}
+
+// 卡住的连接重试几次，避免一次网络抖动就让整个发布失败
+async function putObject(objectKey, filePath) {
+  let lastError;
+  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      await putObjectOnce(objectKey, filePath);
+      return;
+    } catch (error) {
+      lastError = error;
+      console.error(`OSS upload attempt ${attempt}/${UPLOAD_ATTEMPTS} failed: ${error.message}`);
+      if (attempt < UPLOAD_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 5_000));
+      }
+    }
+  }
+  throw lastError;
 }
 
 async function main() {
