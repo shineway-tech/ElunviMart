@@ -92,3 +92,42 @@ test('SqliteStore keeps ui preferences and overwrites them in place', () => {
   assert.equal(reopened.getPreference('ui.selectedTeamId'), '34', '重启后仍然记得');
   reopened.close();
 });
+
+test('caches the bid detail per product in sqlite', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-monitor-detail-'));
+  const store = new SqliteStore(path.join(directory, 'monitor.db'));
+  store.upsertAccount({ id: 'a1', displayName: '店铺', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  assert.equal(store.getProductDetail('a1', 'p1'), null);
+  const rows = [{ referenceSpec: '规格A', bidSpec: '规格A', stock: '5', groupPrice: '9.90', referencePrice: '10.00', bidPrice: '9.50', winStatus: '曝光中', referenceImage: 'https://img/a.jpeg' }];
+  const fetchedAt = new Date().toISOString();
+  store.setProductDetail('a1', 'p1', { rows, fetchedAt });
+  assert.deepEqual(store.getProductDetail('a1', 'p1'), { rows, fetchedAt });
+  // 未知账号不写入（账号可能已被移除）
+  assert.equal(store.setProductDetail('missing', 'p1', { rows, fetchedAt }), false);
+  // 明细变化事件（用的是 node:sqlite，没有 better-sqlite3 的 transaction 帮助函数）
+  assert.equal(store.addProductDetailChanges('a1', 'p1', []), 0);
+  assert.equal(store.addProductDetailChanges('a1', 'p1', [
+    { scope: 'sku', target: '规格A', from: '等待曝光中', to: '曝光中', changedAt: '2026-09-29T00:00:00.000Z' },
+    { scope: 'sku', target: '规格B', from: '曝光中', to: '暂无选标资格', changedAt: '2026-09-29T00:00:00.000Z' }
+  ]), 2);
+  assert.deepEqual(store.getProductDetailChanges('a1', 'p1', 5), [
+    { changedAt: '2026-09-29T00:00:00.000Z', scope: 'sku', target: '规格B', from: '曝光中', to: '暂无选标资格' },
+    { changedAt: '2026-09-29T00:00:00.000Z', scope: 'sku', target: '规格A', from: '等待曝光中', to: '曝光中' }
+  ]);
+  assert.deepEqual(store.getProductDetailChanges('a1', 'p2', 5), []);
+  store.close();
+});
+
+test('a shop can turn its own notifications off', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pdd-monitor-notify-'));
+  const store = new SqliteStore(path.join(directory, 'monitor.db'));
+  const now = new Date().toISOString();
+  store.upsertAccount({ id: 'a1', displayName: '店铺一', createdAt: now, updatedAt: now });
+  assert.equal(store.getAccount('a1').notificationsEnabled, true, '默认开启');
+  store.updateAccount('a1', { notificationsEnabled: false });
+  assert.equal(store.getAccount('a1').notificationsEnabled, false);
+  store.close();
+  const reopened = new SqliteStore(path.join(directory, 'monitor.db'));
+  assert.equal(reopened.getAccount('a1').notificationsEnabled, false, '重启后仍然记得');
+  reopened.close();
+});

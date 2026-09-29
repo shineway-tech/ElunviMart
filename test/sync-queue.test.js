@@ -14,6 +14,25 @@ test('same-account work cannot overlap; different accounts run independently', a
   release(1); assert.equal(await first, 1);
   assert.equal(queue.isRunning('a'), false);
 });
+
+test('a production queue can limit all accounts to one active sync', async () => {
+  let release;
+  const queue = new SyncQueue({ maxConcurrent: 1 });
+  const first = queue.run('a', () => new Promise(resolve => { release = resolve; }));
+  await tick();
+  await assert.rejects(queue.run('b', () => {}), { code: 'SYNC_BUSY' });
+  assert.deepEqual(await queue.run('b', () => {}, { source: 'scheduled' }), { skipped: true });
+  release(1);
+  await first;
+});
+
+test('HTTP 429 uses the long rate-limit backoff', async () => {
+  let clock = 0;
+  const states = new Map();
+  const queue = new SyncQueue({ now: () => clock, loadState: id => states.get(id), saveState: (id, state) => states.set(id, state) });
+  await assert.rejects(queue.run('a', () => { throw Object.assign(new Error('too many requests'), { status: 429 }); }));
+  assert.equal(queue.remainingMs('a'), 30 * 60_000);
+});
 test('54001 backs off, persists across restarts, and manual sync cannot bypass it', async () => {
   let clock = 0;
   const states = new Map();

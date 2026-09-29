@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const { SqliteStore } = require('../src/main/store');
 const { SyncQueue } = require('../src/main/sync-queue');
-const { AdapterResponseError } = require('../src/main/pdd-adapter');
+const { AdapterNotConfiguredError, AdapterResponseError } = require('../src/main/pdd-adapter');
 const source = path.resolve(__dirname, '../src/main/main.js');
 const localRequire = createRequire(source);
 function setup(t) {
@@ -43,6 +43,13 @@ test('54001 preserves the online state and blocks immediate manual re-entry', as
   assert.equal(calls, 1);
   assert.equal(f.store.getAccount('a').status, 'active');
   assert.deepEqual(f.store.getProducts('a').map(p => p.id), ['old']);
+});
+
+test('missing Anti-Content does not mark an otherwise online account offline', async t => {
+  const f = setup(t);
+  const adapter = { syncProducts: async () => { throw new AdapterNotConfiguredError('后台请求签名未能刷新', { accountOffline: false }); } };
+  await assert.rejects(f.sync(adapter, 'a'), /签名未能刷新/);
+  assert.equal(f.store.getAccount('a').status, 'active');
 });
 test('removing an account during a fetch prevents stale writes and notifications', async t => {
   const f = setup(t);

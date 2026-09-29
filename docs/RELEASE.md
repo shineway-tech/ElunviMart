@@ -20,8 +20,8 @@ git tag v1.0.1 && git push origin v1.0.1
 
 | 平台 | 文件 |
 | --- | --- |
-| macOS 通用 | `Elunvi-Mart-<version>-macos-universal.dmg`（分发用）、`Elunvi-Mart-<version>-macos-universal.zip`（自动更新用） |
-| Windows x64 | `Elunvi-Mart-<version>-windows-x64-setup.exe`（安装版，支持应用内更新）、`Elunvi-Mart-<version>-windows-x64-portable.exe`（免安装） |
+| macOS 通用 | `Elunvi-Mart-macos-universal.dmg`（分发用）、`Elunvi-Mart-macos-universal.zip`（自动更新用） |
+| Windows x64 | `Elunvi-Mart-windows-x64-setup.exe`（安装版，支持应用内更新）、`Elunvi-Mart-windows-x64-portable.exe`（免安装） |
 | 更新清单 | `latest-mac.yml` / `latest.yml`（electron-builder 生成，供 electron-updater 读取） |
 
 `Elunvi-Mart-macos-universal.zip.blockmap` 与 `Elunvi-Mart-windows-x64-setup.exe.blockmap` 也会一起上传：
@@ -64,7 +64,7 @@ CI 用 GitHub Secrets（与 ArtForgeStudio 同账号，可直接复用）：
 
 ## 应用内自动更新
 
-- 打包版启动时检查 `https://static.honeykid.cn/public/elunvi_mart/latest-<platform>.yml`，后台下载完成后在窗口右下角提示"新版本已下载，重启即可更新"。
+- 打包版启动时检查 `https://static.honeykid.cn/public/elunvi_mart/latest-mac.yml`（macOS）或 `latest.yml`（Windows），后台下载完成后在窗口右下角提示"新版本已下载，重启即可更新"。
 - **安装版**（macOS DMG 安装、Windows setup.exe）点「重启更新」即可完成；**免安装 portable** 装不了更新，提示里给的是「去下载」。
 - 源码运行（未打包）不会检查更新，避免开发时报错。
 - 发布顺序：先让 CI 把产物与 `latest*.yml` 都传上 OSS，用户端在下一次启动或 6 小时内就会看到提示。

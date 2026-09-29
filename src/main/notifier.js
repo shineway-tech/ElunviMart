@@ -6,13 +6,13 @@ function assertWebhook(kind, value) {
   try {
     url = new URL(value);
   } catch {
-    throw new Error('Webhook 地址格式不正确');
+    throw new Error('机器人 Webhook 地址看起来不完整，请把群里机器人给的地址整条复制过来');
   }
   const allowedHosts = kind === 'wecom'
     ? new Set(['qyapi.weixin.qq.com'])
     : new Set(['oapi.dingtalk.com', 'api.dingtalk.com']);
   if (url.protocol !== 'https:' || !allowedHosts.has(url.hostname)) {
-    throw new Error('Webhook 地址不是受支持的企业微信或钉钉地址');
+    throw new Error(`这个地址不是${kind === 'wecom' ? '企业微信' : '钉钉'}的机器人 Webhook，请确认后再填`);
   }
   return url;
 }
@@ -37,7 +37,7 @@ async function postJson(url, body) {
   const text = await response.text();
   let data;
   try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  if (!response.ok) throw new Error(`消息发送失败（HTTP ${response.status}）`);
+  if (!response.ok) throw new Error(`提醒没有发送成功（服务返回 ${response.status}），请稍后重试`);
   return data;
 }
 
@@ -51,12 +51,12 @@ async function sendChannelMessage(kind, config, message) {
   const content = `${message.title}\n${message.body}`;
   if (kind === 'wecom') {
     const result = await postJson(url, { msgtype: 'text', text: { content } });
-    if (result.errcode && result.errcode !== 0) throw new Error(result.errmsg || '企业微信返回发送失败');
+    if (result.errcode && result.errcode !== 0) throw new Error(result.errmsg || '企业微信没有接收这条提醒，请检查机器人设置');
     return { ok: true };
   }
   signDingTalk(url, config.secret);
   const result = await postJson(url, { msgtype: 'text', text: { content } });
-  if (result.errcode && result.errcode !== 0) throw new Error(result.errmsg || '钉钉返回发送失败');
+  if (result.errcode && result.errcode !== 0) throw new Error(result.errmsg || '钉钉没有接收这条提醒，请检查机器人设置');
   return { ok: true };
 }
 

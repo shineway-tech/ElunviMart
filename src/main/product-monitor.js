@@ -51,18 +51,6 @@ function reconcileProducts(previousProducts, incomingProducts, now = new Date().
   return { products, changes };
 }
 
-function buildStatusAlert(account, change) {
-  const status = change.product.status === 'lost' ? '已掉标' : '疑似掉标';
-  const title = `百亿补贴${status}`;
-  const body = [
-    `店铺：${account.displayName}`,
-    `商品：${change.product.name || change.product.id}`,
-    `商品 ID：${change.product.id}`,
-    `状态：${status}`
-  ].join('\n');
-  return { title, body };
-}
-
 function activityStatusKey(product) {
   if (product?.status === 'lost') return 'lost';
   if (product?.raw?.all_sku_win_bid === true || product?.activityStatus === 'all_sku_win_bid') return 'all_sku_win_bid';
@@ -113,7 +101,6 @@ function hasAbnormalActivityProducts(products) {
 module.exports = {
   normalizeProducts,
   reconcileProducts,
-  buildStatusAlert,
   buildActivitySummaryAlert,
   buildAccountOfflineAlert,
   activityStatusKey,

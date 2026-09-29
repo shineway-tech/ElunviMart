@@ -30,6 +30,8 @@ const state = {
   accounts: [],
   accountQuota: null,
   currentAccount: null,
+  productDetail: null,
+  subView: '',
   products: [],
   productPage: 1,
   syncCooldownUntilByAccount: new Map(),
@@ -75,8 +77,9 @@ const elements = {
   productsPagePrev: document.querySelector('#products-page-prev'),
   productsPageNext: document.querySelector('#products-page-next'),
   syncProducts: document.querySelector('#sync-products'),
-  notice: document.querySelector('#notice'),
   toast: document.querySelector('#toast'),
+  toastIcon: document.querySelector('#toast-icon'),
+  toastText: document.querySelector('#toast-text'),
   sidebarVersionLabel: document.querySelector('#sidebar-version-label'),
   sidebarVersionAction: document.querySelector('#sidebar-version-action'),
   forceUpdateModal: document.querySelector('#force-update-modal'),
@@ -95,6 +98,12 @@ const elements = {
   startLogin: document.querySelector('#start-login'),
   completeLogin: document.querySelector('#complete-login'),
   confirmModal: document.querySelector('#confirm-modal'),
+  productDetailView: document.querySelector('#product-detail-view'),
+  productDetailStatus: document.querySelector('#product-detail-status'),
+  productDetailChanges: document.querySelector('#product-detail-changes'),
+  productDetailChangeList: document.querySelector('#product-detail-change-list'),
+  productDetailTable: document.querySelector('#product-detail-table'),
+  productDetailRows: document.querySelector('#product-detail-rows'),
   confirmTitle: document.querySelector('#confirm-modal-title'),
   confirmDescription: document.querySelector('#confirm-modal-description'),
   confirmIcon: document.querySelector('#confirm-modal-icon'),
@@ -348,8 +357,10 @@ function renderPagination(totalItems) {
   return totalPages;
 }
 
+// 所有提示统一走中间浮层：成功 1.5 秒、失败 4 秒（红色）
 function showNotice(message, error = false) {
-  if (!String(message || '').trim()) {
+  const text = String(message || '').trim();
+  if (!text) {
     hideNotice();
     return;
   }
@@ -357,21 +368,20 @@ function showNotice(message, error = false) {
     window.clearTimeout(state.toastTimer);
     state.toastTimer = null;
   }
-  elements.toast.hidden = true;
-  if (!error) {
-    elements.notice.hidden = true;
-    elements.toast.querySelector('span').textContent = message;
-    elements.toast.hidden = false;
-    state.toastTimer = window.setTimeout(() => { elements.toast.hidden = true; state.toastTimer = null; }, 1500);
-    return;
-  }
-  elements.notice.querySelector('span').textContent = message;
-  elements.notice.classList.add('is-error');
-  elements.notice.hidden = false;
+  elements.toastText.textContent = text;
+  elements.toast.classList.toggle('is-error', Boolean(error));
+  setIcon(elements.toastIcon, error ? 'circle-alert' : 'circle-check');
+  elements.toast.hidden = false;
+  state.toastTimer = window.setTimeout(() => { elements.toast.hidden = true; state.toastTimer = null; }, error ? 4000 : 1500);
+}
+
+// 出错时统一把 Electron 的原始报文转成可读文案
+function showError(error, fallback = '') {
+  const hasMessage = Boolean(String(error?.message || '').trim());
+  showNotice(hasMessage || !fallback ? friendlyError(error) : fallback, true);
 }
 
 function hideNotice() {
-  elements.notice.hidden = true;
   elements.toast.hidden = true;
   if (state.toastTimer) {
     window.clearTimeout(state.toastTimer);
@@ -1032,7 +1042,7 @@ async function loadWalletData() {
     renderWalletTransactions();
     if (state.walletTab === 'orders') void loadWalletOrders();
   } catch (error) {
-    showNotice(error.message || '积分信息暂时无法加载', true);
+    showError(error, '积分信息暂时无法加载');
     renderEmptyState(elements.walletSummary, '积分信息暂时无法加载，请稍后重试。', '重新加载', () => void loadWalletData());
   }
 }
@@ -1311,7 +1321,7 @@ async function loadTeamOrders() {
       }
     });
   } catch (error) {
-    showNotice(error.message || '购买记录暂时无法加载', true);
+    showError(error, '购买记录暂时无法加载');
     elements.teamOrderBody.append(tableEmptyRow(6, '购买记录暂时无法加载'));
   }
 }
@@ -1343,7 +1353,7 @@ async function loadWalletOrders() {
       }
     });
   } catch (error) {
-    showNotice(error.message || '充值记录暂时无法加载', true);
+    showError(error, '充值记录暂时无法加载');
     elements.walletOrderBody.append(tableEmptyRow(6, '充值记录暂时无法加载'));
   }
 }
@@ -1394,7 +1404,7 @@ async function loadTeamData() {
     renderTeamMembers(team);
     if (state.teamTab === 'orders') void loadTeamOrders();
   } catch (error) {
-    showNotice(error.message || '团队信息暂时无法加载', true);
+    showError(error, '团队信息暂时无法加载');
     renderEmptyState(elements.teamSummary, '团队信息暂时无法加载，请稍后重试。', '重新加载', () => void loadTeamData());
   }
 }
@@ -1692,7 +1702,7 @@ async function removeTeamMember(member) {
     await loadTeamData();
     showNotice('成员已移除');
   } catch (error) {
-    showNotice(error.message || '移除成员失败', true);
+    showError(error, '移除成员失败');
   }
 }
 
@@ -1711,7 +1721,7 @@ async function leaveCurrentTeam(team) {
     await loadTeamData();
     showNotice('已退出团队');
   } catch (error) {
-    showNotice(error.message || '退出团队失败', true);
+    showError(error, '退出团队失败');
   }
 }
 
@@ -1775,7 +1785,7 @@ async function startMembershipPurchase(plan) {
     const order = await window.pddMonitor.mart.membershipOrder({ teamId: team.id, quoteId: quote.id });
     openPurchase('membership', order, plan);
   } catch (error) {
-    showNotice(error.message || '创建会员订单失败', true);
+    showError(error, '创建会员订单失败');
   }
 }
 
@@ -1786,7 +1796,7 @@ async function startRechargePurchase(pkg) {
     const order = await window.pddMonitor.mart.rechargeOrder({ teamId: team.id, packageId: pkg.id });
     openPurchase('recharge', order, pkg);
   } catch (error) {
-    showNotice(error.message || '创建充值订单失败', true);
+    showError(error, '创建充值订单失败');
   }
 }
 
@@ -1824,7 +1834,7 @@ async function startPaymentForOrder(order) {
     // 二维码会过期，所以每次进支付页都重新发起一次，拿一张新码
     await beginPayment('alipay');
   } catch (error) {
-    showNotice(error.message || '无法发起支付', true);
+    showError(error, '无法发起支付');
   }
 }
 
@@ -1985,7 +1995,7 @@ function renderPaymentPurchaseBar(attempt) {
         await window.pddMonitor.mart.openPayWindow(attempt.payment_params.pay_url);
         showNotice('请用支付宝扫码支付，完成后关闭窗口即可自动确认');
       } catch (error) {
-        showNotice(error.message || '无法打开支付窗口', true);
+        showError(error, '无法打开支付窗口');
       }
     });
     bar.append(actions, open);
@@ -2186,7 +2196,7 @@ async function beginPayment(channel = 'mock') {
     renderPaymentOrder();
     startOrderPolling();
   } catch (error) {
-    showNotice(error.message || '发起支付失败', true);
+    showError(error, '发起支付失败');
     // 报价陈旧时服务端会直接关单，这里回读一次，界面不会停在「待支付」
     await refreshPaymentOrder(false);
   }
@@ -2232,7 +2242,7 @@ async function refreshPaymentOrder(showFeedback = true, { sync = false } = {}) {
       showNotice(`订单状态：${isOrderExpired(fresh) ? '已超时关闭' : (ORDER_STATUS_LABELS[fresh.status] || '处理中')}`);
     }
   } catch (error) {
-    if (showFeedback) showNotice(error.message || '订单状态暂时无法确认', true);
+    if (showFeedback) showError(error, '订单状态暂时无法确认');
   }
 }
 
@@ -2244,7 +2254,7 @@ async function simulatePayment() {
     await window.pddMonitor.mart.simulatePayment(order.id);
     await refreshPaymentOrder(false);
   } catch (error) {
-    showNotice(error.message || '模拟支付失败', true);
+    showError(error, '模拟支付失败');
   } finally {
     elements.paymentSimulate.disabled = false;
   }
@@ -2266,7 +2276,7 @@ async function closePurchaseOrder() {
     await refreshPaymentOrder(false);
     showNotice('订单已关闭');
   } catch (error) {
-    showNotice(error.message || '关闭订单失败', true);
+    showError(error, '关闭订单失败');
   }
 }
 
@@ -2340,8 +2350,45 @@ function friendlyError(error) {
     return '店铺已经添加过了，请直接使用已有店铺账号。';
   }
   if (/this product is inactive/i.test(original)) return '当前产品尚未在 Elunvi Platform 激活，请先激活产品码 elunvi-mart。';
-  const ipcMessage = original.match(/Error invoking remote method '[^']+': (?:Error|PlatformApiError): (.+)$/);
-  return ipcMessage?.[1] || original || '操作没有完成，请稍后重试。';
+  if (original.includes('尚未捕获拼多多后台请求签名') || original.includes('后台请求签名未能刷新')) {
+    return '拼多多商家后台登录已失效。请点击该账号的「重新登录」完成登录后，再点同步。';
+  }
+  if (/请求频繁|太过频繁/.test(original)) {
+    return `拼多多限流了这次请求（${original.match(/[^：:]*频繁[^。\n]*/)?.[0] || '当前请求频繁'}），稍后会自动恢复。`;
+  }
+  // 统一剥掉 Electron 的原始报文前缀
+  const ipcMessage = original.match(/Error invoking remote method '[^']+': (?:[A-Za-z_$][\w$]*): ([\s\S]+)$/);
+  const raw = (ipcMessage?.[1] || original).trim();
+  if (!raw) return '操作没有完成，请稍后重试。';
+
+  // 网络与超时
+  if (/超时|timed?\s?out/i.test(raw)) return '网络有点慢，这次没请求成功，请稍后重试。';
+  if (/无法连接|连接失败|ECONNREFUSED|ENOTFOUND|fetch failed|network/i.test(raw)) {
+    return '连不上服务器，请检查网络后重试。';
+  }
+  // 会话失效
+  if (/会话已失效|登录状态已失效|AUTH_REQUIRED/.test(raw)) return '登录状态已失效，请重新登录。';
+  // 服务端临时问题
+  if (/HTTP 5\d\d|服务暂时不可用|服务繁忙|内部错误|Mart 请求失败/.test(raw)) {
+    return '服务暂时不可用，请稍后重试。';
+  }
+  // 表单校验类文案改成自然语言：[字段]是必须的 / [字段]必须是一个url / [字段]的长度最大为 N ...
+  const label = raw.match(/^\[([^\]]+)\]/)?.[1];
+  if (label) {
+    if (/必须的|不允许为空/.test(raw)) return `请填写${label}。`;
+    if (/必须是一个url/i.test(raw)) return `${label}需要填写网址。`;
+    if (/必须是一个邮箱/.test(raw)) return `${label}需要填写邮箱地址。`;
+    if (/长度最大为(\d+)/.test(raw)) return `${label}太长了（最多 ${Number(raw.match(/长度最大为(\d+)/)[1])} 个字符）。`;
+    if (/长度最小为(\d+)/.test(raw)) return `${label}太短了（至少 ${Number(raw.match(/长度最小为(\d+)/)[1])} 个字符）。`;
+    if (/必须为\[([^\]]+)\]之一/.test(raw)) {
+      return `${label}只能选：${raw.match(/必须为\[([^\]]+)\]之一/)[1].split(',').join('、')}。`;
+    }
+  }
+  // 兜底：还带着技术词的（英文错误名、undefined/null 之类）不要直接丢给用户
+  if (/\b(Error|TypeError|undefined|null|NaN|IPC)\b/.test(raw)) {
+    return '操作没有完成，请稍后重试。';
+  }
+  return raw;
 }
 
 function syncCooldownRemaining(accountId) {
@@ -2372,7 +2419,7 @@ function updateSyncButton() {
   }
 }
 
-function startSyncCooldown(accountId, durationMs = 60_000) {
+function startSyncCooldown(accountId, durationMs = 120_000) {
   const until = Date.now() + durationMs;
   state.syncCooldownUntilByAccount.set(accountId, Math.max(until, state.syncCooldownUntilByAccount.get(accountId) || 0));
   updateSyncButton();
@@ -2407,6 +2454,7 @@ function showView(name) {
     showPlatformLogin('请先登录 Elunvi 账号');
     return;
   }
+  state.subView = '';
   document.querySelectorAll('.view').forEach((view) => { view.hidden = view.id !== `${name}-view`; });
   document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('is-active', button.dataset.view === name));
   if (name !== 'payment') stopOrderExpireCountdown();
@@ -2419,7 +2467,7 @@ function showView(name) {
     elements.title.textContent = '商家账号';
     void loadAccountQuota();
   } else if (isSettings) {
-    elements.title.textContent = '监控设置';
+    elements.title.textContent = '设置';
     loadSettings();
   } else if (name === 'wallet') {
     elements.title.textContent = '钱包';
@@ -2445,19 +2493,42 @@ function renderAccounts() {
   elements.accountsTable.hidden = state.accounts.length === 0;
   for (const account of state.accounts) {
     const row = document.createElement('tr');
+    const online = account.status === 'active';
+    // 需要登录时商品与后台入口都点不进去，只留登录和移除
+    const browseActions = online
+      ? '<button class="icon-button account-action" type="button" data-account-action="view" aria-label="查看营销活动商品" title="查看营销活动商品"><i data-lucide="external-link"></i></button><button class="icon-button account-action" type="button" data-account-action="shop" aria-label="打开店铺管理后台" title="打开店铺管理后台"><i data-lucide="layout-dashboard"></i></button>'
+      : '';
     row.innerHTML = `
       <td><div class="account-cell"><span class="account-avatar"><i data-lucide="store"></i></span><div><div class="primary-text"></div><div class="secondary-text"></div></div></div></td>
       <td>${accountStatus(account)}</td>
       <td>${Number(account.productCount || 0)} 个</td>
       <td><span class="status ${Number(account.abnormalProductCount || 0) > 0 ? 'status-lost' : 'status-active'}">${Number(account.abnormalProductCount || 0)} 个</span></td>
       <td class="time">${formatDate(account.lastSyncAt)}</td>
-      <td><div class="account-actions"><button class="icon-button account-action" type="button" data-account-action="view" aria-label="查看营销活动商品" title="查看营销活动商品"><i data-lucide="external-link"></i></button><button class="icon-button account-action" type="button" data-account-action="login" aria-label="${account.status === 'active' ? '重新登录' : '登录'}" title="${account.status === 'active' ? '重新登录' : '登录'}"><i data-lucide="log-in"></i></button><button class="icon-button account-action account-remove" type="button" data-account-action="remove" aria-label="移除账号" title="移除账号"><i data-lucide="trash-2"></i></button></div></td>`;
+      <td><label class="switch" title="该店铺的提醒开关"><input type="checkbox" data-account-notify ${account.notificationsEnabled === false ? '' : 'checked'}><span></span></label></td>
+      <td><div class="account-actions">${browseActions}<button class="icon-button account-action" type="button" data-account-action="login" aria-label="${online ? '重新登录' : '登录'}" title="${online ? '重新登录' : '登录'}"><i data-lucide="log-in"></i></button><button class="icon-button account-action account-remove" type="button" data-account-action="remove" aria-label="移除账号" title="移除账号"><i data-lucide="trash-2"></i></button></div></td>`;
     row.querySelector('.primary-text').textContent = account.displayName || '未命名店铺';
     row.querySelector('.secondary-text').textContent = account.mallId ? `店铺 ID ${account.mallId}` : '店铺 ID 待接口识别';
     renderAccountAvatar(row.querySelector('.account-avatar'), account.avatarUrl);
-    row.querySelector('[data-account-action="view"]').addEventListener('click', () => openAccount(account));
     row.querySelector('[data-account-action="login"]').addEventListener('click', () => openLoginModal(account));
     row.querySelector('[data-account-action="remove"]').addEventListener('click', () => void requestRemoveAccount(account));
+    const notifyInput = row.querySelector('[data-account-notify]');
+    notifyInput.addEventListener('change', async () => {
+      const name = account.displayName || '该店铺';
+      notifyInput.disabled = true;
+      try {
+        await window.pddMonitor.accounts.setNotify(account.id, notifyInput.checked);
+        showNotice(notifyInput.checked ? `已开启「${name}」的提醒` : `已关闭「${name}」的提醒`);
+      } catch (error) {
+        notifyInput.checked = !notifyInput.checked;
+        showError(error);
+      } finally {
+        notifyInput.disabled = false;
+      }
+    });
+    if (online) {
+      row.querySelector('[data-account-action="view"]').addEventListener('click', () => openAccount(account));
+      row.querySelector('[data-account-action="shop"]').addEventListener('click', () => void openShopHome(account));
+    }
     elements.accountsBody.append(row);
   }
   refreshIcons();
@@ -2485,6 +2556,14 @@ function closeConfirmModal(confirmed = false) {
   if (resolve) resolve(confirmed);
 }
 
+async function openShopHome(account) {
+  try {
+    await window.pddMonitor.accounts.openShopHome(account.id);
+  } catch (error) {
+    showError(error);
+  }
+}
+
 async function requestRemoveAccount(account) {
   const name = account.displayName || '该账号';
   const ok = await confirmAction({
@@ -2499,7 +2578,7 @@ async function requestRemoveAccount(account) {
     await loadAccounts();
     showNotice('商家账号已移除');
   } catch (error) {
-    showNotice(friendlyError(error), true);
+    showError(error);
   }
 }
 
@@ -2609,7 +2688,8 @@ function renderProducts() {
       <td><div class="activity-name"></div><div class="secondary-text activity-product"></div><div class="secondary-text activity-id"></div></td>
       <td><div class="product-cell"><span class="product-thumb"></span><div><div class="primary-text my-bid-product"></div><div class="secondary-text my-bid-id"></div></div></div></td>
       <td><span class="status ${className}">${label}</span></td>
-      <td class="price"></td><td class="time enrolled-at"></td>`;
+      <td class="price"></td><td class="time enrolled-at"></td>
+      <td><div class="product-actions"><button class="icon-button account-action" type="button" data-product-action="detail" aria-label="查看报名详情" title="查看报名详情"><i data-lucide="eye"></i></button></div></td>`;
     row.querySelector('.activity-name').textContent = product.activityName || '百亿补贴';
     row.querySelector('.activity-product').textContent = product.activityProductName ? `活动商品：${product.activityProductName}` : '';
     row.querySelector('.activity-id').textContent = product.activityId ? `活动 ID ${product.activityId}` : '';
@@ -2627,8 +2707,146 @@ function renderProducts() {
     } else {
       thumb.append(createIcon('image'));
     }
+    row.querySelector('[data-product-action="detail"]').addEventListener('click', () => void openProductDetail(product));
     elements.productsBody.append(row);
   }
+  refreshIcons();
+}
+
+const BID_WIN_STATUS_CLASSES = {
+  曝光中: 'status-active',
+  等待曝光中: 'status-warning',
+  暂无选标资格: 'status-lost'
+};
+
+function renderProductDetailRows(rows) {
+  elements.productDetailRows.replaceChildren();
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    const specCells = [
+      { text: row.referenceSpec || '-', image: row.referenceImage || '' },
+      { text: row.bidSpec || '-', image: row.bidImage || '' }
+    ];
+    for (const cell of specCells) {
+      const td = document.createElement('td');
+      const wrap = document.createElement('div');
+      wrap.className = 'detail-spec-cell';
+      if (cell.image) {
+        const thumb = document.createElement('img');
+        thumb.className = 'detail-thumb';
+        thumb.src = cell.image;
+        thumb.alt = '';
+        thumb.referrerPolicy = 'no-referrer';
+        wrap.append(thumb);
+      }
+      const text = document.createElement('span');
+      text.className = 'detail-spec-text';
+      text.textContent = cell.text;
+      wrap.append(text);
+      td.append(wrap);
+      tr.append(td);
+    }
+    const values = [
+      row.stock == null ? '-' : String(row.stock),
+      row.groupPrice || '-',
+      row.referencePrice || '-',
+      row.bidPrice || '-'
+    ];
+    values.forEach((value, index) => {
+      const td = document.createElement('td');
+      td.textContent = value;
+      td.className = index === 0 ? 'detail-numeric' : 'price';
+      tr.append(td);
+    });
+    const statusCell = document.createElement('td');
+    const status = document.createElement('span');
+    status.className = `status ${BID_WIN_STATUS_CLASSES[row.winStatus] || 'status-info'}`;
+    status.textContent = row.winStatus || '未知';
+    statusCell.append(status);
+    tr.append(statusCell);
+    elements.productDetailRows.append(tr);
+  }
+  refreshIcons();
+}
+
+function renderProductDetailChanges(changes) {
+  elements.productDetailChangeList.replaceChildren();
+  for (const change of changes) {
+    const item = document.createElement('li');
+    const time = change.changedAt ? new Date(change.changedAt).toLocaleString('zh-CN', { hour12: false }) : '';
+    item.textContent = `${time} · ${change.target || '规格'}：${change.from || '未知'} → ${change.to || '未知'}`;
+    elements.productDetailChangeList.append(item);
+  }
+  elements.productDetailChanges.hidden = changes.length === 0;
+}
+
+async function loadProductDetailChanges(accountId, productId) {
+  try {
+    const changes = await window.pddMonitor.products.detailChanges(accountId, productId, 10);
+    renderProductDetailChanges(Array.isArray(changes) ? changes : []);
+  } catch {
+    renderProductDetailChanges([]);
+  }
+}
+
+async function openProductDetail(product) {
+  const accountId = state.currentAccount?.id;
+  if (!accountId) return;
+  state.productDetail = product;
+  state.subView = 'product-detail';
+  elements.title.textContent = product.myBidProductName || product.name || '报名详情';
+  elements.pageMeta.textContent = [
+    product.activityName ? `活动：${product.activityName}` : '',
+    product.activityId ? `活动 ID ${product.activityId}` : '',
+    `商品 ID ${product.myBidProductId || product.id || '-'}`
+  ].filter(Boolean).join(' · ');
+  elements.pageMeta.hidden = false;
+  elements.pageBack.hidden = false;
+  elements.addAccount.hidden = true;
+  document.querySelectorAll('.view').forEach((view) => { view.hidden = view.id !== 'product-detail-view'; });
+  elements.productDetailRows.replaceChildren();
+  elements.productDetailTable.hidden = true;
+  elements.productDetailStatus.hidden = false;
+  elements.productDetailStatus.classList.remove('is-error');
+  elements.productDetailStatus.textContent = '正在读取报名详情…';
+  renderProductDetailChanges([]);
+  elements.productDetailChanges.hidden = true;
+  refreshIcons();
+  void loadProductDetailChanges(accountId, product.id);
+  try {
+    const result = await window.pddMonitor.products.detail(accountId, product.id);
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    if (!rows.length) {
+      elements.productDetailStatus.textContent = '这个报名记录暂时没有可展示的规格。';
+      return;
+    }
+    renderProductDetailRows(rows);
+    elements.productDetailStatus.hidden = true;
+    elements.productDetailTable.hidden = false;
+    if (Array.isArray(result?.changes) && result.changes.length) void loadProductDetailChanges(accountId, product.id);
+  } catch (error) {
+    elements.productDetailStatus.classList.add('is-error');
+    elements.productDetailStatus.textContent = friendlyError(error);
+  }
+}
+
+// 从"报名规格明细"页返回该账号的商品列表（保留页码与筛选状态）
+function backFromProductDetail() {
+  state.subView = '';
+  state.productDetail = null;
+  const account = state.currentAccount;
+  if (!account) {
+    showView('accounts');
+    return;
+  }
+  elements.title.textContent = account.displayName;
+  elements.pageMeta.textContent = account.mallId ? `店铺 ID ${account.mallId}` : '店铺 ID 待接口识别';
+  elements.pageMeta.hidden = false;
+  elements.pageBack.hidden = false;
+  elements.addAccount.hidden = true;
+  document.querySelectorAll('.view').forEach((view) => { view.hidden = view.id !== 'account-detail-view'; });
+  renderProducts();
+  updateSyncButton();
   refreshIcons();
 }
 
@@ -2727,7 +2945,7 @@ async function syncProducts() {
     await loadAccounts();
   } catch (error) {
     applySyncCooldownFromError(error, accountId);
-    showNotice(friendlyError(error), true);
+    showError(error);
   } finally {
     state.syncInProgress = false;
     updateSyncButton();
@@ -2739,10 +2957,21 @@ function channelConfig(kind) {
   return { webhook: document.querySelector('#dingtalk-webhook').value.trim(), secret: document.querySelector('#dingtalk-secret').value.trim() };
 }
 
+// 旧的间隔值（比如 10/20 分钟）不在新档位里时，向上贴近一个可用档位，避免表单空白
+function snapIntervalOption(select, value) {
+  const options = [...select.options].map((option) => Number(option.value));
+  const numeric = Number(value);
+  if (options.includes(numeric)) return numeric;
+  return options.find((option) => option >= numeric) ?? options[options.length - 1];
+}
+
 async function loadSettings() {
   const settings = await window.pddMonitor.settings.get();
-  document.querySelector('#interval-min').value = String(settings.intervalMinMinutes);
-  document.querySelector('#interval-max').value = String(settings.intervalMaxMinutes);
+  const minSelect = document.querySelector('#interval-min');
+  const maxSelect = document.querySelector('#interval-max');
+  const min = snapIntervalOption(minSelect, settings.intervalMinMinutes);
+  minSelect.value = String(min);
+  maxSelect.value = String(Math.max(min, snapIntervalOption(maxSelect, settings.intervalMaxMinutes)));
   document.querySelector('#desktop-enabled').checked = settings.notifications.desktop;
   document.querySelector('#wecom-enabled').checked = settings.notifications.wecom.enabled;
   document.querySelector('#wecom-webhook').value = settings.notifications.wecom.webhook;
@@ -3056,7 +3285,14 @@ elements.confirmModal.addEventListener('click', (event) => { if (event.target ==
 elements.confirmSubmit.addEventListener('click', () => closeConfirmModal(true));
 elements.startLogin.addEventListener('click', beginLogin);
 elements.completeLogin.addEventListener('click', completeLogin);
-elements.pageBack.addEventListener('click', () => { showView('accounts'); loadAccounts(); });
+elements.pageBack.addEventListener('click', () => {
+  if (state.subView === 'product-detail') {
+    backFromProductDetail();
+    return;
+  }
+  showView('accounts');
+  loadAccounts();
+});
 document.querySelector('#sync-products').addEventListener('click', syncProducts);
 document.querySelector('#product-search').addEventListener('input', () => { state.productPage = 1; renderProducts(); });
 document.querySelector('#product-status').addEventListener('change', () => { state.productPage = 1; renderProducts(); });
@@ -3070,7 +3306,7 @@ document.querySelectorAll('[data-test-channel]').forEach((button) => button.addE
     await window.pddMonitor.notifications.test(kind, channelConfig(kind));
     showNotice(`${kind === 'wecom' ? '企业微信' : '钉钉'}测试消息已发送`);
   } catch (error) {
-    showNotice(error.message, true);
+    showError(error);
   } finally {
     button.disabled = false;
   }
@@ -3079,9 +3315,9 @@ document.querySelector('#settings-form').addEventListener('submit', async (event
   event.preventDefault();
   try {
     await window.pddMonitor.settings.save(readSettings());
-    showNotice('监控设置已保存');
+    showNotice('设置已保存');
   } catch (error) {
-    showNotice(error.message, true);
+    showError(error);
   }
 });
 document.querySelectorAll('[data-team-tab]').forEach((button) => button.addEventListener('click', () => setTeamTab(button.dataset.teamTab)));
@@ -3096,6 +3332,7 @@ document.addEventListener('keydown', (event) => {
   else if (!elements.platformLoginModal.hidden) closePlatformAuthModal();
   else if (!elements.teamSwitchMenu.hidden) closeTeamSwitchMenu();
 });
+
 
 window.pddMonitor.onAccountsChanged(() => loadAccounts());
 window.pddMonitor.onPayWindowClosed(() => {

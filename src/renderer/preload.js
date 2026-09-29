@@ -59,10 +59,14 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     list: () => ipcRenderer.invoke('accounts:list'),
     startLogin: (accountId) => ipcRenderer.invoke('accounts:startLogin', accountId),
     completeLogin: (accountId) => ipcRenderer.invoke('accounts:completeLogin', { accountId }),
+    openShopHome: (accountId) => ipcRenderer.invoke('accounts:openShopHome', accountId),
+    setNotify: (accountId, enabled) => ipcRenderer.invoke('accounts:setNotify', { accountId, enabled }),
     remove: (accountId) => ipcRenderer.invoke('accounts:remove', accountId)
   },
   products: {
     list: (accountId) => ipcRenderer.invoke('products:list', accountId),
+    detail: (accountId, productId) => ipcRenderer.invoke('products:detail', { accountId, productId }),
+    detailChanges: (accountId, productId, limit = 10) => ipcRenderer.invoke('products:detailChanges', { accountId, productId, limit }),
     sync: (accountId) => ipcRenderer.invoke('products:sync', accountId)
   },
   settings: {

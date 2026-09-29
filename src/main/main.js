@@ -14,12 +14,14 @@ const { MartService } = require('./mart-service');
 const { martConfigFor } = require('./mart-config');
 const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./merchant-profile');
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
+const { buildDetailUrl, fetchDetailPage, parseDetailTable } = require('./pdd-detail-page');
+const { collectBidListPayloads } = require('./pdd-bid-page');
+const { buildDetailReportHtml, diffDetailRows, detailIdsOf, isFullyWon, selectDetailCandidates, sweepStepMs } = require('./detail-monitor');
 const { SyncQueue } = require('./sync-queue');
 const { assertWebhook, sendChannelTest, sendConfiguredNotifications } = require('./notifier');
 const { MonitorScheduler } = require('./scheduler');
 const {
   reconcileProducts,
-  buildStatusAlert,
   buildActivitySummaryAlert,
   buildAccountOfflineAlert,
   isAbnormalActivityProduct,
@@ -27,7 +29,7 @@ const {
 } = require('./product-monitor');
 
 const MERCHANT_URL = 'https://mms.pinduoduo.com/';
-const BID_PAGE_URL = 'https://mms.pinduoduo.com/act-bidding/market-sign-list?activity_status=IN_PROGRESS';
+const MERCHANT_HOME_URL = 'https://mms.pinduoduo.com/home/';
 const MAX_ACCOUNTS = 10;
 const APP_NAME = 'Elunvi Mart';
 
@@ -40,6 +42,7 @@ let platformSession;
 let platformConfig;
 let martService;
 let martSession;
+let martClientInstance = null;
 let userDataRoot;
 let activePlatformUserId = null;
 let scheduler;
@@ -47,10 +50,12 @@ let updater = null;
 let policyTimer = null;
 let syncQueue;
 const loginWindows = new Map();
-const antiContentByAccount = new Map();
 const configuredPartitions = new Set();
 const manualSyncAtByAccount = new Map();
-const MANUAL_SYNC_COOLDOWN_MS = 60_000;
+const MANUAL_SYNC_COOLDOWN_MS = 120_000;
+const detailFetchingByAccount = new Set();
+const detailSweepRunning = new Set();
+const DETAIL_CACHE_TTL_MS = 2 * 60_000;
 
 function rendererPath(file) {
   return path.join(__dirname, '..', 'renderer', file);
@@ -171,16 +176,11 @@ function accountPartition(accountId) {
   return `persist:pdd-account-${accountId}`;
 }
 
-function configureMerchantSession(partition, accountId) {
+function configureMerchantSession(partition) {
   const merchantSession = session.fromPartition(partition);
   merchantSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   if (configuredPartitions.has(partition)) return merchantSession;
   configuredPartitions.add(partition);
-  merchantSession.webRequest.onBeforeSendHeaders({ urls: ['*://mms.pinduoduo.com/lakemms/bid/query/bidList*'] }, (details, callback) => {
-    const antiContentEntry = Object.entries(details.requestHeaders).find(([name]) => name.toLowerCase() === 'anti-content');
-    if (antiContentEntry?.[1]) antiContentByAccount.set(accountId, String(antiContentEntry[1]));
-    callback({ requestHeaders: details.requestHeaders });
-  });
   return merchantSession;
 }
 
@@ -192,7 +192,7 @@ function createLoginWindow(accountId, { deferNavigation = false, show = true } =
     return existing;
   }
   const partition = accountPartition(accountId);
-  configureMerchantSession(partition, accountId);
+  configureMerchantSession(partition);
   const window = new BrowserWindow({
     width: 1180,
     height: 820,
@@ -201,7 +201,13 @@ function createLoginWindow(accountId, { deferNavigation = false, show = true } =
     title: `${APP_NAME} - 拼多多商家后台登录`,
     icon: appIconPath(),
     show,
-    webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true }
+    webPreferences: {
+      partition,
+      preload: path.join(__dirname, 'pdd-page-hook.js'),
+      contextIsolation: false,
+      nodeIntegration: false,
+      sandbox: false
+    }
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     try {
@@ -213,36 +219,9 @@ function createLoginWindow(accountId, { deferNavigation = false, show = true } =
   if (!deferNavigation) window.loadURL(MERCHANT_URL);
   window.on('closed', () => {
     loginWindows.delete(accountId);
-    antiContentByAccount.delete(accountId);
   });
   loginWindows.set(accountId, window);
   return window;
-}
-
-async function ensureBidPage(accountId, window, { refresh = false } = {}) {
-  if (!window || window.isDestroyed()) throw new AdapterNotConfiguredError();
-  const currentUrl = window.webContents.getURL();
-  if (refresh || !currentUrl.includes('/act-bidding/market-sign-list')) {
-    antiContentByAccount.delete(accountId);
-    await new Promise((resolve, reject) => {
-      const onFinished = () => { cleanup(); resolve(); };
-      const onFailed = (_event, errorCode, errorDescription) => {
-        cleanup();
-        reject(new Error(`拼多多营销竞价页面加载失败（${errorCode}: ${errorDescription}）`));
-      };
-      const cleanup = () => {
-        window.webContents.removeListener('did-finish-load', onFinished);
-        window.webContents.removeListener('did-fail-load', onFailed);
-      };
-      window.webContents.once('did-finish-load', onFinished);
-      window.webContents.once('did-fail-load', onFailed);
-      window.loadURL(BID_PAGE_URL).catch(error => { cleanup(); reject(error); });
-    });
-  }
-  const deadline = Date.now() + 15_000;
-  while (!antiContentByAccount.has(accountId) && Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
 }
 
 function isMerchantLoggedIn(urlString) {
@@ -255,51 +234,132 @@ function isMerchantLoggedIn(urlString) {
 }
 
 async function readMerchantProfile(window) {
-  const apiProfiles = await window.webContents.executeJavaScript(`(async () => {
-    const requests = [
-      '/earth/api/mallInfo/commonMallInfo',
-      '/earth/api/mallInfo/querySimpleCredential'
-    ];
-    const payloads = [];
-    for (const path of requests) {
-      try {
-        const response = await fetch(path, { credentials: 'include', cache: 'no-store' });
-        if (!response.ok) continue;
-        const payload = await response.json();
-        if (payload?.success === false) continue;
-        payloads.push(payload);
-      } catch {}
-    }
-    return payloads;
-  })()`);
-  const apiProfile = findMerchantProfileInPayloads(apiProfiles);
-  if (apiProfile.displayName && apiProfile.mallId) return apiProfile;
-
-  const pageProfile = await window.webContents.executeJavaScript(`(() => {
+  // 店铺资料全部取自页面自身状态（localStorage / DOM / 钩子记录的页面响应），我们不自己调接口
+  const pageData = await window.webContents.executeJavaScript(`(() => {
+    let stored = null;
+    try { stored = JSON.parse(localStorage.getItem('new_userinfo') || 'null'); } catch {}
+    const mall = (stored && stored.mall) || {};
     const firstText = (selectors) => selectors.map((selector) => document.querySelector(selector)?.textContent?.trim()).find(Boolean) || '';
     const firstAttribute = (selectors, attribute) => selectors.map((selector) => document.querySelector(selector)?.getAttribute(attribute)).find(Boolean) || '';
-    const displayName = firstText([
-      '[data-testid*="shop"]', '[data-testid*="store"]', '[class*="shop-name"]', '[class*="store-name"]',
-      '[class*="merchant-name"]', '[class*="shopName"]', '[class*="storeName"]'
-    ]);
-    const avatarUrl = firstAttribute([
-      '[data-testid*="avatar"] img', '[class*="avatar"] img', '[class*="shop-logo"] img', '[class*="store-logo"] img'
-    ], 'src') || document.querySelector('meta[property="og:image"]')?.content || '';
-    const mallId = firstText([
-      '[data-testid*="mall"]', '[data-testid*="shop-id"]', '[class*="mall-id"]', '[class*="shop-id"]'
-    ]);
-    return { displayName, avatarUrl, mallId, title: document.title };
-  })()`);
+    return {
+      displayName: String(mall.mall_name || '').trim() || firstText(['.user-name-text', '[class*="shop-name"]', '[class*="store-name"]', '[class*="merchant-name"]']),
+      avatarUrl: String(mall.logo || '').trim() || firstAttribute(['.avatar img', '[class*="avatar"] img', '[class*="shop-logo"] img'], 'src'),
+      mallId: mall.mall_id ?? stored?.mall_id ?? '',
+      title: document.title
+    };
+  })()`).catch(() => ({}));
+  const capturedProfiles = await window.webContents
+    .executeJavaScript('(() => (window.__cueMallInfo || []).map((entry) => entry.payload))()')
+    .catch(() => []);
+  const apiProfile = findMerchantProfileInPayloads(Array.isArray(capturedProfiles) ? capturedProfiles : []);
   const normalized = normalizeMerchantProfile({
-    displayName: pageProfile.displayName || apiProfile.displayName,
-    avatarUrl: pageProfile.avatarUrl || apiProfile.avatarUrl,
-    mallId: pageProfile.mallId || apiProfile.mallId
+    displayName: pageData.displayName || apiProfile.displayName,
+    avatarUrl: pageData.avatarUrl || apiProfile.avatarUrl,
+    mallId: pageData.mallId || apiProfile.mallId
   });
   if (!normalized.displayName) {
-    const title = String(pageProfile?.title || '').replace(/[-|｜].*$/, '').trim();
+    const title = String(pageData?.title || '').replace(/[-|｜].*$/, '').trim();
     normalized.displayName = title && !/拼多多|商家后台/.test(title) ? title : '';
   }
   return normalized;
+}
+
+// 每个店铺可以单独关掉通知：所有按店铺发的提醒都走这里
+async function sendAccountNotifications(account, message) {
+  if (account && account.notificationsEnabled === false) return [];
+  return sendConfiguredNotifications(publicSettings(store.getSettings()), message);
+}
+
+async function fetchDetailRows(accountId, product) {
+  const ids = detailIdsOf(product);
+  if (!ids) throw new Error('这个商品的报名 ID 不完整，暂时看不了报名详情');
+  const { table, pageText } = await fetchDetailPage({
+    partition: accountPartition(accountId),
+    url: buildDetailUrl(ids)
+  });
+  if (!table) throw new Error(pageText ? `商家后台这次没打开报名详情（页面提示：${String(pageText).slice(0, 60)}）` : '商家后台没有返回报名详情，请稍后再试');
+  return parseDetailTable(table);
+}
+
+// 抓一次 + 落库 + 与上一份快照对比出 SKU 中标变化（手动查看与自动巡检共用）
+async function refreshProductDetail(accountId, product) {
+  const previous = store.getProductDetail(accountId, product.id);
+  const rows = await fetchDetailRows(accountId, product);
+  const changedAt = new Date().toISOString();
+  store.setProductDetail(accountId, product.id, { rows, fetchedAt: changedAt });
+  const changes = diffDetailRows(previous?.rows, rows, changedAt);
+  if (changes.length) store.addProductDetailChanges(accountId, product.id, changes);
+  return { rows, changes };
+}
+
+// 每轮变化：生成 HTML 报告（上传 OSS 后把链接放进提醒；上传失败就发文字摘要）
+async function publishDetailReport(account, changes, roundAt) {
+  const title = `拼多多中标变化：${account.displayName}`;
+  let link = '';
+  try {
+    const html = buildDetailReportHtml(account, changes, roundAt);
+    const result = await martClientInstance?.request('/v1/app/reports', { method: 'POST', body: { title, html } });
+    link = String(result?.url || '');
+  } catch (error) {
+    console.error('detail report upload failed:', error?.message || error);
+  }
+  // 通知里只摘要前 2 条，其余看报告链接
+  const lines = changes.slice(0, 2).map((change) => `· ${change.productName}｜${change.target || '规格'}：${change.from} → ${change.to}`);
+  if (changes.length > lines.length) lines.push(`· 另外还有 ${changes.length - lines.length} 项变化`);
+  lines.push(`共 ${changes.length} 项`);
+  if (link) lines.push(`详情：${link}`);
+  const errors = await sendAccountNotifications(account, { title, body: lines.join('\n') });
+  return { link, notificationErrors: errors };
+}
+
+// 后台巡检：按设置挑商品、平摊间隔逐个抓详情并比对
+async function runDetailSweep(accountId) {
+  if (detailSweepRunning.has(accountId)) return { changes: [] };
+  detailSweepRunning.add(accountId);
+  try {
+    const account = store.getAccount(accountId);
+    if (!account || account.status !== 'active') return { changes: [] };
+    const settings = store.getSettings();
+    const intervalMs = Math.max(5, Number(settings.detailIntervalMinutes) || 30) * 60_000;
+    // 0（或未设置）= 每轮覆盖全部到期商品
+    const configuredBatch = Number(settings.detailBatchSize);
+    const batchSize = Number.isFinite(configuredBatch) && configuredBatch > 0 ? Math.min(200, configuredBatch) : 0;
+    const products = store.getProducts(accountId);
+    const detailByProductId = {};
+    for (const product of products) detailByProductId[String(product.id)] = store.getProductDetail(accountId, product.id);
+    const batch = selectDetailCandidates({ products, detailByProductId, intervalMs, batchSize });
+    if (!batch.length) return { changes: [] };
+    const cycleMinutes = ((Number(settings.intervalMinMinutes) || 30) + (Number(settings.intervalMaxMinutes) || 60)) / 2;
+    const roundChanges = [];
+    for (const [index, product] of batch.entries()) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, sweepStepMs({ batchSize: batch.length, cycleMinutes })));
+      try {
+        const result = await refreshProductDetail(accountId, product);
+        const skuImageBySpec = new Map();
+        for (const row of result.rows) {
+          skuImageBySpec.set(String(row.referenceSpec || row.bidSpec || ''), row.referenceImage || row.bidImage || '');
+        }
+        for (const change of result.changes) {
+          roundChanges.push({
+            ...change,
+            productId: String(product.id),
+            productName: product.myBidProductName || product.name || product.id,
+            productCode: product.myBidProductId || product.id,
+            productImage: product.imageUrl || product.templateImageUrl || '',
+            activityName: product.activityName || '',
+            activityId: product.activityId || '',
+            skuImage: skuImageBySpec.get(String(change.target || '')) || ''
+          });
+        }
+      } catch (error) {
+        console.error(`detail sweep failed for ${product.id}:`, error.message);
+      }
+    }
+    if (roundChanges.length) await publishDetailReport(account, roundChanges, new Date().toISOString());
+    return { changes: roundChanges };
+  } finally {
+    detailSweepRunning.delete(accountId);
+  }
 }
 
 function publicSettings(settings) {
@@ -335,8 +395,9 @@ function protectedSettings(settings) {
 function validateSettings(input) {
   const min = Number(input.intervalMinMinutes);
   const max = Number(input.intervalMaxMinutes);
-  if (!Number.isFinite(min) || !Number.isFinite(max) || min < 1 || max > 1440 || min > max) {
-    throw new Error('检测间隔范围无效');
+  // 检测间隔按 30 分钟一档
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min < 30 || max > 1440 || min > max || min % 30 !== 0 || max % 30 !== 0) {
+    throw new Error('检测间隔需要是 30 分钟的整数倍（30–1440 分钟）');
   }
   const settings = {
     intervalMinMinutes: min,
@@ -356,7 +417,7 @@ function validateSettings(input) {
   };
   for (const kind of ['wecom', 'dingtalk']) {
     const config = settings.notifications[kind];
-    if (config.enabled && !config.webhook) throw new Error(`请填写${kind === 'wecom' ? '企业微信' : '钉钉'}机器人 Webhook`);
+    if (config.enabled && !config.webhook) throw new Error(`请填写${kind === 'wecom' ? '企业微信' : '钉钉'}的机器人 Webhook 地址`);
     if (config.webhook) assertWebhook(kind, config.webhook);
   }
   return settings;
@@ -366,8 +427,6 @@ async function syncAccount(adapter, accountId, source = 'manual') {
   return syncQueue.run(accountId, async (signal) => {
     const account = store.getAccount(accountId);
     if (!account) throw new Error('商家账号不存在');
-    const loginWindow = loginWindows.get(accountId);
-    if (!loginWindow || loginWindow.isDestroyed()) createLoginWindow(accountId, { deferNavigation: true, show: false });
     try {
       const incomingProducts = await adapter.syncProducts(account, { signal });
       signal.throwIfAborted();
@@ -377,15 +436,13 @@ async function syncAccount(adapter, accountId, source = 'manual') {
       store.setProducts(accountId, reconciliation.products);
       store.updateAccount(accountId, { status: 'active', lastSyncAt: now, productCount: reconciliation.products.length, lastSyncSource: source, lastSyncError: '' });
       sendToRenderer('accounts:changed');
+      // 逐条掉标提醒已按要求去掉，只保留异常汇总
       const notificationErrors = [];
-      for (const change of reconciliation.changes) {
-        signal.throwIfAborted();
-        notificationErrors.push(...await sendConfiguredNotifications(publicSettings(store.getSettings()), buildStatusAlert(account, change)));
-      }
-      signal.throwIfAborted();
       if (hasAbnormalActivityProducts(reconciliation.products)) {
-        notificationErrors.push(...await sendConfiguredNotifications(publicSettings(store.getSettings()), buildActivitySummaryAlert(account, reconciliation.products)));
+        notificationErrors.push(...await sendAccountNotifications(account, buildActivitySummaryAlert(account, reconciliation.products)));
       }
+      // 只有自动检测才在后台补抓详情；手动同步只更新商品列表
+      if (source === 'scheduled') void runDetailSweep(accountId);
       return { ok: true, source: 'api', products: reconciliation.products, syncedAt: now, notificationErrors };
     } catch (error) {
       if (signal.aborted || !store.getAccount(accountId)) throw error;
@@ -401,7 +458,8 @@ async function syncAccount(adapter, accountId, source = 'manual') {
 
 function isAccountOfflineError(error) {
   const message = String(error?.message || error || '').toLowerCase();
-  if (error instanceof AdapterNotConfiguredError) return true;
+  if (error instanceof AdapterNotConfiguredError) return error.accountOffline !== false;
+  if ([401, 403].includes(Number(error?.status))) return true;
   return /http\s*(401|403)|未登录|登录失效|账号失效|凭证失效|身份验证失败/.test(message);
 }
 
@@ -417,7 +475,7 @@ async function markAccountOffline(account, error, source) {
   });
   sendToRenderer('accounts:changed');
   if (wasOnline) {
-    await sendConfiguredNotifications(publicSettings(store.getSettings()), buildAccountOfflineAlert(account));
+    await sendAccountNotifications(account, buildAccountOfflineAlert(account));
   }
 }
 
@@ -426,7 +484,7 @@ function enforceManualSyncCooldown(accountId) {
   const remainingMs = MANUAL_SYNC_COOLDOWN_MS - (Date.now() - lastSyncAt);
   if (remainingMs > 0) {
     const seconds = Math.ceil(remainingMs / 1000);
-    throw new Error(`同步操作冷却中，请在 ${seconds} 秒后再试`);
+    throw new Error(`刚刚已经同步过了，请在 ${seconds} 秒后再试`);
   }
   manualSyncAtByAccount.set(accountId, Date.now());
 }
@@ -672,7 +730,6 @@ function registerIpc(adapter) {
     const duplicate = store.findAccountByMallId(profile.mallId, accountId);
     if (duplicate) throw new Error('店铺已经添加过了');
     if (syncQueue?.isRunning(accountId)) throw new Error('该账号同步进行中，请稍后完成登录');
-    antiContentByAccount.delete(accountId);
     const now = new Date().toISOString();
     const account = store.upsertAccount({
       id: accountId,
@@ -690,6 +747,28 @@ function registerIpc(adapter) {
     scheduler?.refreshAccounts();
     return account;
   });
+  // 店铺管理后台用该账号自己的商家窗口打开，登录态就在窗口的 partition 里
+  ipcMain.handle('accounts:openShopHome', async (_event, accountId) => {
+    const signedIn = requireSignedInStore();
+    if (!signedIn.getAccount(accountId)) throw new Error('商家账号不存在');
+    const existing = loginWindows.get(accountId);
+    const window = existing && !existing.isDestroyed()
+      ? existing
+      : createLoginWindow(accountId, { deferNavigation: true });
+    window.show();
+    window.focus();
+    if (!window.webContents.getURL().startsWith(MERCHANT_HOME_URL)) {
+      await window.loadURL(MERCHANT_HOME_URL).catch(() => {});
+    }
+    return true;
+  });
+  ipcMain.handle('accounts:setNotify', (_event, { accountId, enabled } = {}) => {
+    requireSignedInStore();
+    if (!store.getAccount(accountId)) throw new Error('商家账号不存在');
+    store.updateAccount(accountId, { notificationsEnabled: Boolean(enabled) });
+    sendToRenderer('accounts:changed');
+    return true;
+  });
   ipcMain.handle('accounts:remove', (_event, accountId) => {
     requireSignedInStore();
     syncQueue?.cancel(accountId);
@@ -697,12 +776,47 @@ function registerIpc(adapter) {
     manualSyncAtByAccount.delete(accountId);
     const window = loginWindows.get(accountId);
     if (window && !window.isDestroyed()) window.close();
-    antiContentByAccount.delete(accountId);
     sendToRenderer('accounts:changed');
     scheduler?.refreshAccounts();
     return true;
   });
   ipcMain.handle('products:list', (_event, accountId) => requireSignedInStore().getProducts(accountId));
+  // 报名详情：按"店铺+商品"缓存，2 分钟内直接读 SQLite；超过 2 分钟才静默打开页面抓一次
+  // （页面自己带签名请求，我们不重放接口；不做请求次数限制）
+  ipcMain.handle('products:detail', async (_event, { accountId, productId } = {}) => {
+    requireSignedInStore();
+    const account = store.getAccount(accountId);
+    if (!account) throw new Error('商家账号不存在');
+    const product = store.getProducts(accountId).find((item) => String(item.id) === String(productId));
+    if (!product) throw new Error('本地没有这个商品的缓存，请先同步');
+
+    const cached = store.getProductDetail(accountId, productId);
+    const cachedAt = cached ? Date.parse(cached.fetchedAt) : NaN;
+    const cachedPayload = cached && Number.isFinite(cachedAt)
+      ? { rows: cached.rows, fetchedAt: cachedAt, cached: true }
+      : null;
+    if (cachedPayload && Date.now() - cachedAt < DETAIL_CACHE_TTL_MS) return cachedPayload;
+
+    if (detailFetchingByAccount.has(accountId)) throw new Error('上一个报名详情还在读取中，请稍等');
+
+    detailFetchingByAccount.add(accountId);
+    try {
+      const { rows, changes } = await refreshProductDetail(accountId, product);
+      return { rows, changes, fetchedAt: Date.now(), cached: false };
+    } catch (error) {
+      // 抓取失败但本地有旧数据时，宁可给旧数据也不要把弹窗打空
+      console.error('detail fetch failed:', error?.message || error);
+      if (cachedPayload) return { ...cachedPayload, stale: true };
+      throw error;
+    } finally {
+      detailFetchingByAccount.delete(accountId);
+    }
+  });
+  ipcMain.handle('products:detailChanges', (_event, { accountId, productId, limit = 10 } = {}) => {
+    requireSignedInStore();
+    if (!store.getAccount(accountId)) throw new Error('商家账号不存在');
+    return store.getProductDetailChanges(accountId, productId, limit);
+  });
   ipcMain.handle('products:sync', (_event, accountId) => {
     requireSignedInStore();
     enforceManualSyncCooldown(accountId);
@@ -747,29 +861,25 @@ app.whenReady().then(() => {
     }),
     label: 'Mart'
   });
-  const martClient = new MartClient({
+  martClientInstance = new MartClient({
     apiBaseUrl: martConfigFor().apiBaseUrl,
     session: martSession
   });
-  martService = new MartService({ client: martClient, session: martSession, platformSession });
+  martService = new MartService({ client: martClientInstance, session: martSession, platformSession });
   const adapter = new PddActivityAdapter({
-    getLoginWindow: id => loginWindows.get(id),
-    getAntiContent: id => antiContentByAccount.get(id) || '',
-    ensureBidPage
+    collectPayloads: (account, options) => collectBidListPayloads({ partition: accountPartition(account.id), ...options })
   });
   syncQueue = new SyncQueue({
     loadState: (id) => store.getSyncState(id),
-    saveState: (id, state) => { if (store) store.setSyncState(id, state); }
+    saveState: (id, state) => { if (store) store.setSyncState(id, state); },
+    maxConcurrent: 1
   });
   scheduler = new MonitorScheduler(async (accountId) => {
     if (!store) return;
     const account = store.getAccount(accountId);
     if (!account) return;
     if (account.status !== 'active') {
-      await sendConfiguredNotifications(
-        publicSettings(store.getSettings()),
-        buildAccountOfflineAlert(account)
-      );
+      await sendAccountNotifications(account, buildAccountOfflineAlert(account));
       return;
     }
     try {

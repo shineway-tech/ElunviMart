@@ -2,7 +2,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   reconcileProducts,
-  buildStatusAlert,
   buildActivitySummaryAlert,
   buildAccountOfflineAlert,
   isAbnormalActivityProduct,
@@ -109,13 +108,6 @@ test('reconcileProducts keeps a previously lost product in the local history', (
 test('reconcileProducts does not alert for a first snapshot', () => {
   const result = reconcileProducts([], [{ id: 'a', name: '新商品', status: 'lost' }]);
   assert.equal(result.changes.length, 0);
-});
-
-test('buildStatusAlert includes the shop and product identifiers', () => {
-  const message = buildStatusAlert({ displayName: '测试店铺' }, { product: { id: '123', name: '测试商品', status: 'lost' } });
-  assert.match(message.title, /已掉标/);
-  assert.match(message.body, /测试店铺/);
-  assert.match(message.body, /商品 ID：123/);
 });
 
 test('isAbnormalActivityProduct matches the all-sku-win rule', () => {

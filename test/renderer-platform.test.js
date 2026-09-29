@@ -34,6 +34,14 @@ test('renderer exposes a clear signed-out entry and signed-in finance surfaces',
   assert.match(styles, /\.toast\{[^}]*z-index:100/);
   assert.match(renderer, /toastTimer/);
   assert.match(renderer, /setTimeout\(\(\) => \{ elements\.toast\.hidden = true;/);
+  // 提示统一走中间浮层：不再有顶部内联 notice，错误用红色 toast
+  assert.doesNotMatch(html, /id="notice"/);
+  assert.match(styles, /\.toast\.is-error\{/);
+  assert.match(renderer, /function showError\(error, fallback = ''\)/);
+  assert.match(renderer, /已开启「\$\{name\}」的提醒/);
+  // 菜单叫“设置”
+  assert.match(html, /<i data-lucide="settings"><\/i><span>设置<\/span>/);
+  assert.match(renderer, /elements\.title\.textContent = '设置';/);
   assert.match(renderer, /document\.querySelectorAll\('\[data-view\]'\)/);
   assert.match(renderer, /team\.role === MEMBER_ROLE_OWNER/);
   assert.match(renderer, /团队信息暂时无法加载/);
@@ -185,4 +193,111 @@ test('teams, wallet and payment surfaces are driven by the mart client', () => {
   assert.match(renderer, /elements\.addAccount\.disabled = !allowed/);
   assert.match(renderer, /elements\.accountsFooter\.hidden/);
   assert.doesNotMatch(renderer, /window\.pddMonitor\.platform\.(team|wallet|createCheckout|packages)/);
+});
+
+test('merchant rows open the shop backend in that account merchant window', () => {
+  const renderer = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '../src/renderer/preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  assert.match(renderer, /data-account-action="shop"/);
+  assert.match(renderer, /accounts\.openShopHome\(account\.id\)/);
+  assert.match(preload, /openShopHome: \(accountId\) => ipcRenderer\.invoke\('accounts:openShopHome', accountId\)/);
+  assert.doesNotMatch(preload, /openExternal/);
+  // 复用该账号的商家窗口（partition 里有登录态），不往系统浏览器丢
+  const handler = main.slice(
+    main.indexOf("ipcMain.handle('accounts:openShopHome'"),
+    main.indexOf("ipcMain.handle('accounts:remove'")
+  );
+  assert.match(handler, /createLoginWindow\(accountId, \{ deferNavigation: true \}\)/);
+  assert.match(handler, /window\.loadURL\(MERCHANT_HOME_URL\)/);
+  assert.doesNotMatch(handler, /shell\.openExternal/);
+  // 需要登录时商品/后台入口点不进去，行里只留登录和移除
+  assert.match(renderer, /const online = account\.status === 'active'/);
+  assert.match(renderer, /const browseActions = online[\s\S]{0,420}data-account-action="view"[\s\S]{0,420}data-account-action="shop"[\s\S]{0,240}: ''/);
+  assert.match(renderer, /if \(online\) \{[\s\S]{0,220}data-account-action="view"[\s\S]{0,220}data-account-action="shop"/);
+});
+
+test('sync failures from an expired login are actionable and the back button sits on the right', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/renderer/index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
+  // 报错给出可照做的提示，而不是 Electron 的原始 IPC 报文
+  assert.match(renderer, /尚未捕获拼多多后台请求签名[\s\S]{0,120}重新登录/);
+  assert.match(renderer, /Error invoking remote method '\[\^'\]\+': \(\?:\[A-Za-z_\$\]\[\\w\$\]\*\):/);
+  // 返回按钮和顶部操作区在同一组里，落在界面右侧
+  assert.match(html, /topbar-actions[\s\S]{0,400}id="page-back"/);
+});
+
+test('product rows can open the merchant bid detail sheet', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/renderer/index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '../src/renderer/preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  // 报名详情是页内视图（不是弹窗），返回按钮回到商品列表
+  assert.match(html, /class="view detail-view" id="product-detail-view"/);
+  assert.doesNotMatch(html, /product-detail-modal/);
+  assert.match(html, /id="product-detail-rows"/);
+  assert.match(renderer, /state\.subView = 'product-detail'/);
+  assert.match(renderer, /function backFromProductDetail\(\)/);
+  assert.match(renderer, /if \(state\.subView === 'product-detail'\)/);
+  // 列与商家后台「查看报名详情」保持一致
+  assert.match(html, /<th>参考商品规格<\/th><th>竞价商品规格<\/th><th>线上库存<\/th><th>拼单价\(元\)<\/th><th>参考价\(元\)<\/th><th>报名商品报名价\(元\)<\/th><th>中标状态<\/th>/);
+  assert.match(renderer, /data-product-action="detail"/);
+  assert.match(renderer, /products\.detail\(accountId, product\.id\)/);
+  assert.match(renderer, /BID_WIN_STATUS_CLASSES/);
+  // 弹窗只列规格表格，不再带活动/ID 之类的附加信息
+  assert.doesNotMatch(html, /product-detail-meta|product-detail-note|product-detail-refresh/);
+  assert.match(preload, /detail: \(accountId, productId\) => ipcRenderer\.invoke\('products:detail', \{ accountId, productId \}\)/);
+  assert.match(main, /ipcMain\.handle\('products:detail'/);
+  // 详情走"静默开页面抓取"：按"店铺+商品"缓存，2 分钟内直接读 SQLite，没有请求次数限制
+  assert.match(main, /const DETAIL_CACHE_TTL_MS = 2 \* 60_000/);
+  assert.doesNotMatch(main, /DETAIL_REQUEST_LIMIT|DETAIL_REQUEST_WINDOW_MS|detailRequestAtByAccount/);
+  assert.match(main, /store\.getProductDetail\(accountId, productId\)/);
+  assert.match(main, /store\.setProductDetail\(accountId, product\.id, \{ rows, fetchedAt: changedAt \}\)/);
+  assert.match(main, /store\.addProductDetailChanges\(accountId, product\.id, changes\)/);
+  // 自动巡检：同步成功后按策略补抓详情，跳过全中标商品，间隔按轮次时长平摊
+  // 详情巡检只跟自动检测走，手动同步只同步列表
+  assert.match(main, /if \(source === 'scheduled'\) void runDetailSweep\(accountId\);/);
+  assert.match(main, /selectDetailCandidates\(\{ products, detailByProductId, intervalMs, batchSize \}\)/);
+  assert.match(main, /sweepStepMs\(\{ batchSize: batch\.length, cycleMinutes \}\)/);
+  // 每轮变化报告：生成 HTML → 上传后端 → 提醒里带链接
+  assert.match(main, /buildDetailReportHtml\(account, changes, roundAt\)/);
+  // 通知只摘要前 2 条，其余靠报告链接
+  assert.match(main, /const lines = changes\.slice\(0, 2\)\.map/);
+  assert.match(main, /request\('\/v1\/app\/reports', \{ method: 'POST'/);
+  // 弹窗里的“最近变化” + IPC
+  assert.match(html, /id="product-detail-changes"/);
+  assert.match(renderer, /loadProductDetailChanges\(accountId, product\.id\)/);
+  assert.match(preload, /detailChanges: \(accountId, productId, limit = 10\) => ipcRenderer\.invoke\('products:detailChanges'/);
+  assert.match(main, /ipcMain\.handle\('products:detailChanges'/);
+  // 每个店铺可单独关通知：所有按店铺的提醒都过 sendAccountNotifications
+  assert.match(main, /async function sendAccountNotifications\(account, message\)/);
+  assert.match(main, /if \(account && account\.notificationsEnabled === false\) return \[\];/);
+  assert.equal((main.match(/sendAccountNotifications\(account,/g) || []).length >= 4, true, '汇总/变化报告/掉线/催登录都走开关');
+  assert.match(main, /ipcMain\.handle\('accounts:setNotify'/);
+  assert.match(preload, /setNotify: \(accountId, enabled\) => ipcRenderer\.invoke\('accounts:setNotify'/);
+  // 开关就在店铺列表行上（不在设置页）
+  assert.match(html, /<th>提醒<\/th>/);
+  assert.match(renderer, /data-account-notify/);
+  assert.match(renderer, /accounts\.setNotify\(account\.id, notifyInput\.checked\)/);
+  assert.doesNotMatch(html, /id="account-notify-list"/);
+  // 规格列带缩略图
+  assert.match(renderer, /detail-thumb/);
+  assert.match(renderer, /row\.referenceImage/);
+  assert.match(renderer, /row\.bidImage/);
+  // 检测间隔按 30 分钟一档
+  assert.match(html, /id="interval-min"><option value="30">30 分钟<\/option><option value="60">60 分钟<\/option>/);
+  assert.doesNotMatch(html, /id="interval-min"><option value="5">/);
+  assert.match(main, /检测间隔需要是 30 分钟的整数倍/);
+  assert.match(renderer, /function snapIntervalOption\(select, value\)/);
+  // 手动同步冷却 2 分钟，主进程与渲染层保持一致
+  assert.match(main, /const MANUAL_SYNC_COOLDOWN_MS = 120_000/);
+  assert.match(renderer, /function startSyncCooldown\(accountId, durationMs = 120_000\)/);
+  // 同一账号同时只读一个详情（换成抓页面后不再需要时间间隔冷却）
+  assert.match(main, /const detailFetchingByAccount = new Set\(\)/);
+  assert.match(main, /detailFetchingByAccount.add\(accountId\)/);
+  assert.doesNotMatch(main, /DETAIL_MIN_INTERVAL_MS|detailLastFetchAtByAccount/);
+  assert.match(main, /const \{ buildDetailUrl, fetchDetailPage, parseDetailTable \} = require\('\.\/pdd-detail-page'\)/);
+  assert.match(main, /fetchDetailPage\(\{/);
+  assert.match(main, /parseDetailTable\(table\)/);
+  assert.doesNotMatch(main, /readDetailBlock|writeDetailBlock/);
 });
