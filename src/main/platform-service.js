@@ -84,6 +84,11 @@ class PlatformService {
     this.authenticatedEmail = null;
   }
 
+  // 供 Mart 兑换会话前强制刷新平台令牌（见 MartService.linkFromPlatform）
+  async refreshSession() {
+    return this.client.refreshSession();
+  }
+
   async requireSignedIn() {
     if (!(await this.session.accessToken())) throw new Error('请先登录 Elunvi 账号');
   }

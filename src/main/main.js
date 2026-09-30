@@ -918,7 +918,12 @@ app.whenReady().then(() => {
     apiBaseUrl: martConfigFor().apiBaseUrl,
     session: martSession
   });
-  martService = new MartService({ client: martClientInstance, session: martSession, platformSession });
+  martService = new MartService({
+    client: martClientInstance,
+    session: martSession,
+    platformSession,
+    refreshPlatformSession: () => platformService.refreshSession()
+  });
   const adapter = new PddActivityAdapter({
     collectPayloads: (account, options) => collectBidListPayloads({ partition: accountPartition(account.id), ...options })
   });

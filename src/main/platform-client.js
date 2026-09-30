@@ -26,6 +26,11 @@ class PlatformClient {
     this.refreshFn = refresh || ((refreshToken) => this._refresh(refreshToken));
   }
 
+  // 兑换 Mart 会话这类"把平台令牌拿给别人验"的场景需要主动刷新（平台访问令牌只有 15 分钟）
+  async refreshSession() {
+    return this.session.refresh(this.refreshFn);
+  }
+
   async _refresh(refreshToken) {
     try {
       const response = await this._requestOnce('/v1/auth/refresh', {

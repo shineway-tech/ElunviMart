@@ -4,29 +4,50 @@ function expiresAtFromSeconds(seconds) {
   return new Date(Date.now() + value * 1000).toISOString();
 }
 
+// 平台令牌失效时后端会回 401（err_code 20001 / AUTH_REQUIRED），这种情况值得先刷新再重试
+function isPlatformTokenRejected(error) {
+  if (Number(error?.status) !== 401) return false;
+  if (Number(error?.code) === 20001) return true;
+  return /AUTH_REQUIRED|平台登录状态已失效/i.test(String(error?.message || ''));
+}
+
 class MartService {
-  constructor({ client, session, platformSession }) {
+  constructor({ client, session, platformSession, refreshPlatformSession = null }) {
     if (!client || !session || !platformSession) throw new Error('Mart service 配置不完整');
     this.client = client;
     this.session = session;
     this.platformSession = platformSession;
+    // 平台访问令牌只有 15 分钟：兑换前可能已经过期，需要能强制刷新一次
+    this.refreshPlatformSession = refreshPlatformSession;
     this.summary = null;
   }
 
   // 平台登录成功后调用：用平台 access token 换 Mart session，用户和默认团队由 Mart 侧沉淀
   async linkFromPlatform() {
-    const platformToken = await this.platformSession.accessToken();
+    let platformToken = await this.platformSession.accessToken();
     if (!platformToken) throw new Error('请先登录 Elunvi 账号');
     // 平台不给邮箱注册用户昵称，带上邮箱让 Mart 用 @ 前那截兜底（只影响本人显示名）
     const accountEmail = await this.platformSession.accountEmail();
-    const { data } = await this.client.request('/v1/auth/platform/exchange', {
+    const exchange = (token) => this.client.request('/v1/auth/platform/exchange', {
       method: 'POST',
       auth: false,
       body: {
-        access_token: platformToken,
+        access_token: token,
         ...(accountEmail ? { account_email: accountEmail } : {})
       }
     });
+    let response;
+    try {
+      response = await exchange(platformToken);
+    } catch (error) {
+      // 令牌过期时先刷新一次再兑换；刷不出来或换完还是 401 就如实报错
+      if (!isPlatformTokenRejected(error) || !this.refreshPlatformSession) throw error;
+      const refreshed = await this.refreshPlatformSession();
+      platformToken = refreshed?.accessToken || await this.platformSession.accessToken();
+      if (!platformToken) throw error;
+      response = await exchange(platformToken);
+    }
+    const { data } = response;
     await this.session.save({
       accessToken: data.access_token,
       refreshToken: data.refresh_token,

@@ -131,3 +131,45 @@ test('logout revokes the mart session and clears local credentials', async () =>
   assert.equal(await session.tokens(), null);
   assert.deepEqual(await service.status(), { linked: false, user: null, default_team: null });
 });
+
+test('linkFromPlatform refreshes an expired platform token and retries once', async () => {
+  const { MartService } = require('../src/main/mart-service');
+  const calls = [];
+  const client = {
+    request: async (pathname, options) => {
+      calls.push(options.body.access_token);
+      if (calls.length === 1) {
+        const error = new Error('平台登录状态已失效，请重新登录');
+        error.status = 401;
+        error.code = 20001;
+        throw error;
+      }
+      return { data: { access_token: 'mart-a', refresh_token: 'mart-r', expires_in: 900, user: { id: 2 }, default_team: { id: 2 } } };
+    }
+  };
+  const session = { save: async () => {}, accessToken: async () => 'mart-a', accountEmail: async () => null };
+  const platformSession = { accessToken: async () => 'stale-token', accountEmail: async () => 'shenyi@example.com' };
+  let refreshes = 0;
+  const service = new MartService({
+    client, session, platformSession,
+    refreshPlatformSession: async () => { refreshes += 1; platformSession.accessToken = async () => 'fresh-token'; return { accessToken: 'fresh-token' }; }
+  });
+  const summary = await service.linkFromPlatform();
+  assert.equal(refreshes, 1, '401 时应刷新一次平台令牌');
+  assert.deepEqual(calls, ['stale-token', 'fresh-token'], '用刷新后的令牌重试兑换');
+  assert.equal(summary.user.id, 2);
+});
+
+test('linkFromPlatform surfaces other failures without touching the platform session', async () => {
+  const { MartService } = require('../src/main/mart-service');
+  const client = { request: async () => { const error = new Error('HTTP 502'); error.status = 502; throw error; } };
+  let refreshes = 0;
+  const service = new MartService({
+    client,
+    session: { save: async () => {} },
+    platformSession: { accessToken: async () => 'token', accountEmail: async () => null },
+    refreshPlatformSession: async () => { refreshes += 1; return { accessToken: 'x' }; }
+  });
+  await assert.rejects(service.linkFromPlatform(), /502/);
+  assert.equal(refreshes, 0, '非 401 不刷新');
+});
