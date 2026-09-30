@@ -68,3 +68,14 @@ CI 用 GitHub Secrets（与 ArtForgeStudio 同账号，可直接复用）：
 - **安装版**（macOS DMG 安装、Windows setup.exe）点「重启更新」即可完成；**免安装 portable** 装不了更新，提示里给的是「去下载」。
 - 源码运行（未打包）不会检查更新，避免开发时报错。
 - 发布顺序：先让 CI 把产物与 `latest*.yml` 都传上 OSS，用户端在下一次启动或 6 小时内就会看到提示。
+
+### 兜底：CI 上传失败时手工镜像
+
+GitHub runner → 阿里云 OSS 的国际链路会周期性变慢甚至挂死（实测 ~25–57KB/s），CI 那一步有 15 分钟上限、超时会被跳过（`continue-on-error`），此时 OSS 上还是旧产物。可以在一台国内机器上补一次：
+
+```bash
+export ALIYUN_OSS_ACCESS_KEY_ID=... ALIYUN_OSS_ACCESS_KEY_SECRET=...
+bash scripts/mirror-release-to-oss.sh v1.0.1     # 下载 → 校验 sha512 → 上传 → 核验
+```
+
+脚本默认写发布桶 `honeykid`（上海，`static.honeykid.cn`）；报告桶是 `elunvi-mart`（杭州），别搞混。
