@@ -27,7 +27,7 @@ git tag v1.0.1 && git push origin v1.0.1
 `Elunvi-Mart-macos-universal.zip.blockmap` 与 `Elunvi-Mart-windows-x64-setup.exe.blockmap` 也会一起上传：
 electron-updater 靠它做**差分更新**（只下载变化的块，而不是整包 200MB）。缺了这两个文件更新仍能成功，但会退化成整包下载。
 
-产物发布在 GitHub Release，并由**国内侧**镜像到 OSS（`https://static.honeykid.cn`）——GitHub runner 到阿里云 OSS 的国际链路实测长期不可用（~50KB/s 甚至挂死），所以这一步不放在 CI 里：
+产物同时上传到 GitHub Release 和 OSS（`https://static.honeykid.cn`）：
 
 ```text
 public/elunvi_mart/<version>/<file>    版本路径，长期保留
@@ -50,7 +50,7 @@ CI 用 GitHub Secrets（与 ArtForgeStudio 同账号，可直接复用）：
 
 - `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` / `KEYCHAIN_PASSWORD`：Developer ID Application 证书（p12 的 base64 与密码）
 - `APPLE_API_ISSUER` / `APPLE_API_KEY`（Key ID）/ `APPLE_API_KEY_BASE64`（.p8 内容）：App Store Connect API key，用于 notarytool 公证
-- `ALIYUN_OSS_*`：只有本地镜像脚本（`scripts/mirror-release-to-oss.sh`）用得到，CI 已不再需要
+- `ALIYUN_OSS_REGION` / `ALIYUN_OSS_BUCKET` / `ALIYUN_OSS_ACCESS_KEY_ID` / `ALIYUN_OSS_ACCESS_KEY_SECRET`（可选 `ALIYUN_OSS_ENDPOINT`）：OSS 上传
 
 `package:mac` 在 `ELUNVI_MAC_NOTARIZE=1` 时让 electron-builder 走公证，之后工作流再对 DMG 做 `stapler staple`。
 日志里出现 `notarization` 相关失败时，用 `xcrun notarytool log <submission-id>` 看原因。
@@ -67,17 +67,4 @@ CI 用 GitHub Secrets（与 ArtForgeStudio 同账号，可直接复用）：
 - 打包版启动时检查 `https://static.honeykid.cn/public/elunvi_mart/latest-mac.yml`（macOS）或 `latest.yml`（Windows），后台下载完成后在窗口右下角提示"新版本已下载，重启即可更新"。
 - **安装版**（macOS DMG 安装、Windows setup.exe）点「重启更新」即可完成；**免安装 portable** 装不了更新，提示里给的是「去下载」。
 - 源码运行（未打包）不会检查更新，避免开发时报错。
-- 发布顺序：CI 构建 + 签名公证 + 发 GitHub Release → 把产物与 `latest*.yml` 镜像到 OSS → 用户端在下一次启动或 6 小时内看到提示。
-
-## OSS 镜像（CI 之后必做的一步）
-
-在能顺畅访问 OSS 的国内机器上执行（会先从 GitHub Release 下载产物、按 `latest*.yml` 里的 sha512 逐个校验，再上传）：
-
-```bash
-export ALIYUN_OSS_ACCESS_KEY_ID=... ALIYUN_OSS_ACCESS_KEY_SECRET=...
-bash scripts/mirror-release-to-oss.sh v1.0.1
-```
-
-- 默认写发布桶 `honeykid`（上海，`static.honeykid.cn`）、前缀 `public/elunvi_mart`；报告桶是另一个（`elunvi-mart`，杭州），别搞混
-- 校验不通过会直接中止，不会把不对的文件传上去
-- 也可以 `OUT=/some/dir` 指定下载目录复用已有的产物
+- 发布顺序：先让 CI 把产物与 `latest*.yml` 都传上 OSS，用户端在下一次启动或 6 小时内就会看到提示。
