@@ -17,6 +17,7 @@ const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter
 const { buildDetailUrl, fetchDetailPage, parseDetailTable } = require('./pdd-detail-page');
 const { collectBidListPayloads } = require('./pdd-bid-page');
 const { buildDetailReportHtml, diffDetailRows, detailIdsOf, isFullyWon, selectDetailCandidates, sweepStepMs } = require('./detail-monitor');
+const { uploadReport } = require('./report-upload');
 const { SyncQueue } = require('./sync-queue');
 const { assertWebhook, sendChannelTest, sendConfiguredNotifications } = require('./notifier');
 const { MonitorScheduler } = require('./scheduler');
@@ -302,8 +303,7 @@ async function publishDetailReport(account, changes, roundAt) {
   let link = '';
   try {
     const html = buildDetailReportHtml(account, changes, roundAt);
-    const result = await martClientInstance?.request('/v1/app/reports', { method: 'POST', body: { title, html } });
-    link = String(result?.url || '');
+    link = await uploadReport(martClientInstance, { title, html });
   } catch (error) {
     console.error('detail report upload failed:', error?.message || error);
   }

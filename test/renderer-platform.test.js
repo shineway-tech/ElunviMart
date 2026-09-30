@@ -264,7 +264,9 @@ test('product rows can open the merchant bid detail sheet', () => {
   assert.match(main, /buildDetailReportHtml\(account, changes, roundAt\)/);
   // 通知只摘要前 2 条，其余靠报告链接
   assert.match(main, /const lines = changes\.slice\(0, 2\)\.map/);
-  assert.match(main, /request\('\/v1\/app\/reports', \{ method: 'POST'/);
+  // 上传解包在 report-upload 里做：少解一层 data 会让提醒缺链接
+  assert.match(main, /link = await uploadReport\(martClientInstance, \{ title, html \}\)/);
+  assert.match(main, /const \{ uploadReport \} = require\('\.\/report-upload'\)/);
   // 弹窗里的“最近变化” + IPC
   assert.match(html, /id="product-detail-changes"/);
   assert.match(renderer, /loadProductDetailChanges\(accountId, product\.id\)/);
