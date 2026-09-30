@@ -116,7 +116,7 @@
             <div class="product-detail-changes" id="product-detail-changes" hidden><h3>最近变化</h3><ul id="product-detail-change-list"></ul></div>
             <div class="table-frame" id="product-detail-table" hidden>
               <table>
-                <thead><tr><th>参考商品规格</th><th>竞价商品规格</th><th>线上库存</th><th>拼单价(元)</th><th>参考价(元)</th><th>报名商品报名价(元)</th><th>中标状态</th></tr></thead>
+                <thead><tr><th>参考商品规格</th><th>竞价商品规格</th><th>线上库存</th><th>拼单价(元)</th><th>参考价(元)</th><th>报名商品报名价(元)</th><th>中标状态</th><th class="detail-action-head">比价</th></tr></thead>
                 <tbody id="product-detail-rows"></tbody>
               </table>
             </div>
@@ -264,6 +264,22 @@
     </section>
   </div>
 
+  <div class="modal-backdrop" id="price-modal" hidden>
+    <section class="modal price-modal" role="dialog" aria-modal="true" aria-labelledby="price-modal-title">
+      <div class="modal-header"><h2 id="price-modal-title"></h2><button class="icon-button" type="button" data-close-price-modal aria-label="关闭"><i data-lucide="x"></i></button></div>
+      <div class="price-modal-body">
+        <p class="price-modal-meta" id="price-modal-meta"></p>
+        <p class="price-modal-status" id="price-modal-status"></p>
+        <div class="price-list" id="price-result-list"></div>
+      </div>
+      <div class="modal-actions price-modal-actions">
+        <span class="price-modal-balance" id="price-modal-balance"></span>
+        <button class="button" type="button" id="price-modal-requery">重新查询</button>
+        <button class="button button-primary" type="button" data-close-price-modal>关闭</button>
+      </div>
+    </section>
+  </div>
+
   <div class="modal-backdrop" id="force-update-modal" hidden>
     <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="force-update-title">
       <div class="modal-header"><h2 id="force-update-title">需要更新后才能继续使用</h2></div>
@@ -328,17 +344,6 @@
             </div>
         </div>
       </div>
-    </section>
-  </div>
-
-  <div class="modal-backdrop" id="force-update-modal" hidden>
-    <section class="modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="force-update-title">
-      <div class="modal-header"><h2 id="force-update-title">需要更新后才能继续使用</h2></div>
-      <div class="confirm-content">
-        <span class="confirm-icon confirm-icon-accent"><i data-lucide="arrow-up-circle"></i></span>
-        <p id="force-update-copy"></p>
-      </div>
-      <div class="modal-actions"><button class="button button-primary" type="button" id="force-update-submit">立即更新</button></div>
     </section>
   </div>
 

@@ -202,7 +202,8 @@ test('merchant rows open the shop backend in that account merchant window', () =
   assert.match(renderer, /data-account-action="shop"/);
   assert.match(renderer, /accounts\.openShopHome\(account\.id\)/);
   assert.match(preload, /openShopHome: \(accountId\) => ipcRenderer\.invoke\('accounts:openShopHome', accountId\)/);
-  assert.doesNotMatch(preload, /openExternal/);
+  // 商家后台只能开在 app 内的商家窗口：openShopHome 不允许走系统浏览器/外部链接入口
+  assert.doesNotMatch(preload, /openShopHome: \(accountId\) => ipcRenderer\.invoke\('app:openExternal'/);
   // 复用该账号的商家窗口（partition 里有登录态），不往系统浏览器丢
   const handler = main.slice(
     main.indexOf("ipcMain.handle('accounts:openShopHome'"),
@@ -300,4 +301,55 @@ test('product rows can open the merchant bid detail sheet', () => {
   assert.match(main, /fetchDetailPage\(\{/);
   assert.match(main, /parseDetailTable\(table\)/);
   assert.doesNotMatch(main, /readDetailBlock|writeDetailBlock/);
+});
+
+test('sku rows expose jd/taobao price search with points confirmation', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../src/renderer/index.html'), 'utf8');
+  const renderer = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '../src/renderer/styles.css'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '../src/renderer/preload.js'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const service = fs.readFileSync(path.join(__dirname, '../src/main/mart-service.js'), 'utf8');
+
+  // 规格表多一列比价入口，两个渠道各一个按钮
+  assert.match(html, /<th class="detail-action-head">比价<\/th>/);
+  assert.match(renderer, /const PRICE_CHANNELS = \[\['jd', '京东'\], \['taobao', '淘宝'\]\]/);
+  assert.match(renderer, /button\.dataset\.priceChannel = channel/);
+  assert.match(renderer, /async function querySkuPrice\(channel, row\)/);
+  // 每次点击都要确认，并写清消耗多少积分
+  assert.match(renderer, /本次查询消耗 \$\{cost\} 积分（从团队积分扣除，当前余额 \$\{formatPoints\(balance\)\} 积分）/);
+  assert.match(renderer, /const confirmed = await confirmAction\(\{/);
+  // 关键词 = 干净的商品名 + 规格关键词，去掉后台标签
+  assert.match(renderer, /function priceKeywordFor\(product, spec\)/);
+  assert.match(renderer, /选报规格\|必报规格\|终止竞标\|已有其余商品提报/);
+  // 结果弹窗：价格升序、条数来源提示、消耗与余额、重新查询
+  assert.match(html, /id="price-modal"/);
+  assert.match(html, /data-close-price-modal/);
+  assert.match(html, /id="price-modal-requery"/);
+  assert.match(renderer, /function renderPriceResults\(result\)/);
+  assert.match(renderer, /结果来自 5 分钟内的缓存（本次仍按一次查询计费）/);
+  assert.match(renderer, /本次消耗 \$\{formatPoints\(cost\)\} 积分 · 余额 \$\{formatPoints\(balance\)\} 积分/);
+  assert.match(renderer, /elements\.priceModalRequery\.addEventListener\('click'/);
+  assert.match(styles, /\.price-item\{[^}]*grid-template-columns:22px 40px minmax\(0,1fr\) auto/);
+  assert.match(styles, /\.detail-action-cell\{/);
+  // 查询后立刻更新侧边栏积分
+  assert.match(renderer, /function applyWalletBalance\(teamId, balancePoints\)/);
+  assert.match(renderer, /applyWalletBalance\(teamId, result\?\.balance_points\)/);
+  // 单价由后端策略下发，取不到按 10
+  assert.match(renderer, /state\.priceSearch\.costPoints/);
+  assert.match(main, /priceSearchCostPoints/);
+  // 扣分与缓存都在后端：渲染层不缓存、不算账
+  assert.doesNotMatch(renderer, /priceSearchCache|price_cache/);
+  assert.match(service, /async priceSearch\(\{/);
+  assert.match(service, /'\/v1\/app\/price-search'/);
+  assert.match(preload, /priceSearch: \(input\) => ipcRenderer\.invoke\('mart:priceSearch', input\)/);
+  assert.match(main, /ipcMain\.handle\('mart:priceSearch'/);
+  // 商品链接只放行京东/淘宝/天猫
+  assert.match(main, /const PRICE_LINK_HOSTS = \['jd\.com', 'taobao\.com', 'tmall\.com'\]/);
+  assert.match(main, /ipcMain\.handle\('app:openExternal'/);
+  // 白名单校验：非京东/淘宝/天猫的 https 地址一律拒绝
+  assert.match(main, /PRICE_LINK_HOSTS\.some\(\(suffix\) => host === suffix \|\| host\.endsWith\(`\.\$\{suffix\}`\)\)/);
+  assert.match(preload, /openExternal: \(url\) => ipcRenderer\.invoke\('app:openExternal', url\)/);
+  // force-update 弹窗先前重复了一份，已删掉重复节点
+  assert.equal((html.match(/id="force-update-modal"/g) || []).length, 1);
 });

@@ -2,6 +2,8 @@ const state = {
   app: { isPackaged: false, version: '', martApiBaseUrl: '' },
   update: { ready: null, available: '', checking: false },
   forceUpdate: null,
+  // 比价：costPoints 以后端策略为准，取不到就按 10 展示
+  priceSearch: { costPoints: 10, last: null, loading: false },
   platform: { status: 'loading', profile: null, security: null, accountEmail: null },
   mart: {
     linked: false,
@@ -104,6 +106,13 @@ const elements = {
   productDetailChangeList: document.querySelector('#product-detail-change-list'),
   productDetailTable: document.querySelector('#product-detail-table'),
   productDetailRows: document.querySelector('#product-detail-rows'),
+  priceModal: document.querySelector('#price-modal'),
+  priceModalTitle: document.querySelector('#price-modal-title'),
+  priceModalMeta: document.querySelector('#price-modal-meta'),
+  priceModalStatus: document.querySelector('#price-modal-status'),
+  priceResultList: document.querySelector('#price-result-list'),
+  priceModalBalance: document.querySelector('#price-modal-balance'),
+  priceModalRequery: document.querySelector('#price-modal-requery'),
   confirmTitle: document.querySelector('#confirm-modal-title'),
   confirmDescription: document.querySelector('#confirm-modal-description'),
   confirmIcon: document.querySelector('#confirm-modal-icon'),
@@ -2155,6 +2164,8 @@ async function loadAppInfo() {
       version: String(info?.version || ''),
       martApiBaseUrl: String(info?.martApiBaseUrl || '')
     };
+    const cost = Number(info?.priceSearchCostPoints);
+    if (Number.isFinite(cost) && cost > 0) state.priceSearch.costPoints = cost;
   } catch {
     state.app = { isPackaged: false, version: '', martApiBaseUrl: '' };
   }
@@ -2723,6 +2734,8 @@ const BID_WIN_STATUS_CLASSES = {
   暂无选标资格: 'status-lost'
 };
 
+const PRICE_CHANNELS = [['jd', '京东'], ['taobao', '淘宝']];
+
 function renderProductDetailRows(rows) {
   elements.productDetailRows.replaceChildren();
   for (const row of rows) {
@@ -2768,6 +2781,20 @@ function renderProductDetailRows(rows) {
     status.textContent = row.winStatus || '未知';
     statusCell.append(status);
     tr.append(statusCell);
+
+    // 比价：两个渠道各一个入口，点击后先确认扣积分再查
+    const actionCell = document.createElement('td');
+    actionCell.className = 'detail-action-cell';
+    for (const [channel, label] of PRICE_CHANNELS) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'price-link';
+      button.textContent = label;
+      button.dataset.priceChannel = channel;
+      button.addEventListener('click', () => void querySkuPrice(channel, row));
+      actionCell.append(button);
+    }
+    tr.append(actionCell);
     elements.productDetailRows.append(tr);
   }
   refreshIcons();
@@ -2792,6 +2819,171 @@ async function loadProductDetailChanges(accountId, productId) {
     renderProductDetailChanges([]);
   }
 }
+
+// 比价关键词：商品名（活动里那份更干净）+ 规格关键词，去掉后台标签噪音
+function priceKeywordFor(product, spec) {
+  const base = String(product?.activityProductName || product?.name || '').trim();
+  const cleaned = String(spec || '')
+    .replace(/选报规格|必报规格|终止竞标|已有其余商品提报/gu, ' ')
+    .replace(/[，,、/|]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return [base, cleaned].filter(Boolean).join(' ').slice(0, 60);
+}
+
+function priceChannelLabel(channel) {
+  const found = PRICE_CHANNELS.find(([value]) => value === channel);
+  return found ? found[1] : channel;
+}
+
+function applyWalletBalance(teamId, balancePoints) {
+  if (balancePoints == null) return;
+  const wallet = state.mart.wallet;
+  if (wallet && String(wallet.team_id) === String(teamId)) wallet.balance_points = Number(balancePoints) || 0;
+  renderSidebarAccount();
+}
+
+// 规格行上的两个入口：确认扣积分 → 调后端 → 展示价格升序前 20 条
+async function querySkuPrice(channel, row) {
+  const product = state.productDetail;
+  const accountId = state.currentAccount?.id;
+  if (!product || !accountId) return;
+  const teamId = state.mart.teamId;
+  if (!teamId) {
+    showNotice('请先登录 Elunvi 账号后再查询价格', true);
+    return;
+  }
+  const label = priceChannelLabel(channel);
+  const spec = String(row.referenceSpec || row.bidSpec || '').trim();
+  const keyword = priceKeywordFor(product, spec);
+  if (!keyword) {
+    showNotice('这个规格没有可用的商品名，暂时查不了价格', true);
+    return;
+  }
+  const cost = state.priceSearch.costPoints;
+  const balance = Number(state.mart.wallet?.balance_points || 0);
+  const confirmed = await confirmAction({
+    title: `查询${label}价格？`,
+    description: `将按「${keyword}」在${label}搜索价格最低的 20 条。本次查询消耗 ${cost} 积分（从团队积分扣除，当前余额 ${formatPoints(balance)} 积分）。`,
+    confirmLabel: '查询',
+    icon: 'search'
+  });
+  if (!confirmed) return;
+  await runPriceQuery({ channel, label, spec, keyword, productId: product.id, accountId, teamId });
+}
+
+async function runPriceQuery({ channel, label, spec, keyword, productId, accountId, teamId }) {
+  if (state.priceSearch.loading) return;
+  state.priceSearch.loading = true;
+  state.priceSearch.last = { channel, label, spec, keyword, productId, accountId, teamId };
+  openPriceModal({ label, spec, keyword });
+  elements.priceModalRequery.disabled = true;
+  elements.priceModalStatus.hidden = false;
+  elements.priceModalStatus.textContent = `正在查询${label}价格…`;
+  elements.priceModalStatus.classList.remove('is-error');
+  try {
+    const result = await window.pddMonitor.mart.priceSearch({
+      teamId, channel, keyword, spec, accountId, productId
+    });
+    applyWalletBalance(teamId, result?.balance_points);
+    renderPriceResults(result);
+  } catch (error) {
+    elements.priceModalStatus.hidden = false;
+    elements.priceModalStatus.textContent = friendlyError(error) || '这次没有查到价格，请稍后重试';
+    elements.priceModalStatus.classList.add('is-error');
+    elements.priceModalBalance.textContent = '';
+  } finally {
+    state.priceSearch.loading = false;
+    elements.priceModalRequery.disabled = false;
+  }
+}
+
+function openPriceModal({ label, spec, keyword }) {
+  elements.priceModalTitle.textContent = `${label}价格 · ${spec || '全部规格'}`;
+  elements.priceModalMeta.textContent = `关键词：${keyword}`;
+  elements.priceResultList.replaceChildren();
+  elements.priceModalBalance.textContent = '';
+  elements.priceModal.hidden = false;
+}
+
+function closePriceModal() {
+  elements.priceModal.hidden = true;
+  state.priceSearch.loading = false;
+}
+
+function renderPriceResults(result) {
+  const items = Array.isArray(result?.items) ? result.items : [];
+  const cost = Number(result?.cost_points ?? state.priceSearch.costPoints) || 0;
+  const balance = Number(result?.balance_points || 0);
+  if (result?.stale) {
+    elements.priceModalStatus.hidden = false;
+    elements.priceModalStatus.textContent = '比价服务这次没查到新数据，下面是上一次的结果（本次未扣积分）';
+    elements.priceModalStatus.classList.remove('is-error');
+  } else if (result?.cached) {
+    elements.priceModalStatus.hidden = false;
+    elements.priceModalStatus.textContent = '结果来自 5 分钟内的缓存（本次仍按一次查询计费）';
+    elements.priceModalStatus.classList.remove('is-error');
+  } else {
+    elements.priceModalStatus.hidden = true;
+  }
+  elements.priceModalBalance.textContent = `本次消耗 ${formatPoints(cost)} 积分 · 余额 ${formatPoints(balance)} 积分`;
+
+  const list = elements.priceResultList;
+  list.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement('p');
+    empty.className = 'price-empty';
+    empty.textContent = '没有找到价格结果';
+    list.append(empty);
+    return;
+  }
+  items.forEach((item, index) => {    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'price-item';
+    row.addEventListener('click', () => {
+      void window.pddMonitor.app.openExternal(item.url).catch((error) => showError(error));
+    });
+
+    const rank = document.createElement('span');
+    rank.className = 'price-rank';
+    rank.textContent = String(index + 1);
+
+    if (item.image) {
+      const thumb = document.createElement('img');
+      thumb.className = 'price-thumb';
+      thumb.src = item.image;
+      thumb.alt = '';
+      thumb.referrerPolicy = 'no-referrer';
+      row.append(rank, thumb);
+    } else {
+      const thumb = document.createElement('span');
+      thumb.className = 'price-thumb price-thumb-empty';
+      row.append(rank, thumb);
+    }
+
+    const main = document.createElement('span');
+    main.className = 'price-main';
+    const title = document.createElement('span');
+    title.className = 'price-title';
+    title.textContent = item.title || '未命名商品';
+    const meta = document.createElement('span');
+    meta.className = 'price-shop';
+    const parts = [];
+    if (item.shop) parts.push(item.shop);
+    if (item.area) parts.push(item.area);
+    if (item.sales) parts.push(`销量 ${formatPoints(item.sales)}`);
+    meta.textContent = parts.join(' · ') || '—';
+    main.append(title, meta);
+
+    const price = document.createElement('strong');
+    price.className = 'price-amount';
+    price.textContent = `¥${Number(item.price).toFixed(2)}`;
+
+    row.append(main, price);
+    list.append(row);
+  });
+}
+
 
 async function openProductDetail(product) {
   const accountId = state.currentAccount?.id;
@@ -3286,6 +3478,13 @@ elements.teamActionModal.addEventListener('click', (event) => { if (event.target
 document.querySelectorAll('[data-close-modal]').forEach((button) => button.addEventListener('click', () => { elements.modal.hidden = true; }));
 document.querySelectorAll('[data-close-confirm-modal]').forEach((button) => button.addEventListener('click', () => closeConfirmModal(false)));
 elements.confirmModal.addEventListener('click', (event) => { if (event.target === elements.confirmModal) closeConfirmModal(false); });
+document.querySelectorAll('[data-close-price-modal]').forEach((button) => button.addEventListener('click', () => closePriceModal()));
+elements.priceModal.addEventListener('click', (event) => { if (event.target === elements.priceModal) closePriceModal(); });
+elements.priceModalRequery.addEventListener('click', () => {
+  const last = state.priceSearch.last;
+  if (!last || state.priceSearch.loading) return;
+  void runPriceQuery(last);
+});
 elements.confirmSubmit.addEventListener('click', () => closeConfirmModal(true));
 elements.startLogin.addEventListener('click', beginLogin);
 elements.completeLogin.addEventListener('click', completeLogin);
@@ -3333,6 +3532,7 @@ elements.paymentCloseOrder.addEventListener('click', () => void closePurchaseOrd
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (!elements.confirmModal.hidden) closeConfirmModal(false);
+  else if (!elements.priceModal.hidden) closePriceModal();
   else if (!elements.platformLoginModal.hidden) closePlatformAuthModal();
   else if (!elements.teamSwitchMenu.hidden) closeTeamSwitchMenu();
 });

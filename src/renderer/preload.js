@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     updateCheck: () => ipcRenderer.invoke('app:updateCheck'),
     installUpdate: () => ipcRenderer.invoke('app:updateInstall'),
     openUpdateDownload: () => ipcRenderer.invoke('app:updateOpenDownload'),
+    // 只允许打开京东/淘宝/天猫的 https 链接（比价结果跳转用）
+    openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
     onUpdateReady: (handler) => ipcRenderer.on('app:update-ready', (_event, payload) => handler(payload)),
     onForceUpdate: (handler) => ipcRenderer.on('app:force-update', (_event, payload) => handler(payload))
   },
@@ -42,6 +44,7 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     membershipQuote: (input) => ipcRenderer.invoke('mart:membershipQuote', input),
     membershipOrder: (input) => ipcRenderer.invoke('mart:membershipOrder', input),
     wallet: (teamId) => ipcRenderer.invoke('mart:wallet', teamId),
+    priceSearch: (input) => ipcRenderer.invoke('mart:priceSearch', input),
     walletPackages: () => ipcRenderer.invoke('mart:walletPackages'),
     walletTransactions: (input) => ipcRenderer.invoke('mart:walletTransactions', input),
     rechargeOrder: (input) => ipcRenderer.invoke('mart:rechargeOrder', input),

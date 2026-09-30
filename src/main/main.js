@@ -30,6 +30,7 @@ const {
 
 const MERCHANT_URL = 'https://mms.pinduoduo.com/';
 const MERCHANT_HOME_URL = 'https://mms.pinduoduo.com/home/';
+const PRICE_LINK_HOSTS = ['jd.com', 'taobao.com', 'tmall.com'];
 const MAX_ACCOUNTS = 10;
 const APP_NAME = 'Elunvi Mart';
 
@@ -115,11 +116,14 @@ function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
 }
 
-// 版本策略：后端可以要求低于某个版本的客户端先更新（configs 的 app.min_client_version）
+// 版本与计费策略：后端可以要求低于某个版本的客户端先更新（configs 的 app.min_client_version）
+// 比价单价的客户端展示值也来自这里，取不到就按 10
+let clientPolicy = null;
+
 async function checkVersionPolicy() {
-  if (!app.isPackaged) return null;
   const policy = await fetchPolicy({ apiBaseUrl: martConfigFor().apiBaseUrl });
-  if (policy && isBelowMinVersion(app.getVersion(), policy.minClientVersion)) {
+  if (policy) clientPolicy = policy;
+  if (policy && app.isPackaged && isBelowMinVersion(app.getVersion(), policy.minClientVersion)) {
     sendToRenderer('app:force-update', {
       currentVersion: app.getVersion(),
       minVersion: policy.minClientVersion,
@@ -668,13 +672,22 @@ function registerIpc(adapter) {
   ipcMain.handle('mart:membershipQuote', (_event, input) => martService.quoteMembership(input || {}));
   ipcMain.handle('mart:membershipOrder', (_event, input) => martService.createMembershipOrder(input || {}));
   ipcMain.handle('mart:wallet', (_event, teamId) => martService.wallet(teamId));
+  // 比价查询：扣积分的动作全在后端做，这里只转发
+  ipcMain.handle('mart:priceSearch', (_event, input) => martService.priceSearch(input || {}));
   ipcMain.handle('mart:walletPackages', () => martService.walletPackages());
   ipcMain.handle('mart:walletTransactions', (_event, input) => martService.walletTransactions(input || {}));
   ipcMain.handle('mart:rechargeOrder', (_event, input) => martService.createRechargeOrder(input || {}));
   ipcMain.handle('mart:order', (_event, orderId) => martService.order(orderId));
   ipcMain.handle('mart:orderContext', (_event, orderId) => martService.orderContext(orderId));
   // 渲染层靠这个判断当前是本地后端还是线上：mock 渠道只在本地开放
-  ipcMain.handle('app:info', () => ({ isPackaged: app.isPackaged, version: app.getVersion(), martApiBaseUrl: martConfigFor().apiBaseUrl }));
+  ipcMain.handle('app:info', () => ({
+    isPackaged: app.isPackaged,
+    version: app.getVersion(),
+    martApiBaseUrl: martConfigFor().apiBaseUrl,
+    priceSearchCostPoints: Number(clientPolicy?.priceSearchCostPoints) > 0
+      ? Number(clientPolicy.priceSearchCostPoints)
+      : 10
+  }));
   ipcMain.handle('app:updateCheck', () => runUpdateCheck());
   ipcMain.handle('app:updateInstall', () => (updater?.enabled ? updater.install() : { ok: false, reason: 'disabled' }));
   ipcMain.handle('app:updateOpenDownload', async () => {
@@ -682,6 +695,21 @@ function registerIpc(adapter) {
     if (!url) return { ok: false };
     await shell.openExternal(url);
     return { ok: true, url };
+  });
+  // 比价结果里的商品链接：只放行京东/淘宝/天猫的 https 地址
+  ipcMain.handle('app:openExternal', async (_event, rawUrl) => {
+    let parsed;
+    try {
+      parsed = new URL(String(rawUrl || ''));
+    } catch {
+      throw new Error('这个链接打不开');
+    }
+    const host = parsed.hostname.toLowerCase();
+    const allowed = parsed.protocol === 'https:'
+      && PRICE_LINK_HOSTS.some((suffix) => host === suffix || host.endsWith(`.${suffix}`));
+    if (!allowed) throw new Error('这个链接不支持打开');
+    await shell.openExternal(parsed.toString());
+    return { ok: true };
   });
   ipcMain.handle('mart:orders', (_event, input) => martService.listOrders(input || {}));
   ipcMain.handle('mart:paymentAttempt', (_event, input) => martService.createPaymentAttempt(input || {}));

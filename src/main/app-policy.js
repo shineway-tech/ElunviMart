@@ -29,10 +29,13 @@ async function fetchPolicy({ apiBaseUrl, fetchImpl = globalThis.fetch, timeoutMs
     if (!response.ok) return null;
     const payload = await response.json().catch(() => null);
     const data = payload?.data || {};
+    const cost = Number(data.price_search?.cost_points);
     return {
       minClientVersion: String(data.min_client_version || '').trim(),
       downloadUrl: String(data.download_url || '').trim(),
-      note: String(data.note || '').trim()
+      note: String(data.note || '').trim(),
+      // 比价每次扣多少积分随策略下发，取不到按 10 处理
+      priceSearchCostPoints: Number.isFinite(cost) && cost > 0 ? Math.floor(cost) : 10
     };
   } catch {
     return null;

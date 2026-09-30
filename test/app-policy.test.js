@@ -27,9 +27,28 @@ test('fetchPolicy reads the backend policy endpoint', async () => {
   assert.deepEqual(policy, {
     minClientVersion: '1.1.0',
     downloadUrl: 'https://static.honeykid.cn/public/elunvi_mart',
-    note: '请更新'
+    note: '请更新',
+    priceSearchCostPoints: 10
   });
   assert.equal(calls[0].url, 'https://elunvi-mart-api.honeykid.cn/v1/app/policy');
+
+  // 比价单价随策略下发：后端说多少就展示多少
+  const priced = await fetchPolicy({
+    apiBaseUrl: 'https://x',
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({ data: { min_client_version: '', download_url: '', note: '', price_search: { cost_points: 20 } } })
+    })
+  });
+  assert.equal(priced.priceSearchCostPoints, 20);
+  const nonsense = await fetchPolicy({
+    apiBaseUrl: 'https://x',
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({ data: { price_search: { cost_points: -3 } } })
+    })
+  });
+  assert.equal(nonsense.priceSearchCostPoints, 10, '异常值退回默认 10');
 
   const failing = await fetchPolicy({ apiBaseUrl: 'https://x', fetchImpl: async () => ({ ok: false }) });
   assert.equal(failing, null, '拿不到策略时不阻断');

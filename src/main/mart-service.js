@@ -139,6 +139,24 @@ class MartService {
     return data;
   }
 
+  // 比价查询：每次调用都会扣固定积分（由后端负责扣减与缓存）
+  async priceSearch({
+    teamId, channel, keyword, spec = '', accountId = '', productId = ''
+  }) {
+    const { data } = await this.client.request('/v1/app/price-search', {
+      method: 'POST',
+      body: {
+        team_id: teamId,
+        channel,
+        keyword,
+        spec,
+        account_id: accountId,
+        product_id: productId
+      }
+    });
+    return data;
+  }
+
   async walletPackages() {
     const { data } = await this.client.request('/v1/wallet/packages');
     return data;
