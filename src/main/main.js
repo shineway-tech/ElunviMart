@@ -14,7 +14,7 @@ const { MartService } = require('./mart-service');
 const { martConfigFor } = require('./mart-config');
 const { normalizeMerchantProfile, findMerchantProfileInPayloads } = require('./merchant-profile');
 const { PddActivityAdapter, AdapterNotConfiguredError } = require('./pdd-adapter');
-const { buildDetailUrl, fetchDetailPage, parseDetailTable } = require('./pdd-detail-page');
+const { buildDetailUrl, fetchDetailPage, isLoginPage, parseDetailTable } = require('./pdd-detail-page');
 const { collectBidListPayloads } = require('./pdd-bid-page');
 const { buildDetailReportHtml, diffDetailRows, detailIdsOf, isFullyWon, selectDetailCandidates, sweepStepMs } = require('./detail-monitor');
 const { uploadReport } = require('./report-upload');
@@ -275,13 +275,21 @@ async function sendAccountNotifications(account, message) {
   return sendConfiguredNotifications(publicSettings(store.getSettings()), message);
 }
 
+// 详情页掉登录：跟列表同步一样要能标记掉线（accountOffline 标记交给 isAccountOfflineError 识别）
+function merchantLoginExpiredError() {
+  const error = new Error('拼多多商家后台登录状态已失效，请重新登录后恢复监控');
+  error.accountOffline = true;
+  return error;
+}
+
 async function fetchDetailRows(accountId, product) {
   const ids = detailIdsOf(product);
   if (!ids) throw new Error('这个商品的报名 ID 不完整，暂时看不了报名详情');
-  const { table, pageText } = await fetchDetailPage({
+  const { table, pageText, finalUrl, loginRequired } = await fetchDetailPage({
     partition: accountPartition(accountId),
     url: buildDetailUrl(ids)
   });
+  if (loginRequired || isLoginPage({ url: finalUrl, text: pageText })) throw merchantLoginExpiredError();
   if (!table) throw new Error(pageText ? `商家后台这次没打开报名详情（页面提示：${String(pageText).slice(0, 60)}）` : '商家后台没有返回报名详情，请稍后再试');
   return parseDetailTable(table);
 }
@@ -289,7 +297,17 @@ async function fetchDetailRows(accountId, product) {
 // 抓一次 + 落库 + 与上一份快照对比出 SKU 中标变化（手动查看与自动巡检共用）
 async function refreshProductDetail(accountId, product) {
   const previous = store.getProductDetail(accountId, product.id);
-  const rows = await fetchDetailRows(accountId, product);
+  let rows;
+  try {
+    rows = await fetchDetailRows(accountId, product);
+  } catch (error) {
+    // 详情这条路也得把账号标成"需要重新登录"，否则列表一直显示登录正常
+    if (isAccountOfflineError(error)) {
+      const account = store.getAccount(accountId);
+      if (account) await markAccountOffline(account, error, 'detail');
+    }
+    throw error;
+  }
   const changedAt = new Date().toISOString();
   store.setProductDetail(accountId, product.id, { rows, fetchedAt: changedAt });
   const changes = diffDetailRows(previous?.rows, rows, changedAt);
@@ -356,6 +374,10 @@ async function runDetailSweep(accountId) {
           });
         }
       } catch (error) {
+        if (isAccountOfflineError(error)) {
+          console.error(`detail sweep stopped at ${product.id}: 账号需要重新登录`);
+          break;
+        }
         console.error(`detail sweep failed for ${product.id}:`, error.message);
       }
     }
@@ -462,6 +484,7 @@ async function syncAccount(adapter, accountId, source = 'manual') {
 
 function isAccountOfflineError(error) {
   const message = String(error?.message || error || '').toLowerCase();
+  if (error?.accountOffline === true) return true;
   if (error instanceof AdapterNotConfiguredError) return error.accountOffline !== false;
   if ([401, 403].includes(Number(error?.status))) return true;
   return /http\s*(401|403)|未登录|登录失效|账号失效|凭证失效|身份验证失败/.test(message);
@@ -479,7 +502,9 @@ async function markAccountOffline(account, error, source) {
   });
   sendToRenderer('accounts:changed');
   if (wasOnline) {
-    await sendAccountNotifications(account, buildAccountOfflineAlert(account));
+    // 掉线提醒发失败（企业微信关键词/机器人被改之类）必须留痕，否则用户以为通知正常
+    const errors = await sendAccountNotifications(account, buildAccountOfflineAlert(account));
+    if (errors.length) console.error('offline alert failed:', errors.join('; '));
   }
 }
 

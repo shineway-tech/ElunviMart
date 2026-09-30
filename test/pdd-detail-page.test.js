@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildDetailUrl, parseDetailTable, specText } = require('../src/main/pdd-detail-page');
+const { buildDetailUrl, isLoginPage, parseDetailTable, specText } = require('../src/main/pdd-detail-page');
 
 test('builds the same detail url the merchant backend opens', () => {
   assert.equal(
@@ -66,4 +66,13 @@ test('the list sync uses a preload capture hook instead of a devtools debugger',
   assert.match(main, /localStorage\.getItem\('new_userinfo'\)/);
   assert.match(main, /mall\.mall_name/);
   assert.doesNotMatch(main, /fetch\('\/lakemms/);
+});
+
+test('recognises the merchant login page so a dead session is reported as offline', () => {
+  assert.equal(isLoginPage({ url: 'https://mms.pinduoduo.com/login/?redirectUrl=x' }), true);
+  assert.equal(isLoginPage({ text: '扫码登录 账号登录 打开拼多多商家版App扫码登录' }), true, '跳到登录页时按文案也能认出来');
+  assert.equal(isLoginPage({ text: '还没有店铺？0元开店 商家入驻' }), true);
+  assert.equal(isLoginPage({ url: 'https://mms.pinduoduo.com/act-bidding/ten-billion-bid-detail?a=1' }), false);
+  assert.equal(isLoginPage({ url: '', text: '参考商品规格 竞价商品规格 中标状态' }), false);
+  assert.equal(isLoginPage(), false);
 });

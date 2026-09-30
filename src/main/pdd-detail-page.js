@@ -86,6 +86,14 @@ function parseDetailTable(table) {
   });
 }
 
+// 登录失效时拼多多会把页面跳到登录页：URL 或页面文案（扫码登录/账号登录）都能认出来
+const LOGIN_URL_PATTERN = /mms\.pinduoduo\.com\/login/i;
+const LOGIN_TEXT_PATTERN = /扫码登录|账号登录|请先登录|还没有店铺/;
+
+function isLoginPage({ url = '', text = '' } = {}) {
+  return LOGIN_URL_PATTERN.test(String(url)) || LOGIN_TEXT_PATTERN.test(String(text));
+}
+
 // 静默窗口：同一 partition（带着登录态）打开拼多多自己的详情页，等表格渲染出来再抓
 async function fetchDetailPage({ partition, url, timeoutMs = 25_000, pollMs = 500 }) {
   const window = new BrowserWindow({
@@ -96,18 +104,22 @@ async function fetchDetailPage({ partition, url, timeoutMs = 25_000, pollMs = 50
     await window.loadURL(url).catch(() => {});
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      if (window.isDestroyed()) return { table: null, pageText: '' };
+      const finalUrl = window.isDestroyed() ? '' : window.webContents.getURL();
+      // 掉登录就直接返回，不用白等超时
+      if (isLoginPage({ url: finalUrl })) return { table: null, pageText: '', finalUrl, loginRequired: true };
+      if (window.isDestroyed()) return { table: null, pageText: '', finalUrl: '', loginRequired: false };
       const table = await window.webContents.executeJavaScript(SCRAPE_SCRIPT).catch(() => null);
-      if (table) return { table, pageText: '' };
+      if (table) return { table, pageText: '', finalUrl, loginRequired: false };
       await delay(pollMs);
     }
     const pageText = await window.webContents
       .executeJavaScript('String(document.body && document.body.innerText || "").replace(/\\s+/g, " ").slice(0, 120)')
       .catch(() => '');
-    return { table: null, pageText };
+    const finalUrl = window.isDestroyed() ? '' : window.webContents.getURL();
+    return { table: null, pageText, finalUrl, loginRequired: isLoginPage({ url: finalUrl, text: pageText }) };
   } finally {
     if (!window.isDestroyed()) window.destroy();
   }
 }
 
-module.exports = { DETAIL_PAGE_BASE, buildDetailUrl, fetchDetailPage, parseDetailTable, specText };
+module.exports = { DETAIL_PAGE_BASE, buildDetailUrl, fetchDetailPage, isLoginPage, parseDetailTable, specText };

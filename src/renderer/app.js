@@ -2378,6 +2378,9 @@ function friendlyError(error) {
     return '连不上服务器，请检查网络后重试。';
   }
   // 会话失效
+  if (/拼多多商家后台登录状态已失效|拼多多商家后台登录已失效/.test(raw)) {
+    return '拼多多商家后台登录已失效，请在店铺列表点「重新登录」后恢复监控。';
+  }
   if (/会话已失效|登录状态已失效|AUTH_REQUIRED/.test(raw)) return '登录状态已失效，请重新登录。';
   // 服务端临时问题
   if (/HTTP 5\d\d|服务暂时不可用|服务繁忙|内部错误|Mart 请求失败/.test(raw)) {

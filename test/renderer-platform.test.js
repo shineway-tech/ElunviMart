@@ -267,6 +267,16 @@ test('product rows can open the merchant bid detail sheet', () => {
   // 上传解包在 report-upload 里做：少解一层 data 会让提醒缺链接
   assert.match(main, /link = await uploadReport\(martClientInstance, \{ title, html \}\)/);
   assert.match(main, /const \{ uploadReport \} = require\('\.\/report-upload'\)/);
+  // 详情页掉登录也要标记掉线（列表同步之外的第二条路径）
+  assert.match(main, /function merchantLoginExpiredError\(\)/);
+  assert.match(main, /error\.accountOffline = true/);
+  assert.match(main, /throw merchantLoginExpiredError\(\)/);
+  assert.match(main, /await markAccountOffline\(account, error, 'detail'\)/);
+  assert.match(main, /detail sweep stopped at \$\{product\.id\}: 账号需要重新登录/);
+  assert.match(main, /if \(error\?\.accountOffline === true\) return true/);
+  assert.match(main, /offline alert failed/, '掉线提醒发失败要留痕');
+  assert.match(renderer, /拼多多商家后台登录已失效，请在店铺列表点「重新登录」后恢复监控/);
+
   // 弹窗里的“最近变化” + IPC
   assert.match(html, /id="product-detail-changes"/);
   assert.match(renderer, /loadProductDetailChanges\(accountId, product\.id\)/);
@@ -299,7 +309,7 @@ test('product rows can open the merchant bid detail sheet', () => {
   assert.match(main, /const detailFetchingByAccount = new Set\(\)/);
   assert.match(main, /detailFetchingByAccount.add\(accountId\)/);
   assert.doesNotMatch(main, /DETAIL_MIN_INTERVAL_MS|detailLastFetchAtByAccount/);
-  assert.match(main, /const \{ buildDetailUrl, fetchDetailPage, parseDetailTable \} = require\('\.\/pdd-detail-page'\)/);
+  assert.match(main, /const \{ buildDetailUrl, fetchDetailPage, isLoginPage, parseDetailTable \} = require\('\.\/pdd-detail-page'\)/);
   assert.match(main, /fetchDetailPage\(\{/);
   assert.match(main, /parseDetailTable\(table\)/);
   assert.doesNotMatch(main, /readDetailBlock|writeDetailBlock/);
