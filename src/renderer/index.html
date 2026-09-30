@@ -130,6 +130,13 @@
             </section>
 
             <section class="settings-section">
+              <h2>诊断</h2>
+              <div class="setting-row">
+                <div><strong>同步诊断日志</strong><p>同步或巡检出问题时，复制这份日志发给技术支持即可定位原因</p></div>
+                <div class="toolbar"><button class="button" type="button" id="copy-sync-log"><i data-lucide="clipboard-copy"></i><span>复制日志</span></button><button class="button" type="button" id="clear-sync-log">清空</button></div>
+              </div>
+            </section>
+            <section class="settings-section">
               <h2>提醒方式</h2>
               <div class="channel-row"><span class="channel-icon"><i data-lucide="monitor"></i></span><div><strong>桌面通知</strong><p>客户端运行时显示系统通知</p></div><label class="switch"><input type="checkbox" id="desktop-enabled"><span></span></label></div>
               <div class="channel-row" id="wecom-channel"><span class="channel-icon"><i data-lucide="message-circle-more"></i></span><div><strong>企业微信</strong><p>通过群机器人进行推送</p></div><label class="switch"><input type="checkbox" id="wecom-enabled"><span></span></label><div class="channel-fields"><label>机器人 Webhook<div class="inline-field"><input class="input" id="wecom-webhook" type="url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."><button class="button" type="button" data-test-channel="wecom">测试</button></div></label></div></div>

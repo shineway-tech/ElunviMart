@@ -1,4 +1,5 @@
 const { BrowserWindow } = require('electron');
+const syncLog = require('./sync-log');
 const { setTimeout: delay } = require('node:timers/promises');
 
 const DETAIL_PAGE_BASE = 'https://mms.pinduoduo.com/act-bidding/ten-billion-bid-detail';
@@ -106,7 +107,10 @@ async function fetchDetailPage({ partition, url, timeoutMs = 25_000, pollMs = 50
     while (Date.now() < deadline) {
       const finalUrl = window.isDestroyed() ? '' : window.webContents.getURL();
       // 掉登录就直接返回，不用白等超时
-      if (isLoginPage({ url: finalUrl })) return { table: null, pageText: '', finalUrl, loginRequired: true };
+      if (isLoginPage({ url: finalUrl })) {
+        syncLog.append('detail', '详情页被跳到登录页', finalUrl || '(未知地址)');
+        return { table: null, pageText: '', finalUrl, loginRequired: true };
+      }
       if (window.isDestroyed()) return { table: null, pageText: '', finalUrl: '', loginRequired: false };
       const table = await window.webContents.executeJavaScript(SCRAPE_SCRIPT).catch(() => null);
       if (table) return { table, pageText: '', finalUrl, loginRequired: false };
@@ -116,7 +120,9 @@ async function fetchDetailPage({ partition, url, timeoutMs = 25_000, pollMs = 50
       .executeJavaScript('String(document.body && document.body.innerText || "").replace(/\\s+/g, " ").slice(0, 120)')
       .catch(() => '');
     const finalUrl = window.isDestroyed() ? '' : window.webContents.getURL();
-    return { table: null, pageText, finalUrl, loginRequired: isLoginPage({ url: finalUrl, text: pageText }) };
+    const loginRequired = isLoginPage({ url: finalUrl, text: pageText });
+    syncLog.append('detail', loginRequired ? '详情页需要登录' : '详情页没渲染出规格表', `停留页面: ${finalUrl || '(未知)'}${pageText ? ` | 页面提示: ${pageText}` : ''}`);
+    return { table: null, pageText, finalUrl, loginRequired };
   } finally {
     if (!window.isDestroyed()) window.destroy();
   }

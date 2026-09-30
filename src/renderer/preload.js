@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('pddMonitor', {
     openUpdateDownload: () => ipcRenderer.invoke('app:updateOpenDownload'),
     // 只允许打开京东/淘宝/天猫的 https 链接（比价结果跳转用）
     openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
+    copyToClipboard: (text) => ipcRenderer.invoke('app:copyToClipboard', text),
+    syncLog: () => ipcRenderer.invoke('diagnostics:syncLog'),
+    clearSyncLog: () => ipcRenderer.invoke('diagnostics:clearSyncLog'),
     onUpdateReady: (handler) => ipcRenderer.on('app:update-ready', (_event, payload) => handler(payload)),
     onForceUpdate: (handler) => ipcRenderer.on('app:force-update', (_event, payload) => handler(payload))
   },

@@ -3,7 +3,8 @@ const { initUpdater } = require('./updater');
 const { fetchPolicy, isBelowMinVersion } = require('./app-policy');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
-const { app, BrowserWindow, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, clipboard, ipcMain, nativeImage, session, safeStorage, shell } = require('electron');
+const os = require('node:os');
 const { SqliteStore, DEFAULT_DATA } = require('./store');
 const { PlatformClient } = require('./platform-client');
 const { PlatformSession, SafeStorageTokenStore } = require('./platform-session');
@@ -18,6 +19,7 @@ const { buildDetailUrl, fetchDetailPage, isLoginPage, parseDetailTable } = requi
 const { collectBidListPayloads } = require('./pdd-bid-page');
 const { buildDetailReportHtml, diffDetailRows, detailIdsOf, isFullyWon, selectDetailCandidates, sweepStepMs } = require('./detail-monitor');
 const { uploadReport } = require('./report-upload');
+const syncLog = require('./sync-log');
 const { SyncQueue } = require('./sync-queue');
 const { assertWebhook, sendChannelTest, sendConfiguredNotifications } = require('./notifier');
 const { MonitorScheduler } = require('./scheduler');
@@ -374,10 +376,13 @@ async function runDetailSweep(accountId) {
           });
         }
       } catch (error) {
+        const label = product.myBidProductName || product.name || product.id;
         if (isAccountOfflineError(error)) {
+          syncLog.append('detail', '巡检中止：账号需要重新登录', `停在: ${label}`);
           console.error(`detail sweep stopped at ${product.id}: 账号需要重新登录`);
           break;
         }
+        syncLog.append('detail', '详情读取失败', `${label} | ${error.message}`);
         console.error(`detail sweep failed for ${product.id}:`, error.message);
       }
     }
@@ -453,6 +458,9 @@ async function syncAccount(adapter, accountId, source = 'manual') {
   return syncQueue.run(accountId, async (signal) => {
     const account = store.getAccount(accountId);
     if (!account) throw new Error('商家账号不存在');
+    const sourceLabel = source === 'scheduled' ? '自动' : '手动';
+    syncLog.append('sync', `开始${sourceLabel}同步`, `店铺: ${account.displayName || accountId}`);
+    const startedAt = Date.now();
     try {
       const incomingProducts = await adapter.syncProducts(account, { signal });
       signal.throwIfAborted();
@@ -461,6 +469,7 @@ async function syncAccount(adapter, accountId, source = 'manual') {
       const reconciliation = reconcileProducts(store.getProducts(accountId), incomingProducts, now);
       store.setProducts(accountId, reconciliation.products);
       store.updateAccount(accountId, { status: 'active', lastSyncAt: now, productCount: reconciliation.products.length, lastSyncSource: source, lastSyncError: '' });
+      syncLog.append('sync', `${sourceLabel}同步成功`, `商品 ${reconciliation.products.length} 个 | 用时 ${Math.round((Date.now() - startedAt) / 1000)}s`);
       sendToRenderer('accounts:changed');
       // 逐条掉标提醒已按要求去掉，只保留异常汇总
       const notificationErrors = [];
@@ -472,6 +481,7 @@ async function syncAccount(adapter, accountId, source = 'manual') {
       return { ok: true, source: 'api', products: reconciliation.products, syncedAt: now, notificationErrors };
     } catch (error) {
       if (signal.aborted || !store.getAccount(accountId)) throw error;
+      syncLog.append('sync', `${sourceLabel}同步失败`, `${error.message} | 用时 ${Math.round((Date.now() - startedAt) / 1000)}s`);
       if (isAccountOfflineError(error)) await markAccountOffline(account, error, source);
       signal.throwIfAborted();
       if (!store.getAccount(accountId)) throw error;
@@ -494,6 +504,7 @@ async function markAccountOffline(account, error, source) {
   const current = store.getAccount(account.id);
   if (!current) return;
   const wasOnline = current.status === 'active';
+  syncLog.append('account', '账号需要重新登录', `店铺: ${account.displayName || account.id} | 原因: ${error.message}`);
   store.updateAccount(account.id, {
     status: 'needs_login',
     syncStatus: 'error',
@@ -713,6 +724,25 @@ function registerIpc(adapter) {
       ? Number(clientPolicy.priceSearchCostPoints)
       : 10
   }));
+  // 诊断日志：设置页一键复制，粘贴给技术支持定位同步问题
+  ipcMain.handle('diagnostics:syncLog', () => {
+    const accounts = store ? store.getAccounts() : [];
+    const settings = store ? store.getSettings() : {};
+    return syncLog.format({
+      版本: `${app.getVersion()}${app.isPackaged ? '' : '（源码运行）'}`,
+      系统: `${process.platform} ${os.release()}`,
+      检测间隔: `${settings.intervalMinMinutes || '-'}~${settings.intervalMaxMinutes || '-'} 分钟`,
+      店铺: accounts.map((item) => `${item.displayName || item.id}(${item.status}${item.lastSyncError ? `: ${item.lastSyncError}` : ''})`).join(' / ') || '(无)',
+    });
+  });
+  ipcMain.handle('diagnostics:clearSyncLog', () => {
+    syncLog.clear();
+    return true;
+  });
+  ipcMain.handle('app:copyToClipboard', (_event, text) => {
+    clipboard.writeText(String(text || ''));
+    return true;
+  });
   ipcMain.handle('app:updateCheck', () => runUpdateCheck());
   ipcMain.handle('app:updateInstall', () => (updater?.enabled ? updater.install() : { ok: false, reason: 'disabled' }));
   ipcMain.handle('app:updateOpenDownload', async () => {

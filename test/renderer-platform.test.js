@@ -234,6 +234,8 @@ test('product rows can open the merchant bid detail sheet', () => {
   const preload = fs.readFileSync(path.join(__dirname, '../src/renderer/preload.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
   const styles = fs.readFileSync(path.join(__dirname, '../src/renderer/styles.css'), 'utf8');
+  const bidPage = fs.readFileSync(path.join(__dirname, '../src/main/pdd-bid-page.js'), 'utf8');
+  const detailPage = fs.readFileSync(path.join(__dirname, '../src/main/pdd-detail-page.js'), 'utf8');
   // 报名详情是页内视图（不是弹窗），返回按钮回到商品列表
   assert.match(html, /class="view detail-view" id="product-detail-view"/);
   assert.doesNotMatch(html, /product-detail-modal/);
@@ -276,6 +278,20 @@ test('product rows can open the merchant bid detail sheet', () => {
   assert.match(main, /detail sweep stopped at \$\{product\.id\}: 账号需要重新登录/);
   assert.match(main, /if \(error\?\.accountOffline === true\) return true/);
   assert.match(main, /offline alert failed/, '掉线提醒发失败要留痕');
+  // 同步诊断日志：主进程插桩 + 设置页一键复制
+  assert.match(html, /id="copy-sync-log"/);
+  assert.match(html, /id="clear-sync-log"/);
+  assert.match(renderer, /window\.pddMonitor\.app\.syncLog\(\)/);
+  assert.match(renderer, /日志已复制，粘贴发给技术支持即可/);
+  assert.match(preload, /syncLog: \(\) => ipcRenderer\.invoke\('diagnostics:syncLog'\)/);
+  assert.match(preload, /copyToClipboard: \(text\) => ipcRenderer\.invoke\('app:copyToClipboard', text\)/);
+  assert.match(main, /ipcMain\.handle\('diagnostics:syncLog'/);
+  assert.match(main, /const syncLog = require\('\.\/sync-log'\)/);
+  assert.match(main, /syncLog\.append\('sync', `开始\$\{sourceLabel\}同步`/);
+  assert.match(main, /syncLog\.append\('sync', `\$\{sourceLabel\}同步失败`/);
+  assert.match(main, /syncLog\.append\('account', '账号需要重新登录'/);
+  assert.match(bidPage, /syncLog\.append\('list', '没等到列表请求'/);
+  assert.match(detailPage, /syncLog\.append\('detail', '详情页被跳到登录页'/);
   // 规格表列多：grid 子项必须允许收缩，否则宽表格会撑破容器把「比价」列挤到窗口外
   assert.match(styles, /\.detail-view:not\(\[hidden\]\)>\*\{min-width:0\}/);
   assert.match(styles, /#product-detail-table th:last-child,#product-detail-table td:last-child\{position:sticky;right:0/);

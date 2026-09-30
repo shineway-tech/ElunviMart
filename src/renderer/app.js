@@ -3508,6 +3508,31 @@ elements.platformAccountChangePassword.addEventListener('click', (event) => {
   event.stopPropagation();
   openPasswordChange();
 });
+// 诊断日志：一键复制（排障用），清空只影响当前内存里的记录
+const copySyncLogButton = document.querySelector('#copy-sync-log');
+if (copySyncLogButton) {
+  copySyncLogButton.addEventListener('click', async () => {
+    try {
+      const text = await window.pddMonitor.app.syncLog();
+      await window.pddMonitor.app.copyToClipboard(text || '');
+      showNotice('日志已复制，粘贴发给技术支持即可');
+    } catch (error) {
+      showError(error, '日志暂时复制不了，请稍后重试');
+    }
+  });
+}
+const clearSyncLogButton = document.querySelector('#clear-sync-log');
+if (clearSyncLogButton) {
+  clearSyncLogButton.addEventListener('click', async () => {
+    try {
+      await window.pddMonitor.app.clearSyncLog();
+      showNotice('诊断日志已清空');
+    } catch (error) {
+      showError(error, '清空失败，请稍后重试');
+    }
+  });
+}
+
 elements.platformAccountLogout.addEventListener('click', async (event) => {
   event.stopPropagation();
   closePlatformAccountMenu();
