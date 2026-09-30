@@ -1,5 +1,6 @@
 const { BrowserWindow } = require('electron');
 const syncLog = require('./sync-log');
+const { describeSession } = require('./session-info');
 const { setTimeout: delay } = require('node:timers/promises');
 
 const DETAIL_PAGE_BASE = 'https://mms.pinduoduo.com/act-bidding/ten-billion-bid-detail';
@@ -102,7 +103,12 @@ async function fetchDetailPage({ partition, url, timeoutMs = 25_000, pollMs = 50
     webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true, backgroundThrottling: false }
   });
   try {
-    await window.loadURL(url).catch(() => {});
+    window.webContents.on('did-navigate', (_event, target) => syncLog.append('detail', '页面跳转', target));
+    window.webContents.on('did-fail-load', (_event, code, description, target) => {
+      syncLog.append('detail', '页面加载失败', `${code} ${description} | ${target}`);
+    });
+    const startedAt = Date.now();
+    await window.loadURL(url).catch((error) => syncLog.append('detail', 'loadURL 抛错', error.message));
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const finalUrl = window.isDestroyed() ? '' : window.webContents.getURL();
@@ -113,7 +119,10 @@ async function fetchDetailPage({ partition, url, timeoutMs = 25_000, pollMs = 50
       }
       if (window.isDestroyed()) return { table: null, pageText: '', finalUrl: '', loginRequired: false };
       const table = await window.webContents.executeJavaScript(SCRAPE_SCRIPT).catch(() => null);
-      if (table) return { table, pageText: '', finalUrl, loginRequired: false };
+      if (table) {
+        syncLog.append('detail', '规格表已读取', `行数 ${Array.isArray(table.rows) ? table.rows.length : 0} | 用时 ${Date.now() - startedAt}ms`);
+        return { table, pageText: '', finalUrl, loginRequired: false };
+      }
       await delay(pollMs);
     }
     const pageText = await window.webContents
@@ -121,7 +130,32 @@ async function fetchDetailPage({ partition, url, timeoutMs = 25_000, pollMs = 50
       .catch(() => '');
     const finalUrl = window.isDestroyed() ? '' : window.webContents.getURL();
     const loginRequired = isLoginPage({ url: finalUrl, text: pageText });
-    syncLog.append('detail', loginRequired ? '详情页需要登录' : '详情页没渲染出规格表', `停留页面: ${finalUrl || '(未知)'}${pageText ? ` | 页面提示: ${pageText}` : ''}`);
+    const pageDetail = window.isDestroyed()
+      ? ''
+      : await window.webContents
+        .executeJavaScript(`(() => {
+          const text = String(document.body && document.body.innerText || '').replace(/\\s+/g, ' ').slice(0, 140);
+          return JSON.stringify({
+            title: document.title || '',
+            hasPassword: Boolean(document.querySelector('input[type=password]')),
+            hasTable: Boolean(document.querySelector('table')),
+            text
+          });
+        })()`)
+        .catch((error) => JSON.stringify({ error: error.message }));
+    const parsed = (() => { try { return JSON.parse(pageDetail); } catch { return {}; } })();
+    const cookieSummary = await describeSession(partition);
+    const bits = [
+      `停留页面: ${finalUrl || '(未知)'}`,
+      parsed.title ? `标题: ${parsed.title}` : '',
+      parsed.hasPassword ? '页面含密码输入框' : '',
+      typeof parsed.hasTable === 'boolean' ? `页面有表格: ${parsed.hasTable}` : '',
+      parsed.text ? `页面提示: ${parsed.text}` : '',
+      parsed.error ? `页面读取失败: ${parsed.error}` : '',
+      cookieSummary,
+      `等待了 ${Math.round(timeoutMs / 1000)}s`,
+    ].filter(Boolean);
+    syncLog.append('detail', loginRequired ? '详情页需要登录' : '详情页没渲染出规格表', bits.join(' | '));
     return { table: null, pageText, finalUrl, loginRequired };
   } finally {
     if (!window.isDestroyed()) window.destroy();

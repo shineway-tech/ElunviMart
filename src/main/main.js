@@ -357,8 +357,10 @@ async function runDetailSweep(accountId) {
     const roundChanges = [];
     for (const [index, product] of batch.entries()) {
       if (index > 0) await new Promise((resolve) => setTimeout(resolve, sweepStepMs({ batchSize: batch.length, cycleMinutes })));
+      const fetchStartedAt = Date.now();
       try {
         const result = await refreshProductDetail(accountId, product);
+        syncLog.append('detail', '详情读取成功', `${product.myBidProductName || product.name || product.id} | 规格 ${result.rows.length} 行 | 用时 ${Math.round((Date.now() - fetchStartedAt) / 1000)}s`);
         const skuImageBySpec = new Map();
         for (const row of result.rows) {
           skuImageBySpec.set(String(row.referenceSpec || row.bidSpec || ''), row.referenceImage || row.bidImage || '');
@@ -459,7 +461,10 @@ async function syncAccount(adapter, accountId, source = 'manual') {
     const account = store.getAccount(accountId);
     if (!account) throw new Error('商家账号不存在');
     const sourceLabel = source === 'scheduled' ? '自动' : '手动';
-    syncLog.append('sync', `开始${sourceLabel}同步`, `店铺: ${account.displayName || accountId}`);
+    const previousProducts = store.getProducts(accountId).length;
+    syncLog.append('sync', `开始${sourceLabel}同步`, `店铺: ${account.displayName || accountId} | 上次同步: ${account.lastSyncAt ? new Date(account.lastSyncAt).toLocaleString('zh-CN', { hour12: false }) : '(无)'}(${account.lastSyncSource || '-'}) | 本地商品 ${previousProducts} 个`);
+    // cookie 概览在列表采集开始处记录（那里才有分区句柄），这里只记同步前的本地状态
+    syncLog.append('sync', '账号当前状态', `status=${account.status} | 最近错误=${account.lastSyncError || '(无)'}`);
     const startedAt = Date.now();
     try {
       const incomingProducts = await adapter.syncProducts(account, { signal });
@@ -729,8 +734,8 @@ function registerIpc(adapter) {
     const accounts = store ? store.getAccounts() : [];
     const settings = store ? store.getSettings() : {};
     return syncLog.format({
-      版本: `${app.getVersion()}${app.isPackaged ? '' : '（源码运行）'}`,
-      系统: `${process.platform} ${os.release()}`,
+      版本: `${app.getVersion()}${app.isPackaged ? '' : '（源码运行）'} | Electron ${process.versions.electron} | Chromium ${process.versions.chrome}`,
+      系统: `${process.platform} ${os.release()} ${os.arch()} | 时区 ${Intl.DateTimeFormat().resolvedOptions().timeZone} | 内存 ${Math.round(os.totalmem() / 1024 ** 3)}GB`,
       检测间隔: `${settings.intervalMinMinutes || '-'}~${settings.intervalMaxMinutes || '-'} 分钟`,
       店铺: accounts.map((item) => `${item.displayName || item.id}(${item.status}${item.lastSyncError ? `: ${item.lastSyncError}` : ''})`).join(' / ') || '(无)',
     });
