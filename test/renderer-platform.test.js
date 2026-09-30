@@ -233,6 +233,7 @@ test('product rows can open the merchant bid detail sheet', () => {
   const renderer = fs.readFileSync(path.join(__dirname, '../src/renderer/app.js'), 'utf8');
   const preload = fs.readFileSync(path.join(__dirname, '../src/renderer/preload.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '../src/main/main.js'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '../src/renderer/styles.css'), 'utf8');
   // 报名详情是页内视图（不是弹窗），返回按钮回到商品列表
   assert.match(html, /class="view detail-view" id="product-detail-view"/);
   assert.doesNotMatch(html, /product-detail-modal/);
