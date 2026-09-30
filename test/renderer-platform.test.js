@@ -324,6 +324,17 @@ test('sku rows expose jd/taobao price search with points confirmation', () => {
   // 关键词 = 干净的商品名 + 规格关键词，去掉后台标签
   assert.match(renderer, /function priceKeywordFor\(product, spec\)/);
   assert.match(renderer, /选报规格\|必报规格\|终止竞标\|已有其余商品提报/);
+  // 价格上限：优先拼单价（当前售价），其次报名价、参考价；同款判定用活动商品名
+  assert.match(renderer, /function rowPriceCap\(row\)/);
+  assert.match(renderer, /\['groupPrice', 'bidPrice', 'referencePrice'\]/);
+  assert.match(renderer, /function priceProductName\(product\)/);
+  assert.match(renderer, /只保留低于当前售价 ¥\$\{cap\.toFixed\(2\)\} 的同款/);
+  assert.match(renderer, /productName, maxPrice, accountId, productId/);
+  assert.match(renderer, /function priceFilterNote\(result\)/);
+  assert.match(renderer, /已过滤 \$\{skipped\} 条配件\/不同型号/);
+  assert.match(renderer, /没有找到符合条件的同款，下面是按价格筛出的结果/);
+  assert.match(service, /product_name: productName/);
+  assert.match(service, /max_price: Number\(maxPrice\) > 0 \? Number\(maxPrice\) : 0/);
   // 结果弹窗：价格升序、条数来源提示、消耗与余额、重新查询
   assert.match(html, /id="price-modal"/);
   assert.match(html, /data-close-price-modal/);

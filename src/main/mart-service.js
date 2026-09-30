@@ -139,9 +139,9 @@ class MartService {
     return data;
   }
 
-  // 比价查询：每次调用都会扣固定积分（由后端负责扣减与缓存）
+  // 比价查询：每次调用都会扣固定积分（由后端负责扣减、缓存与筛选）
   async priceSearch({
-    teamId, channel, keyword, spec = '', accountId = '', productId = ''
+    teamId, channel, keyword, spec = '', productName = '', maxPrice = 0, accountId = '', productId = ''
   }) {
     const { data } = await this.client.request('/v1/app/price-search', {
       method: 'POST',
@@ -150,6 +150,8 @@ class MartService {
         channel,
         keyword,
         spec,
+        product_name: productName,
+        max_price: Number(maxPrice) > 0 ? Number(maxPrice) : 0,
         account_id: accountId,
         product_id: productId
       }
