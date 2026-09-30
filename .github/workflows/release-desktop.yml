@@ -11,8 +11,6 @@ on:
 permissions:
   contents: write
 
-env:
-  OSS_PREFIX: public/elunvi_mart
 
 jobs:
   resolve-version:
@@ -114,31 +112,8 @@ jobs:
             release/Elunvi-Mart-macos-universal.zip.blockmap
             release/latest-mac.yml
 
-      # 国际链路到阿里云 OSS 会周期性变得极慢（实测 ~50KB/s，200MB 要传一小时以上）。
-      # 这里给个上限并允许失败：Release 先发出来（更新链路的源），OSS 镜像事后补传。
-      - name: Upload macOS artifacts to OSS
-        timeout-minutes: 15
-        continue-on-error: true
-        env:
-          ALIYUN_OSS_REGION: ${{ secrets.ALIYUN_OSS_REGION }}
-          ALIYUN_OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
-          ALIYUN_OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
-          ALIYUN_OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
-          ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
-          ALIYUN_OSS_PUBLIC_BASE_URL: https://static.honeykid.cn
-          ALIYUN_OSS_PREFIX: ${{ env.OSS_PREFIX }}
-          ALIYUN_OSS_OBJECT_ACL: ${{ secrets.ALIYUN_OSS_OBJECT_ACL }}
-        run: |
-          set -euo pipefail
-          for file in \
-            "release/Elunvi-Mart-macos-universal.dmg" \
-            "release/Elunvi-Mart-macos-universal.zip" \
-            "release/Elunvi-Mart-macos-universal.zip.blockmap" \
-            "release/latest-mac.yml"
-          do
-            node scripts/upload-release-assets.js --file "$file" --version "$APP_VERSION"
-          done
-
+      # OSS 镜像交给国内侧（见 docs/RELEASE.md 的"OSS 镜像"一节）：
+      # GitHub runner 到阿里云的国际链路实测长期不可用（~50KB/s 甚至挂死），放 CI 里只会白等。
   windows:
     name: Build Windows x64
     needs: resolve-version
@@ -169,30 +144,6 @@ jobs:
             release/Elunvi-Mart-windows-x64-setup.exe.blockmap
             release/Elunvi-Mart-windows-x64-portable.exe
             release/latest.yml
-
-      - name: Upload Windows artifacts to OSS
-        timeout-minutes: 15
-        continue-on-error: true
-        shell: pwsh
-        env:
-          ALIYUN_OSS_REGION: ${{ secrets.ALIYUN_OSS_REGION }}
-          ALIYUN_OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
-          ALIYUN_OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
-          ALIYUN_OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
-          ALIYUN_OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
-          ALIYUN_OSS_PUBLIC_BASE_URL: https://static.honeykid.cn
-          ALIYUN_OSS_PREFIX: ${{ env.OSS_PREFIX }}
-          ALIYUN_OSS_OBJECT_ACL: ${{ secrets.ALIYUN_OSS_OBJECT_ACL }}
-        run: |
-          foreach ($file in @(
-            "release/Elunvi-Mart-windows-x64-setup.exe",
-            "release/Elunvi-Mart-windows-x64-setup.exe.blockmap",
-            "release/Elunvi-Mart-windows-x64-portable.exe",
-            "release/latest.yml"
-          )) {
-            node scripts/upload-release-assets.js --file $file --version $env:APP_VERSION
-            if ($LASTEXITCODE -ne 0) { throw "OSS 上传失败：$file" }
-          }
 
   publish-release:
     name: Publish GitHub Release
