@@ -444,3 +444,13 @@ html,body{height:100%;overflow:hidden}.app-shell{height:100vh;min-height:0;overf
 
 /* 比价弹窗与结果列表 */
 .price-modal{width:min(620px,100%);padding:0}.price-modal .modal-header{padding:20px 20px 14px;border-bottom:1px solid var(--line)}.price-modal-body{max-height:min(58vh,520px);overflow-y:auto;padding:14px 20px 4px}.price-modal-meta{margin:0 0 6px;color:var(--muted);font-size:12px}.price-modal-status{margin:0 0 10px;padding:9px 11px;border-radius:6px;color:var(--amber);background:var(--amber-soft);font-size:12px;line-height:1.5}.price-modal-status.is-error{color:var(--accent);background:var(--accent-soft)}.price-empty{padding:26px 0;color:var(--muted);font-size:13px;text-align:center}.price-list{display:grid}.price-item{display:grid;grid-template-columns:22px 40px minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:10px 0;border:0;border-bottom:1px solid var(--line);color:var(--text);background:transparent;cursor:pointer;text-align:left}.price-item:last-child{border-bottom:0}.price-item:hover{background:var(--soft)}.price-rank{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;text-align:center}.price-thumb{display:block;width:40px;height:40px;border-radius:6px;background:var(--soft);object-fit:cover}.price-thumb-empty{background:var(--soft)}.price-main{display:grid;gap:4px;min-width:0}.price-title{display:-webkit-box;overflow:hidden;font-size:13px;line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:2}.price-shop{color:var(--muted);font-size:11px}.price-amount{color:var(--accent);font-size:15px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}.price-modal-actions{align-items:center;margin:0;padding:14px 20px 18px;border-top:1px solid var(--line)}.price-modal-balance{margin-right:auto;color:var(--muted);font-size:12px}.detail-action-head{text-align:center}.detail-action-cell{white-space:nowrap}.price-link{padding:0;border:0;color:var(--accent);background:transparent;cursor:pointer;font-size:12px}.price-link + .price-link{margin-left:10px}.price-link:hover{text-decoration:underline}
+
+/* 规格表列多时会横向滚动：把「比价」列钉在右侧，别让操作被裁掉 */
+#product-detail-table th:last-child,#product-detail-table td:last-child{position:sticky;right:0;z-index:1;background:var(--surface);box-shadow:-8px 0 10px -8px rgba(16,24,40,.18)}
+#product-detail-table thead th:last-child{background:var(--soft)}
+#product-detail-table tbody tr:hover td:last-child{background:var(--soft)}
+#product-detail-table .detail-action-cell{padding-left:10px;padding-right:14px}
+/* 规格表列多：内边距收紧一点，常规窗口就能整表放下，不用横向滚 */
+#product-detail-table th,#product-detail-table td{padding-left:8px;padding-right:8px}
+/* grid 子项默认 min-width:auto 会被宽表格撑破容器（曾把「比价」列挤出窗口），必须允许收缩 */
+.detail-view:not([hidden])>*{min-width:0}

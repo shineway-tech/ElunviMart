@@ -275,6 +275,10 @@ test('product rows can open the merchant bid detail sheet', () => {
   assert.match(main, /detail sweep stopped at \$\{product\.id\}: 账号需要重新登录/);
   assert.match(main, /if \(error\?\.accountOffline === true\) return true/);
   assert.match(main, /offline alert failed/, '掉线提醒发失败要留痕');
+  // 规格表列多：grid 子项必须允许收缩，否则宽表格会撑破容器把「比价」列挤到窗口外
+  assert.match(styles, /\.detail-view:not\(\[hidden\]\)>\*\{min-width:0\}/);
+  assert.match(styles, /#product-detail-table th:last-child,#product-detail-table td:last-child\{position:sticky;right:0/);
+  assert.match(styles, /#product-detail-table th,#product-detail-table td\{padding-left:8px;padding-right:8px\}/);
   assert.match(renderer, /拼多多商家后台登录已失效，请在店铺列表点「重新登录」后恢复监控/);
 
   // 弹窗里的“最近变化” + IPC
