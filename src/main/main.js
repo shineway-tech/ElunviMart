@@ -922,6 +922,7 @@ app.whenReady().then(() => {
     client: martClientInstance,
     session: martSession,
     platformSession,
+    platformClientId: platformConfig.clientId,
     refreshPlatformSession: () => platformService.refreshSession()
   });
   const adapter = new PddActivityAdapter({

@@ -12,11 +12,13 @@ function isPlatformTokenRejected(error) {
 }
 
 class MartService {
-  constructor({ client, session, platformSession, refreshPlatformSession = null }) {
+  constructor({ client, session, platformSession, platformClientId = '', refreshPlatformSession = null }) {
     if (!client || !session || !platformSession) throw new Error('Mart service 配置不完整');
     this.client = client;
     this.session = session;
     this.platformSession = platformSession;
+    // 平台会话按 client 绑定（mac/windows 各一套），兑换时要说清自己是哪个平台端
+    this.platformClientId = String(platformClientId || '').trim();
     // 平台访问令牌只有 15 分钟：兑换前可能已经过期，需要能强制刷新一次
     this.refreshPlatformSession = refreshPlatformSession;
     this.summary = null;
@@ -33,7 +35,8 @@ class MartService {
       auth: false,
       body: {
         access_token: token,
-        ...(accountEmail ? { account_email: accountEmail } : {})
+        ...(accountEmail ? { account_email: accountEmail } : {}),
+        ...(this.platformClientId ? { client_id: this.platformClientId } : {})
       }
     });
     let response;

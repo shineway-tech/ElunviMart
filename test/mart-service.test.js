@@ -135,9 +135,11 @@ test('logout revokes the mart session and clears local credentials', async () =>
 test('linkFromPlatform refreshes an expired platform token and retries once', async () => {
   const { MartService } = require('../src/main/mart-service');
   const calls = [];
+  const bodies = [];
   const client = {
     request: async (pathname, options) => {
       calls.push(options.body.access_token);
+      bodies.push(options.body);
       if (calls.length === 1) {
         const error = new Error('平台登录状态已失效，请重新登录');
         error.status = 401;
@@ -151,11 +153,12 @@ test('linkFromPlatform refreshes an expired platform token and retries once', as
   const platformSession = { accessToken: async () => 'stale-token', accountEmail: async () => 'shenyi@example.com' };
   let refreshes = 0;
   const service = new MartService({
-    client, session, platformSession,
+    client, session, platformSession, platformClientId: 'elunvi-mart-windows',
     refreshPlatformSession: async () => { refreshes += 1; platformSession.accessToken = async () => 'fresh-token'; return { accessToken: 'fresh-token' }; }
   });
   const summary = await service.linkFromPlatform();
   assert.equal(refreshes, 1, '401 时应刷新一次平台令牌');
+  assert.equal(bodies[0].client_id, 'elunvi-mart-windows', '兑换要带上自己平台端的 client id');
   assert.deepEqual(calls, ['stale-token', 'fresh-token'], '用刷新后的令牌重试兑换');
   assert.equal(summary.user.id, 2);
 });
