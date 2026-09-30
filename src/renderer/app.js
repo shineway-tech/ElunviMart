@@ -2837,9 +2837,14 @@ function priceProductName(product) {
   return String(product?.activityProductName || product?.name || '').trim();
 }
 
-// 比价关键词：商品名（活动里那份更干净）+ 规格关键词，去掉后台标签噪音
+// 比价关键词：商品名（活动里那份更干净）+ 规格关键词；促销词和【】都要清掉，否则搜索结果会变差
+const PRICE_KEYWORD_NOISE = /【[^】]*】|（[^）]*）|\([^)]*\)|官方|正品|包邮|新品|现货|旗舰店|专营店|自营|百亿|补贴|国补/g;
+
 function priceKeywordFor(product, spec) {
-  const base = String(product?.activityProductName || product?.name || '').trim();
+  const base = String(product?.activityProductName || product?.name || '')
+    .replace(PRICE_KEYWORD_NOISE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   const cleaned = String(spec || '')
     .replace(/选报规格|必报规格|终止竞标|已有其余商品提报/gu, ' ')
     .replace(/[，,、/|]+/gu, ' ')

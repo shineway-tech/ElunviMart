@@ -340,6 +340,9 @@ test('sku rows expose jd/taobao price search with points confirmation', () => {
   // 关键词 = 干净的商品名 + 规格关键词，去掉后台标签
   assert.match(renderer, /function priceKeywordFor\(product, spec\)/);
   assert.match(renderer, /选报规格\|必报规格\|终止竞标\|已有其余商品提报/);
+  assert.ok(renderer.includes('const PRICE_KEYWORD_NOISE'), '商品名里的促销词也要清掉');
+  assert.ok(renderer.includes('【[^】]*】'), '关键词要剥掉【】里的促销词');
+  assert.match(renderer, /replace\(PRICE_KEYWORD_NOISE, ' '\)/);
   // 价格上限：优先拼单价（当前售价），其次报名价、参考价；同款判定用活动商品名
   assert.match(renderer, /function rowPriceCap\(row\)/);
   assert.match(renderer, /\['groupPrice', 'bidPrice', 'referencePrice'\]/);
