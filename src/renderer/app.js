@@ -2960,7 +2960,8 @@ function renderPriceResults(result) {
   const balance = Number(result?.balance_points || 0);
   const filters = result?.filters || {};
   const notes = [];
-  if (result?.stale) notes.push('这次没取到新数据，先给你上次的结果（未扣积分）');
+  if (result?.stale && result?.upstream_quota) notes.push('比价接口的额度用完了，先给你上次的结果（未扣积分），额度恢复后会自动查到新的');
+  else if (result?.stale) notes.push('这次没取到新数据，先给你上次的结果（未扣积分）');
   else if (result?.cached) notes.push(`5 分钟内查过同一个词，直接给你上次的结果（本次仍计 ${formatPoints(cost)} 积分）`);
   if (filters.relaxed) notes.push('没找到完全匹配的同款，下面是价格筛选后的结果');
   const filterNote = priceFilterNote(result);
@@ -3026,11 +3027,20 @@ function renderPriceResults(result) {
     meta.textContent = parts.join(' · ') || '—';
     main.append(title, meta);
 
+    const priceBox = document.createElement('span');
+    priceBox.className = 'price-amount-box';
     const price = document.createElement('strong');
     price.className = 'price-amount';
     price.textContent = `¥${Number(item.price).toFixed(2)}`;
+    priceBox.append(price);
+    if (Number(item.originalPrice) > Number(item.price)) {
+      const original = document.createElement('del');
+      original.className = 'price-original';
+      original.textContent = `¥${Number(item.originalPrice).toFixed(2)}`;
+      priceBox.append(original);
+    }
 
-    row.append(main, price);
+    row.append(main, priceBox);
     list.append(row);
   });
 }

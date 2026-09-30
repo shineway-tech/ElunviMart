@@ -362,6 +362,12 @@ test('sku rows expose jd/taobao price search with points confirmation', () => {
   assert.match(renderer, /5 分钟内查过同一个词，直接给你上次的结果/);
   assert.match(renderer, /本次消耗 \$\{formatPoints\(cost\)\} 积分 · 余额 \$\{formatPoints\(balance\)\} 积分/);
   assert.match(renderer, /本次未消耗积分 · 余额 \$\{formatPoints\(balance\)\} 积分/);
+  // 结果显示全：标题不截断、原价划线、额度用尽有专门提示
+  assert.ok(!styles.includes('-webkit-line-clamp:2'), '标题不再截断成两行');
+  assert.match(styles, /\.price-original\{/);
+  assert.match(renderer, /originalPrice/);
+  assert.match(renderer, /比价接口的额度用完了，先给你上次的结果（未扣积分）/);
+  assert.match(renderer, /result\?\.upstream_quota/);
   assert.match(renderer, /elements\.priceModalRequery\.addEventListener\('click'/);
   assert.match(styles, /\.price-item\{[^}]*grid-template-columns:22px 40px minmax\(0,1fr\) auto/);
   assert.match(styles, /\.detail-action-cell\{/);
