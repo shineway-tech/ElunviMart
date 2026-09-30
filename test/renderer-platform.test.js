@@ -333,6 +333,7 @@ test('sku rows expose jd/taobao price search with points confirmation', () => {
   assert.match(renderer, /const PRICE_CHANNELS = \[\['jd', '京东'\], \['taobao', '淘宝'\]\]/);
   assert.match(renderer, /button\.dataset\.priceChannel = channel/);
   assert.match(renderer, /async function querySkuPrice\(channel, row\)/);
+  assert.match(renderer, /页面状态已变化，请重新打开商品详情后再操作/, '状态缺失时不能静默无反应');
   // 每次点击都要确认，并写清消耗多少积分
   assert.match(renderer, /本次查询消耗 \$\{cost\} 积分（从团队积分扣除，当前余额 \$\{formatPoints\(balance\)\} 积分）/);
   assert.match(renderer, /const confirmed = await confirmAction\(\{/);

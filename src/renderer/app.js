@@ -2864,7 +2864,11 @@ function applyWalletBalance(teamId, balancePoints) {
 async function querySkuPrice(channel, row) {
   const product = state.productDetail;
   const accountId = state.currentAccount?.id;
-  if (!product || !accountId) return;
+  // 静默 return 会让用户以为按钮坏了（踩过）：状态不对时给一句提示
+  if (!product || !accountId) {
+    showNotice('页面状态已变化，请重新打开商品详情后再操作', true);
+    return;
+  }
   const teamId = state.mart.teamId;
   if (!teamId) {
     showNotice('请先登录 Elunvi 账号后再查询价格', true);
