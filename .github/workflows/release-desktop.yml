@@ -42,8 +42,6 @@ jobs:
   macos:
     name: Build macOS universal DMG
     needs: resolve-version
-    # 临时：本次只要 Windows 安装包（用户临时下载用），跑完撤销这一行
-    if: false
     runs-on: macos-15
     timeout-minutes: 90
     env:
@@ -198,8 +196,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    # 临时：macOS job 被跳过（同上），先只依赖 windows
-    needs: [resolve-version, windows]
+    needs: [resolve-version, macos, windows]
     if: needs.resolve-version.outputs.release == 'true'
     runs-on: ubuntu-latest
     steps:
