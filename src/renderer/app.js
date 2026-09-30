@@ -2889,10 +2889,10 @@ async function querySkuPrice(channel, row) {
   const cost = state.priceSearch.costPoints;
   const balance = Number(state.mart.wallet?.balance_points || 0);
   const cap = rowPriceCap(row);
-  const capCopy = cap ? `，只保留低于当前售价 ¥${cap.toFixed(2)} 的同款` : '';
+  const capCopy = cap ? `，只保留价格低于当前售价 ¥${cap.toFixed(2)} 的同款` : '';
   const confirmed = await confirmAction({
-    title: `查询${label}价格？`,
-    description: `将按「${keyword}」在${label}搜索两页结果${capCopy}。本次查询消耗 ${cost} 积分（从团队积分扣除，当前余额 ${formatPoints(balance)} 积分）。`,
+    title: `查一下${label}的同款价格？`,
+    description: `会在${label}搜「${keyword}」的前两页${capCopy}。每次查询扣 ${cost} 积分（团队积分，当前余额 ${formatPoints(balance)}）。`,
     confirmLabel: '查询',
     icon: 'search'
   });
@@ -2946,12 +2946,12 @@ function closePriceModal() {
 function priceFilterNote(result) {
   const filters = result?.filters || {};
   const parts = [];
-  if (Number(filters.max_price) > 0) parts.push(`只保留低于 ¥${Number(filters.max_price).toFixed(2)} 的`);
+  if (Number(filters.max_price) > 0) parts.push(`只看 ¥${Number(filters.max_price).toFixed(2)} 以内的同款`);
   const dropped = filters.dropped || {};
   const skipped = Number(dropped.accessory || 0) + Number(dropped.unrelated || 0);
-  if (skipped > 0) parts.push(`已过滤 ${skipped} 条配件/不同型号`);
-  if (Number(dropped.above_price || 0) > 0) parts.push(`价格超出的 ${Number(dropped.above_price)} 条未列出`);
-  return parts.join('，');
+  if (skipped > 0) parts.push(`已跳过 ${skipped} 条配件或非同一型号`);
+  if (Number(dropped.above_price || 0) > 0) parts.push(`另有 ${Number(dropped.above_price)} 条价格高于当前售价`);
+  return parts.join('；');
 }
 
 function renderPriceResults(result) {
@@ -2960,9 +2960,9 @@ function renderPriceResults(result) {
   const balance = Number(result?.balance_points || 0);
   const filters = result?.filters || {};
   const notes = [];
-  if (result?.stale) notes.push('比价服务这次没查到新数据，下面是上一次的结果（本次未扣积分）');
-  else if (result?.cached) notes.push('结果来自 5 分钟内的缓存（本次仍按一次查询计费）');
-  if (filters.relaxed) notes.push('没有找到符合条件的同款，下面是按价格筛出的结果');
+  if (result?.stale) notes.push('这次没取到新数据，先给你上次的结果（未扣积分）');
+  else if (result?.cached) notes.push(`5 分钟内查过同一个词，直接给你上次的结果（本次仍计 ${formatPoints(cost)} 积分）`);
+  if (filters.relaxed) notes.push('没找到完全匹配的同款，下面是价格筛选后的结果');
   const filterNote = priceFilterNote(result);
   if (filterNote) notes.push(filterNote);
   if (notes.length) {
@@ -2972,7 +2972,9 @@ function renderPriceResults(result) {
   } else {
     elements.priceModalStatus.hidden = true;
   }
-  elements.priceModalBalance.textContent = `本次消耗 ${formatPoints(cost)} 积分 · 余额 ${formatPoints(balance)} 积分`;
+  elements.priceModalBalance.textContent = cost > 0
+    ? `本次消耗 ${formatPoints(cost)} 积分 · 余额 ${formatPoints(balance)} 积分`
+    : `本次未消耗积分 · 余额 ${formatPoints(balance)} 积分`;
 
   const list = elements.priceResultList;
   list.replaceChildren();
@@ -2980,8 +2982,8 @@ function renderPriceResults(result) {
     const empty = document.createElement('p');
     empty.className = 'price-empty';
     empty.textContent = Number(filters.max_price) > 0
-      ? `没有找到低于 ¥${Number(filters.max_price).toFixed(2)} 的同款商品`
-      : '没有找到价格结果';
+      ? `¥${Number(filters.max_price).toFixed(2)} 以内没有找到同款商品，换个关键词或稍后再试`
+      : '没有找到价格结果，稍后再试试';
     list.append(empty);
     return;
   }

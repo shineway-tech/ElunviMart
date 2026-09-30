@@ -145,6 +145,8 @@ class MartService {
   }) {
     const { data } = await this.client.request('/v1/app/price-search', {
       method: 'POST',
+      // 后端要翻两页 + 对随机失败重试，总预算 90s，客户端给到 150s
+      timeoutMs: 150_000,
       body: {
         team_id: teamId,
         channel,

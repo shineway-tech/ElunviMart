@@ -335,7 +335,7 @@ test('sku rows expose jd/taobao price search with points confirmation', () => {
   assert.match(renderer, /async function querySkuPrice\(channel, row\)/);
   assert.match(renderer, /页面状态已变化，请重新打开商品详情后再操作/, '状态缺失时不能静默无反应');
   // 每次点击都要确认，并写清消耗多少积分
-  assert.match(renderer, /本次查询消耗 \$\{cost\} 积分（从团队积分扣除，当前余额 \$\{formatPoints\(balance\)\} 积分）/);
+  assert.match(renderer, /每次查询扣 \$\{cost\} 积分（团队积分，当前余额 \$\{formatPoints\(balance\)\}）/);
   assert.match(renderer, /const confirmed = await confirmAction\(\{/);
   // 关键词 = 干净的商品名 + 规格关键词，去掉后台标签
   assert.match(renderer, /function priceKeywordFor\(product, spec\)/);
@@ -347,11 +347,11 @@ test('sku rows expose jd/taobao price search with points confirmation', () => {
   assert.match(renderer, /function rowPriceCap\(row\)/);
   assert.match(renderer, /\['groupPrice', 'bidPrice', 'referencePrice'\]/);
   assert.match(renderer, /function priceProductName\(product\)/);
-  assert.match(renderer, /只保留低于当前售价 ¥\$\{cap\.toFixed\(2\)\} 的同款/);
+  assert.match(renderer, /只保留价格低于当前售价 ¥\$\{cap\.toFixed\(2\)\} 的同款/);
   assert.match(renderer, /productName, maxPrice, accountId, productId/);
   assert.match(renderer, /function priceFilterNote\(result\)/);
-  assert.match(renderer, /已过滤 \$\{skipped\} 条配件\/不同型号/);
-  assert.match(renderer, /没有找到符合条件的同款，下面是按价格筛出的结果/);
+  assert.match(renderer, /已跳过 \$\{skipped\} 条配件或非同一型号/);
+  assert.match(renderer, /没找到完全匹配的同款，下面是价格筛选后的结果/);
   assert.match(service, /product_name: productName/);
   assert.match(service, /max_price: Number\(maxPrice\) > 0 \? Number\(maxPrice\) : 0/);
   // 结果弹窗：价格升序、条数来源提示、消耗与余额、重新查询
@@ -359,8 +359,9 @@ test('sku rows expose jd/taobao price search with points confirmation', () => {
   assert.match(html, /data-close-price-modal/);
   assert.match(html, /id="price-modal-requery"/);
   assert.match(renderer, /function renderPriceResults\(result\)/);
-  assert.match(renderer, /结果来自 5 分钟内的缓存（本次仍按一次查询计费）/);
+  assert.match(renderer, /5 分钟内查过同一个词，直接给你上次的结果/);
   assert.match(renderer, /本次消耗 \$\{formatPoints\(cost\)\} 积分 · 余额 \$\{formatPoints\(balance\)\} 积分/);
+  assert.match(renderer, /本次未消耗积分 · 余额 \$\{formatPoints\(balance\)\} 积分/);
   assert.match(renderer, /elements\.priceModalRequery\.addEventListener\('click'/);
   assert.match(styles, /\.price-item\{[^}]*grid-template-columns:22px 40px minmax\(0,1fr\) auto/);
   assert.match(styles, /\.detail-action-cell\{/);

@@ -28,13 +28,13 @@ class MartClient {
   }
 
   // 会话过期时刷新一次并重放原请求；刷新令牌一次性使用，重放会直接失败
-  async request(pathname, { method = 'GET', body, auth = true, retryAuth = true } = {}) {
+  async request(pathname, { method = 'GET', body, auth = true, retryAuth = true, timeoutMs } = {}) {
     try {
-      return await this._requestOnce(pathname, { method, body, auth });
+      return await this._requestOnce(pathname, { method, body, auth, timeoutMs });
     } catch (error) {
       if (!(error instanceof MartApiError) || error.status !== 401 || !auth || !retryAuth) throw error;
       await this.session.refresh((refreshToken) => this._refresh(refreshToken));
-      return this._requestOnce(pathname, { method, body, auth });
+      return this._requestOnce(pathname, { method, body, auth, timeoutMs });
     }
   }
 
@@ -51,7 +51,8 @@ class MartClient {
     };
   }
 
-  async _requestOnce(pathname, { method, body, auth }) {
+  // 慢接口（比价要翻页+重试）可以按次放宽超时，默认 15s
+  async _requestOnce(pathname, { method, body, auth, timeoutMs }) {
     const url = joinUrl(this.apiBaseUrl, pathname);
     const headers = { accept: 'application/json' };
     if (body !== undefined) headers['content-type'] = 'application/json';
@@ -60,7 +61,7 @@ class MartClient {
       if (token) headers.authorization = `Bearer ${token}`;
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), Number(timeoutMs) > 0 ? Number(timeoutMs) : this.timeoutMs);
     try {
       const response = await this.fetchImpl(url, {
         method,
